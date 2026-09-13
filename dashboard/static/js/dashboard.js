@@ -564,151 +564,6 @@ function updateExplainability(explainabilityContext) {
     );
 }
 
-function updateNormalVsAttack(context) {
-    const statusEl =
-        document.getElementById("comparisonStatus");
-    const environmentEl =
-        document.getElementById("comparisonEnvironment");
-    const totalEl =
-        document.getElementById("comparisonTotalWindows");
-    const normalEl =
-        document.getElementById("comparisonNormalWindows");
-    const attackEl =
-        document.getElementById("comparisonAttackWindows");
-    const labelEl =
-        document.getElementById("comparisonAttackLabel");
-    const scenarioGrid =
-        document.getElementById("comparisonScenarioGrid");
-    const featureList =
-        document.getElementById("comparisonFeatureList");
-    const banner =
-        document.getElementById("comparisonStatusBanner");
-
-    if (!context || typeof context !== "object") {
-        statusEl.textContent = "UNAVAILABLE";
-        environmentEl.textContent = "—";
-        totalEl.textContent = "—";
-        normalEl.textContent = "—";
-        attackEl.textContent = "—";
-        labelEl.textContent = "—";
-
-        scenarioGrid.innerHTML =
-            '<div class="comparison-empty">' +
-            "Comparison context unavailable." +
-            "</div>";
-
-        featureList.innerHTML =
-            '<div class="comparison-empty">' +
-            "Feature contract unavailable." +
-            "</div>";
-
-        banner.classList.remove("comparison-valid");
-        banner.classList.add("comparison-unavailable");
-        return;
-    }
-
-    const status =
-        String(context.status || "UNKNOWN").toUpperCase();
-
-    statusEl.textContent = status;
-    environmentEl.textContent =
-        context.environment || "UNKNOWN";
-
-    totalEl.textContent =
-        context.total_windows ?? "—";
-
-    normalEl.textContent =
-        context.normal_windows ?? "—";
-
-    attackEl.textContent =
-        context.controlled_attack_windows ?? "—";
-
-    labelEl.textContent =
-        context.attack_label || "—";
-
-    banner.classList.remove(
-        "comparison-valid",
-        "comparison-unavailable"
-    );
-
-    if (status === "CONTROLLED_VALIDATED") {
-        banner.classList.add("comparison-valid");
-    } else {
-        banner.classList.add("comparison-unavailable");
-    }
-
-    const scenarios = Array.isArray(context.scenarios)
-        ? context.scenarios
-        : [];
-
-    if (!scenarios.length) {
-        scenarioGrid.innerHTML =
-            '<div class="comparison-empty">' +
-            "No validated scenarios available." +
-            "</div>";
-    } else {
-        scenarioGrid.innerHTML = scenarios.map((scenario) => {
-            const scenarioName =
-                scenario.scenario || "UNKNOWN";
-
-            const total =
-                scenario.total_windows ?? "—";
-
-            const normal =
-                scenario.normal_windows ?? "—";
-
-            const attack =
-                scenario.attack_windows ?? "—";
-
-            return `
-                <div class="comparison-scenario-card">
-                    <div class="comparison-scenario-name">
-                        ${scenarioName}
-                    </div>
-
-                    <div class="comparison-scenario-status">
-                        ${scenario.status || "UNKNOWN"}
-                    </div>
-
-                    <div class="comparison-scenario-values">
-                        <div>
-                            <span>Total</span>
-                            <strong>${total}</strong>
-                        </div>
-
-                        <div>
-                            <span>Normal</span>
-                            <strong>${normal}</strong>
-                        </div>
-
-                        <div>
-                            <span>Attack</span>
-                            <strong>${attack}</strong>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join("");
-    }
-
-    const features = Array.isArray(context.features)
-        ? context.features
-        : [];
-
-    if (!features.length) {
-        featureList.innerHTML =
-            '<div class="comparison-empty">' +
-            "No feature contract available." +
-            "</div>";
-    } else {
-        featureList.innerHTML = features.map((feature) => `
-            <div class="comparison-feature-chip">
-                ${feature}
-            </div>
-        `).join("");
-    }
-}
-
 function updateLifecycle(lifecycleContext) {
     const state = document.getElementById("lifecycleState");
     const stage = document.getElementById("lifecycleStage");
@@ -1131,7 +986,7 @@ async function refreshDashboard() {
 
 
         const liveResponse =
-            await fetch("/api/live-data", {
+            await fetch("/api/telemetry", {
                 cache: "no-store"
             });
 
@@ -1164,7 +1019,7 @@ async function refreshDashboard() {
 
 
         const energyResponse =
-            await fetch("/api/energy-context", {
+            await fetch("/api/energy", {
                 cache: "no-store"
             });
 
@@ -1175,7 +1030,7 @@ async function refreshDashboard() {
 
 
         const topologyResponse =
-            await fetch("/api/topology-context", {
+            await fetch("/api/topology", {
                 cache: "no-store"
             });
 
@@ -1183,16 +1038,6 @@ async function refreshDashboard() {
             await topologyResponse.json();
 
         updateTopology(topologyData);
-
-        const comparisonResponse =
-            await fetch("/api/normal-vs-attack", {
-                cache: "no-store"
-            });
-
-        const comparisonData =
-            await comparisonResponse.json();
-
-        updateNormalVsAttack(comparisonData);
 
 
 
