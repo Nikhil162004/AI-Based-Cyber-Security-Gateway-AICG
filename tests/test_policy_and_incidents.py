@@ -89,3 +89,27 @@ def test_invalid_lifecycle_transition_raises(tmp_path: Path):
     # DETECTED cannot jump straight to RESOLVED without containment/recovery
     with pytest.raises(ValueError, match="Invalid transition"):
         store.transition_incident(inc["incident_id"], "RESOLVED", "operator", "Invalid shortcut")
+
+
+def test_separate_campaigns_create_separate_incidents(tmp_path: Path):
+    store = GatewayStore(tmp_path / "test_store_multi.sqlite3")
+
+    # Campaign A: Node ATK-01 doing udp_flood
+    ev_a1 = generate_window("udp_flood", intensity=3, sequence=0)
+    inc_a = store.create_incident(ev_a1, ["UDP flood from ATK-01"], "CPU/Radio")
+
+    # Campaign B: Node SENSOR-02 doing syn_flood
+    ev_b1 = generate_window("syn_flood", intensity=3, sequence=0)
+    ev_b1.device_id = "SENSOR-02"
+
+    active_b = store.find_active_incident(device_id=ev_b1.device_id, attack_type=ev_b1.attack_type)
+    assert active_b is None, "Campaign B from separate node must not match active Campaign A incident"
+
+    inc_b = store.create_incident(ev_b1, ["SYN flood from SENSOR-02"], "Memory")
+    assert inc_b["incident_id"] != inc_a["incident_id"]
+
+    open_incidents = store.incidents()
+    assert len(open_incidents) == 2
+    ids = {i["incident_id"] for i in open_incidents}
+    assert inc_a["incident_id"] in ids
+    assert inc_b["incident_id"] in ids

@@ -81,18 +81,19 @@ Every telemetry point, decision, and audit record carries an explicit provenance
   $$\text{DETECTED} \longrightarrow \text{TRIAGED} \longrightarrow \text{RESPONDING} \longrightarrow \text{CONTAINED} \longrightarrow \text{RECOVERING} \longrightarrow \text{RESOLVED} \longrightarrow \text{CLOSED}$$
 - **Verified Recovery Verification**: Incidents transition to `RECOVERING` only after 3 consecutive benign windows, and to `RESOLVED` (with `recovery_state="VERIFIED"`) only after 5 consecutive benign windows.
 
-### F. Complete 10-Vector Attack Catalogue
-Includes 10 attack profiles + benign baseline:
+### F. Complete Scenario Catalogue (10 Attack Vectors + Benign Baseline = 11 Profiles)
+Includes 10 attack profiles + 1 benign operational baseline:
+0. `normal`: Benign IIoT sensor telemetry baseline (14–18 pps).
 1. `udp_flood`: High-volume stateless UDP datagram flood.
 2. `syn_flood`: Half-open TCP connection exhaustion attack.
 3. `icmp_flood`: Edge control ping and ICMP echo storm.
-4. `slow_rate`: Low-frequency asymmetric connection holding (stealth).
-5. `burst_exhaustion`: Intermittent pulsating micro-bursts degrading edge buffers.
-6. `modbus_anomaly`: Industrial OT Modbus TCP function code & register scan.
-7. `coap_anomaly`: IIoT constrained CoAP confirmable request flood.
-8. `rpl_anomaly`: 6LoWPAN routing DODAG inconsistency & rank spoofing.
-9. `dns_amp`: UDP reflection simulation with spoofed source requests.
-10. `mixed_vector`: Multi-protocol hybrid barrage (held out for validation).
+4. `burst_exhaustion`: Intermittent pulsating micro-bursts degrading edge buffers.
+5. `slow_rate`: Low-frequency asymmetric connection holding (stealth).
+6. `coap_anomaly`: IIoT constrained CoAP confirmable request flood (port 5683).
+7. `mqtt_anomaly`: MQTT/MQTT-SN publish-like anomaly profile (port 1883).
+8. `rpl_anomaly`: 6LoWPAN routing DODAG inconsistency & rank spoofing (ICMPv6).
+9. `modbus_anomaly`: Industrial OT Modbus TCP function code & register scan (port 502).
+10. `mixed_vector`: Multi-protocol hybrid barrage (held out for zero-day generalization validation).
 
 ---
 
@@ -150,7 +151,7 @@ AI-Edge-DDoS-Gateway/
 │       ├── index.html          # Operator HMI (Topology, Incidents, Metrics)
 │       └── attacker.html       # Attacker simulation console
 ├── dataset/                    # Sample NS-3 & synthetic training data
-├── models/                     # Production model artifacts
+├── models/                     # Evaluated laboratory model artifacts
 │   └── hybrid_detector.joblib  # Trained, Platt-calibrated model bundle
 ├── reports/                    # Model validation metrics & confusion matrix
 │   ├── evaluation.json         # Stratified group-split evaluation metrics

@@ -162,6 +162,14 @@ if pcap_file.exists():
 
 ## Step 7: Machine Learning & Calibration Assurance
 
+Execute standalone dataset training and evaluation:
+```bash
+.venv/bin/python -m aegis_gateway.ml \
+  --dataset data/datasets/synthetic_lab_v2.csv \
+  --model models/hybrid_detector.joblib \
+  --report reports/evaluation.json
+```
+
 Inspect the ML evaluation report:
 ```bash
 cat reports/evaluation.json | python3 -m json.tool

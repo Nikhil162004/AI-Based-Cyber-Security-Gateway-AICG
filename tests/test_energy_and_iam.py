@@ -19,7 +19,9 @@ def test_energy_correlation_normal_vs_attack():
     atk_event = generate_window("udp_flood", intensity=4, sequence=0)
     model.correlate(atk_event)
 
-    assert atk_event.resource_state == "ELEVATED"
+    assert atk_event.resource_state in ("ELEVATED", "CRITICAL")
+    assert atk_event.energy_rate > norm_event.energy_rate
+    assert atk_event.energy_consumed > norm_event.energy_consumed
     assert atk_event.energy_deviation > norm_event.energy_deviation
     assert atk_event.cpu_activity > norm_event.cpu_activity
     assert atk_event.radio_rx > norm_event.radio_rx

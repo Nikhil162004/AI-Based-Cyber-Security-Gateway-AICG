@@ -155,15 +155,15 @@ class GatewayStore:
         """Find an unclosed, unresolved incident matching device_id or attack_type."""
         clauses = ["lifecycle_state NOT IN ('RESOLVED', 'CLOSED')"]
         params: list[Any] = []
-        sub_clauses = []
-        if device_id:
-            sub_clauses.append("device_id = ?")
+        if device_id and attack_type:
+            clauses.append("device_id = ? AND attack_type = ?")
+            params.extend([device_id, attack_type])
+        elif device_id:
+            clauses.append("device_id = ?")
             params.append(device_id)
-        if attack_type:
-            sub_clauses.append("attack_type = ?")
+        elif attack_type:
+            clauses.append("attack_type = ?")
             params.append(attack_type)
-        if sub_clauses:
-            clauses.append(f"({' OR '.join(sub_clauses)})")
         where = f"WHERE {' AND '.join(clauses)}"
         with self.connection() as con:
             row = con.execute(f"SELECT * FROM incidents {where} ORDER BY updated_at DESC LIMIT 1", params).fetchone()
@@ -287,9 +287,12 @@ class GatewayStore:
 
     def export(self, kind: str, fmt: str) -> str:
         if kind == "incidents": rows = self.incidents(limit=1000)
-        elif kind == "telemetry": rows = self.telemetry(limit=5000)
+        elif kind in ("telemetry", "events"):
+            rows = self.telemetry(limit=5000)
+            if kind == "events":
+                rows = [r for r in rows if r.get("label") == "ATTACK"]
         elif kind == "actions": rows = self.actions(limit=1000)
-        else: raise ValueError("Export kind must be incidents, telemetry, or actions")
+        else: raise ValueError("Export kind must be incidents, telemetry, events, or actions")
         if fmt == "json": return json.dumps(rows, indent=2, sort_keys=True)
         if fmt != "csv": raise ValueError("Export format must be csv or json")
         flattened = [{key: json.dumps(value) if isinstance(value, (list, dict)) else value for key, value in row.items()} for row in rows]

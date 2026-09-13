@@ -1217,7 +1217,7 @@
 
                 <!-- Scenario Catalogue Grid -->
                 <div style="margin-top: 14px;">
-                    <div class="control-label">Controlled Scenario Catalogue (10 In-Process Profiles):</div>
+                    <div class="control-label">Controlled Scenario Catalogue (10 Attack Profiles + Benign Baseline = 11 Profiles):</div>
                     <div class="scenario-grid">
                         <button class="btn-scenario btn-normal" onclick="triggerScenario('normal', 1, 15)">Normal Rhythm</button>
                         <button class="btn-scenario btn-attack" onclick="triggerScenario('udp_flood', 3, 10)">UDP Flood</button>
@@ -1227,6 +1227,7 @@
                         <button class="btn-scenario btn-attack" onclick="triggerScenario('slow_rate', 2, 12)">Slow-Rate</button>
                         <button class="btn-scenario btn-attack" onclick="triggerScenario('coap_anomaly', 3, 10)">CoAP Anomaly</button>
                         <button class="btn-scenario btn-attack" onclick="triggerScenario('mqtt_anomaly', 3, 10)">MQTT Anomaly</button>
+                        <button class="btn-scenario btn-attack" onclick="triggerScenario('rpl_anomaly', 3, 10)">RPL Storm</button>
                         <button class="btn-scenario btn-attack" onclick="triggerScenario('modbus_anomaly', 3, 10)">Modbus Style</button>
                         <button class="btn-scenario btn-attack" onclick="triggerScenario('mixed_vector', 4, 10)">Mixed Vector</button>
                         <button class="btn-scenario btn-stop" onclick="stopCurrentSimulation()">■ Stop Profile</button>

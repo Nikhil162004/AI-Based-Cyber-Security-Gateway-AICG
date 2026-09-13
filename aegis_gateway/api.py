@@ -112,21 +112,22 @@ def _format_telemetry_row(event: dict[str, Any], runtime: GatewayRuntime) -> dic
 
 def _format_energy_row(event: dict[str, Any]) -> dict[str, Any]:
     rate = float(event.get("packet_rate") or 0.0)
-    e_rate = float(event.get("energy_rate") or 0.018)
-    baseline = float(event.get("energy_baseline") or 0.018)
-    dev = float(event.get("energy_deviation") or 0.0)
+    baseline = float(event.get("energy_baseline") or 55.0)
+    e_rate = float(event.get("energy_rate") or baseline)
+    dev = float(event.get("energy_deviation") if event.get("energy_deviation") is not None else ((e_rate - baseline) / baseline))
+    consumed = float(event.get("energy_consumed") or e_rate)
     return {
         "window_start": event.get("timestamp"),
-        "energy_estimate": float(event.get("energy_consumed") or e_rate),
-        "energy_rate": round(e_rate, 6),
-        "energy_per_packet": round(e_rate / rate, 6) if rate > 0 else 0.0,
-        "baseline_energy": baseline,
+        "energy_estimate": round(consumed, 2),
+        "energy_rate": round(e_rate, 2),
+        "energy_per_packet": round(consumed / rate, 4) if rate > 0 else 0.0,
+        "baseline_energy": round(baseline, 2),
         "energy_deviation": round(dev, 4),
         "energy_increase_percent": round(dev * 100.0, 2),
         "tx_activity": float(event.get("radio_tx") or 4.0),
         "rx_activity": float(event.get("radio_rx") or 5.0),
         "cpu_activity": float(event.get("cpu_activity") or 6.0),
-        "energy_cause": event.get("energy_cause") or "MODELLED: baseline rhythm",
+        "energy_cause": event.get("energy_cause") or f"MODELLED: baseline rhythm ({e_rate:.1f} mW)",
         "measurement_status": "MODELLED",
         "environment": "CONTROLLED_SIMULATION",
         "hardware_measured": False,
@@ -514,6 +515,10 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         def stream():
             for message in runtime.subscribe():
                 yield f"event: {message['type']}\ndata: {json.dumps(message['data'], default=str)}\n\n"
-        return Response(stream(), mimetype="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-
     return app
+
+
+if __name__ == "__main__":
+    runtime = GatewayRuntime()
+    app = create_app(runtime)
+    app.run(host=runtime.settings.host, port=runtime.settings.port, debug=False, threaded=True)

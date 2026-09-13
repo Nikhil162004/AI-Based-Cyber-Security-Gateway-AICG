@@ -3,12 +3,13 @@
 
 Demonstrates:
 1. Normal baseline rhythm (streak >= 3) -> verifies baseline energy & no incident.
-2. Controlled attack launch (udp_flood, intensity=4) -> verifies AI detection, evidence generation,
-   elevated modelled energy, IAM trust decay, incident creation & correlation into single campaign.
+2. Controlled attack burst (udp_flood, intensity=4) -> verifies AI detection, evidence generation,
+   elevated modelled energy (mW), IAM trust decay, incident creation & correlation into single campaign.
 3. Multiple successive attack windows -> verifies correlation into the active incident without duplication.
 4. Response action -> automatic dry-run containment (CONTAINED).
 5. Resume normal rhythm -> verifies recovery streak tracking:
    CONTAINED -> RECOVERING (streak >= 3) -> RESOLVED (streak >= 5, verified).
+6. Separate campaigns -> verifies distinct device/attack vectors generate distinct incidents.
 """
 
 import json
@@ -47,8 +48,8 @@ def main():
             res = runtime.ingest(event)
             ev = res["event"]
             dec = res["decision"]
-            print(f"  Seq {seq}: Rate={ev['packet_rate']:.1f} pps, Energy={ev['energy_rate']:.1f} mW, "
-                  f"Decision={dec['prediction']}, Severity={dec['severity']}, "
+            print(f"  Seq {seq}: Rate={ev['packet_rate']:.1f} pps, Energy={ev['energy_rate']:.1f} mW "
+                  f"({ev['energy_deviation'] * 100:+.1f}%), Decision={dec['prediction']}, Severity={dec['severity']}, "
                   f"Trust={ev['trust_score']:.1f}, Active Incidents={len(runtime.store.incidents(state='OPEN'))}")
 
         assert len(runtime.store.incidents(state="OPEN")) == 0, "Expected 0 open incidents during baseline"
@@ -60,8 +61,9 @@ def main():
         ev1 = res1["event"]
         dec1 = res1["decision"]
         resp1 = res1["response"]
-        print(f"  Attack Window 1: Rate={ev1['packet_rate']:.1f} pps, Energy={ev1['energy_rate']:.1f} mW (+{ev1['energy_rate'] - 14.5:.1f} mW), "
-              f"Decision={dec1['prediction']}, Severity={dec1['severity']}, Trust={ev1['trust_score']:.1f} (-{100 - ev1['trust_score']:.1f}), "
+        print(f"  Attack Window 1: Rate={ev1['packet_rate']:.1f} pps, Energy={ev1['energy_rate']:.1f} mW "
+              f"({ev1['energy_deviation'] * 100:+.1f}% vs baseline), Decision={dec1['prediction']}, "
+              f"Severity={dec1['severity']}, Trust={ev1['trust_score']:.1f} (-{100 - ev1['trust_score']:.1f}), "
               f"Action={resp1['action']} ({resp1['mode']})")
 
         incidents = runtime.store.incidents(limit=5)
@@ -76,8 +78,9 @@ def main():
         res2 = runtime.ingest(attack_event_2)
         ev2 = res2["event"]
         dec2 = res2["decision"]
-        print(f"  Attack Window 2: Rate={ev2['packet_rate']:.1f} pps, Energy={ev2['energy_rate']:.1f} mW, "
-              f"Decision={dec2['prediction']}, Severity={dec2['severity']}, Trust={ev2['trust_score']:.1f}")
+        print(f"  Attack Window 2: Rate={ev2['packet_rate']:.1f} pps, Energy={ev2['energy_rate']:.1f} mW "
+              f"({ev2['energy_deviation'] * 100:+.1f}%), Decision={dec2['prediction']}, "
+              f"Severity={dec2['severity']}, Trust={ev2['trust_score']:.1f}")
 
         incidents_after = runtime.store.incidents(limit=5)
         assert len(incidents_after) == 1, f"Expected still exactly 1 correlated incident, found {len(incidents_after)}"
@@ -123,12 +126,26 @@ def main():
         inc_closed = runtime.store.incidents(limit=1)[0]
         print(f"  -> Incident transitioned to {inc_closed['lifecycle_state']}.")
 
-        # Check trust recovery
-        print(f"\n[Phase 4: Trust & Identity Recovery Check]")
+        print("\n[Phase 4: Trust & Identity Audit Check]")
         trust_entries = runtime.store.trust("ATK-01")
         print(f"  Total Trust Log Entries for ATK-01: {len(trust_entries)}")
         for t in trust_entries[-4:]:
             print(f"    Time={t['timestamp']}, Score={t['score']:.1f}, Delta={t['delta']:.1f}, Reason={t['reason']}")
+
+        print("\n[Phase 5: Campaign Separation Verification]")
+        # Distinct attack from a different node (SENSOR-02) with syn_flood
+        distinct_attack = generate_window("syn_flood", intensity=4, sequence=0)
+        distinct_attack.device_id = "SENSOR-02"
+        distinct_attack.source_id = "SENSOR-NODE-02"
+        res_distinct = runtime.ingest(distinct_attack)
+        distinct_inc = res_distinct.get("incident")
+        assert distinct_inc is not None, "Expected distinct incident created for new campaign"
+        assert distinct_inc["incident_id"] != inc_id, "New campaign must create a distinct incident ID"
+        print(f"  -> Distinct Campaign Incident Created: {distinct_inc['incident_id']} (Target: {distinct_inc['device_id']}, Vector: {distinct_inc['attack_type']})")
+
+        all_incidents = runtime.store.incidents()
+        assert len(all_incidents) == 2, f"Expected exactly 2 distinct incidents in history, found {len(all_incidents)}"
+        print(f"  -> Total distinct incident records in store: {len(all_incidents)} (Verified campaign separation).")
 
         print("\n" + "=" * 70)
         print("ALL END-TO-END ACCEPTANCE VERIFICATION CRITERIA SUCCESSFULLY MET!")

@@ -242,3 +242,25 @@ def train_and_evaluate(dataset_path: Path, model_path: Path, report_path: Path, 
     ).to_csv(report_path.with_name("confusion_matrix.csv"))
 
     return report
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Aegis Gateway ML training and evaluation")
+    parser.add_argument("--dataset", type=Path, default=Path("data/datasets/synthetic_lab_v2.csv"))
+    parser.add_argument("--model", type=Path, default=Path("models/hybrid_detector.joblib"))
+    parser.add_argument("--report", type=Path, default=Path("reports/evaluation.json"))
+    parser.add_argument("--seed", type=int, default=20260913)
+    parser.add_argument("--generate", action="store_true", help="Generate synthetic dataset first")
+    args = parser.parse_args()
+
+    if args.generate or not args.dataset.exists():
+        print(f"Generating synthetic dataset at {args.dataset}...")
+        meta_path = args.dataset.with_name(args.dataset.stem + ".metadata.json")
+        generate_dataset(args.dataset, meta_path, seed=args.seed)
+
+    print(f"Training and evaluating model on {args.dataset}...")
+    res = train_and_evaluate(args.dataset, args.model, args.report, seed=args.seed)
+    print(f"Model saved to {args.model}")
+    print(f"Report saved to {args.report}")
+    print(f"Test F1: {res['test']['f1']['ATTACK']:.4f}, Brier: {res['calibration']['brier_score_calibrated']:.6f}")
