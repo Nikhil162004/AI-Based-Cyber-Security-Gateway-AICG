@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AEGIS-OT • Controlled Attack Simulation Console</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <style>
+        :root {
+            --bg-primary: #0a0f18;
+            --bg-secondary: #111a2e;
+            --bg-card: #152238;
+            --border: #1e3557;
+            --accent-red: #ff3b5c;
+            --accent-green: #00e5a3;
+            --accent-blue: #35d4ff;
+            --accent-yellow: #ffb830;
+            --text-main: #e2ecf8;
+            --text-muted: #7b93b2;
+        }
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 16px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 680px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .header {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 18px 20px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 1.25rem;
+            margin: 0 0 6px 0;
+            letter-spacing: 1px;
+            color: var(--accent-blue);
+        }
+        .header .subtitle {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .banner-safety {
+            background: rgba(255, 184, 48, 0.12);
+            border: 1px solid rgba(255, 184, 48, 0.4);
+            color: var(--accent-yellow);
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            line-height: 1.4;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 18px 20px;
+        }
+        .card-title {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+        .form-group {
+            margin-bottom: 14px;
+        }
+        label {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        select, input[type="range"] {
+            width: 100%;
+            box-sizing: border-box;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+        .slider-value {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: var(--accent-blue);
+            margin-top: 4px;
+        }
+        .btn-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        button {
+            cursor: pointer;
+            padding: 14px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+            border: none;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+        }
+        .btn-launch {
+            background: linear-gradient(135deg, #ff3b5c, #d91c3d);
+            color: #ffffff;
+        }
+        .btn-launch:hover {
+            background: linear-gradient(135deg, #ff5471, #ff3b5c);
+            box-shadow: 0 0 16px rgba(255, 59, 92, 0.4);
+        }
+        .btn-stop {
+            background: #253957;
+            color: #e2ecf8;
+            border: 1px solid var(--border);
+        }
+        .btn-stop:hover {
+            background: #2f486e;
+        }
+        .btn-normal {
+            grid-column: span 2;
+            background: rgba(0, 229, 163, 0.15);
+            color: var(--accent-green);
+            border: 1px solid var(--accent-green);
+        }
+        .btn-normal:hover {
+            background: rgba(0, 229, 163, 0.25);
+        }
+        .status-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 14px;
+            font-size: 0.8rem;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+        }
+        .status-val-active {
+            color: var(--accent-red);
+            font-weight: bold;
+        }
+        .status-val-idle {
+            color: var(--accent-green);
+            font-weight: bold;
+        }
+        .nav-link {
+            text-align: center;
+            margin-top: 8px;
+        }
+        .nav-link a {
+            color: var(--accent-blue);
+            text-decoration: none;
+            font-size: 0.85rem;
+        }
+        .nav-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>AEGIS-OT ATTACK SIMULATOR</h1>
+            <div class="subtitle">Controlled IIoT Laboratory Demonstration Console</div>
+        </div>
+
+        <div class="banner-safety">
+            <strong>⚠ SAFETY BOUNDARY:</strong>
+            <span>All profiles are safe in-process models. No network packets are transmitted, external hosts are not targeted, and firewall rules are NOT modified.</span>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Select Attack Scenario</div>
+            <div class="form-group">
+                <label for="scenarioSelect">Attack Profile</label>
+                <select id="scenarioSelect">
+                    <option value="udp_flood">UDP Flood — CoAP / High-Rate Ingestion</option>
+                    <option value="syn_flood">TCP SYN Flood — Connection Starvation</option>
+                    <option value="icmp_flood">ICMP Flood — Ping / RPL Storm</option>
+                    <option value="burst_exhaustion">Burst Traffic Exhaustion — Sharp Load Spikes</option>
+                    <option value="slow_rate">Slow-Rate Exhaustion — Persistent Connections</option>
+                    <option value="coap_anomaly">CoAP Anomaly — Port 5683 Resource Abuse</option>
+                    <option value="mqtt_anomaly">MQTT-SN Anomaly — Port 1883 Publish Burst</option>
+                    <option value="rpl_anomaly">RPL / 6LoWPAN Anomaly — Control Plane Anomaly</option>
+                    <option value="modbus_anomaly">Modbus-Style Anomaly — Port 502 Industrial Flow</option>
+                    <option value="mixed_vector">Mixed Multi-Vector — UDP + TCP + ICMP Compound</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="intensityRange">Intensity Level: <span id="intensityVal">3</span> (x1-x6 Scale)</label>
+                <input type="range" id="intensityRange" min="1" max="6" value="3" oninput="document.getElementById('intensityVal').innerText=this.value">
+                <div class="slider-value">
+                    <span>1: Subtle / Stealth</span>
+                    <span>3: Standard Lab</span>
+                    <span>6: Maximum Saturation</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="durationRange">Duration: <span id="durationVal">10</span> seconds</label>
+                <input type="range" id="durationRange" min="3" max="30" value="10" oninput="document.getElementById('durationVal').innerText=this.value">
+                <div class="slider-value">
+                    <span>3 sec</span>
+                    <span>15 sec</span>
+                    <span>30 sec</span>
+                </div>
+            </div>
+
+            <div class="btn-grid">
+                <button class="btn-launch" id="btnLaunch" onclick="launchSimulation()">Launch Simulation</button>
+                <button class="btn-stop" id="btnStop" onclick="stopSimulation()">Stop Simulation</button>
+                <button class="btn-normal" onclick="setNormalBaseline()">Reset to Normal Rhythm</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Live Simulator Status</div>
+            <div class="status-box">
+                <div class="status-row">
+                    <span>Simulator Engine:</span>
+                    <span id="simEngineStatus" class="status-val-idle">IDLE / NORMAL</span>
+                </div>
+                <div class="status-row">
+                    <span>Active Scenario:</span>
+                    <span id="simActiveScenario">None</span>
+                </div>
+                <div class="status-row">
+                    <span>Target Interface:</span>
+                    <span>GATEWAY-01 (In-Process Adapter)</span>
+                </div>
+                <div class="status-row">
+                    <span>Network Transmission:</span>
+                    <span style="color: var(--accent-green)">DISABLED (Safe Local Profile)</span>
+                </div>
+                <div class="status-row">
+                    <span>Host Enforcement:</span>
+                    <span style="color: var(--text-muted)">SIMULATED / DRY-RUN</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="nav-link">
+            <a href="/">← Return to Main Gateway Operator HMI</a>
+        </div>
+    </div>
+
+    <script>
+        async function launchSimulation() {
+            const scenario = document.getElementById("scenarioSelect").value;
+            const intensity = parseInt(document.getElementById("intensityRange").value, 10);
+            const duration = parseInt(document.getElementById("durationRange").value, 10);
+            const statusEl = document.getElementById("simEngineStatus");
+            const scenarioEl = document.getElementById("simActiveScenario");
+
+            statusEl.textContent = "STARTING...";
+            try {
+                const res = await fetch("/api/simulations/start", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({ scenario_id: scenario, intensity: intensity, duration: duration })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    statusEl.textContent = "SIMULATING (ATTACK PROFILE)";
+                    statusEl.className = "status-val-active";
+                    scenarioEl.textContent = `${scenario} (Intensity ${intensity}, ${duration}s)`;
+                } else {
+                    statusEl.textContent = "ERROR: " + (data.error || "Failed");
+                    statusEl.className = "status-val-active";
+                }
+            } catch (err) {
+                statusEl.textContent = "FETCH FAILED";
+                statusEl.className = "status-val-active";
+            }
+        }
+
+        async function stopSimulation() {
+            const statusEl = document.getElementById("simEngineStatus");
+            const scenarioEl = document.getElementById("simActiveScenario");
+            try {
+                await fetch("/api/simulations/stop", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({})
+                });
+                statusEl.textContent = "STOPPED / IDLE";
+                statusEl.className = "status-val-idle";
+                scenarioEl.textContent = "None";
+            } catch (err) {
+                statusEl.textContent = "STOP FAILED";
+            }
+        }
+
+        async function setNormalBaseline() {
+            await stopSimulation();
+            try {
+                await fetch("/api/simulations/start", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({ scenario_id: "normal", intensity: 1, duration: 15 })
+                });
+                document.getElementById("simEngineStatus").textContent = "NORMAL RHYTHM";
+                document.getElementById("simEngineStatus").className = "status-val-idle";
+                document.getElementById("simActiveScenario").textContent = "Normal IIoT Rhythm";
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function pollStatus() {
+            try {
+                const res = await fetch("/api/status");
+                const data = await res.json();
+                const active = data.active_simulations || [];
+                const statusEl = document.getElementById("simEngineStatus");
+                const scenarioEl = document.getElementById("simActiveScenario");
+                if (active.length > 0) {
+                    const sim = active[0];
+                    if (sim.scenario_id === "normal") {
+                        statusEl.textContent = "NORMAL RHYTHM";
+                        statusEl.className = "status-val-idle";
+                    } else {
+                        statusEl.textContent = "SIMULATING (ATTACK PROFILE)";
+                        statusEl.className = "status-val-active";
+                    }
+                    scenarioEl.textContent = `${sim.scenario_id} (Intensity ${sim.intensity}, ${sim.windows} windows)`;
+                } else {
+                    statusEl.textContent = "IDLE";
+                    statusEl.className = "status-val-idle";
+                    scenarioEl.textContent = "None";
+                }
+            } catch (e) {}
+        }
+        setInterval(pollStatus, 3000);
+        pollStatus();
+    </script>
+</body>
+</html>

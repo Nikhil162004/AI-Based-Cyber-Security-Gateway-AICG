@@ -10,6 +10,186 @@
         rel="stylesheet"
         href="{{ url_for('static', filename='css/dashboard.css') }}"
     >
+    <style>
+        .scenario-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .btn-scenario {
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--panel-2);
+            color: var(--text);
+            transition: all 0.2s ease;
+        }
+        .btn-scenario:hover {
+            border-color: var(--cyan);
+            color: var(--cyan);
+        }
+        .btn-scenario.btn-attack {
+            border-color: rgba(255, 85, 119, 0.4);
+            color: var(--red);
+        }
+        .btn-scenario.btn-attack:hover {
+            background: rgba(255, 85, 119, 0.15);
+            box-shadow: 0 0 10px rgba(255, 85, 119, 0.3);
+        }
+        .btn-scenario.btn-normal {
+            border-color: rgba(57, 217, 138, 0.4);
+            color: var(--green);
+        }
+        .btn-scenario.btn-normal:hover {
+            background: rgba(57, 217, 138, 0.15);
+            box-shadow: 0 0 10px rgba(57, 217, 138, 0.3);
+        }
+        .btn-scenario.btn-stop {
+            border-color: rgba(120, 144, 168, 0.4);
+            color: var(--muted);
+        }
+        .operator-controls-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 14px;
+            padding: 12px 14px;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .control-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .control-label {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--muted);
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+        }
+        .btn-action-sim {
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--panel-2);
+            color: var(--text);
+            text-transform: uppercase;
+        }
+        .btn-action-sim:hover {
+            border-color: var(--yellow);
+            color: var(--yellow);
+        }
+        .btn-mode {
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            border: 1px solid var(--cyan);
+            background: rgba(53, 212, 255, 0.1);
+            color: var(--cyan);
+        }
+        .btn-mode.mode-manual {
+            border-color: var(--yellow);
+            background: rgba(244, 201, 93, 0.1);
+            color: var(--yellow);
+        }
+        .link-mobile-console {
+            color: var(--cyan);
+            font-size: 11px;
+            text-decoration: none;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .link-mobile-console:hover {
+            text-decoration: underline;
+        }
+        .badge-lifecycle {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .badge-detected { background: rgba(255, 85, 119, 0.2); color: var(--red); border: 1px solid var(--red); }
+        .badge-triaged { background: rgba(53, 212, 255, 0.2); color: var(--cyan); border: 1px solid var(--cyan); }
+        .badge-responding { background: rgba(160, 100, 255, 0.2); color: #c28aff; border: 1px solid #c28aff; }
+        .badge-contained { background: rgba(53, 150, 255, 0.2); color: #70b0ff; border: 1px solid #70b0ff; }
+        .badge-recovering { background: rgba(244, 201, 93, 0.2); color: var(--yellow); border: 1px solid var(--yellow); }
+        .badge-resolved { background: rgba(57, 217, 138, 0.2); color: var(--green); border: 1px solid var(--green); }
+        .badge-closed { background: rgba(120, 144, 168, 0.2); color: var(--muted); border: 1px solid var(--muted); }
+        .metrics-grid-view {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+        .metrics-card-item {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .metrics-card-item span {
+            display: block;
+            font-size: 9px;
+            color: var(--muted);
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+        }
+        .metrics-card-item strong {
+            display: block;
+            font-size: 18px;
+            font-weight: 800;
+            margin-top: 4px;
+            color: var(--cyan);
+        }
+        .export-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 14px;
+        }
+        .btn-export {
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            background: var(--panel-2);
+            color: var(--text);
+            border: 1px solid var(--border);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+        .btn-export:hover {
+            border-color: var(--cyan);
+            color: var(--cyan);
+        }
+    </style>
 </head>
 
 <body>
@@ -999,16 +1179,16 @@
 
             <div>
                 <div class="panel-title">
-                    CONTROLLED ATTACK DEMONSTRATION
+                    CONTROLLED ATTACK &amp; OPERATOR SIMULATION CONSOLE
                 </div>
 
                 <div class="panel-subtitle">
-                    NS-3 validated LOW_DDOS decision-path demonstration
+                    In-process traffic profiles • No external transmission • Dry-run mitigation
                 </div>
             </div>
 
             <div class="panel-badge demo-badge">
-                OFFLINE DEMO
+                CONTROLLED LAB
             </div>
 
         </div>
@@ -1019,20 +1199,57 @@
             <div class="demo-info">
 
                 <div class="demo-description">
-                    Run a validated NS-3 LOW_DDOS feature vector through
-                    the existing ML detection and security decision pipeline.
+                    Trigger safe, in-process scenario profiles through the canonical hybrid gateway pipeline, or launch a validated single-vector verification.
                 </div>
 
-                <button
-                    id="run-demo-btn"
-                    class="demo-button"
-                    type="button">
-                    RUN CONTROLLED DEMO
-                </button>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px;">
+                    <button
+                        id="run-demo-btn"
+                        class="demo-button"
+                        type="button">
+                        RUN SINGLE-STEP DEMO
+                    </button>
+
+                    <a href="/attacker" target="_blank" class="link-mobile-console">
+                        📱 Open Attacker Simulation Console →
+                    </a>
+                </div>
+
+                <!-- Scenario Catalogue Grid -->
+                <div style="margin-top: 14px;">
+                    <div class="control-label">Controlled Scenario Catalogue (10 In-Process Profiles):</div>
+                    <div class="scenario-grid">
+                        <button class="btn-scenario btn-normal" onclick="triggerScenario('normal', 1, 15)">Normal Rhythm</button>
+                        <button class="btn-scenario btn-attack" onclick="triggerScenario('udp_flood', 3, 10)">UDP Flood</button>
+                        <button class="btn-scenario btn-attack" onclick="triggerScenario('syn_flood', 3, 10)">SYN Flood</button>
+                        <button class="btn-scenario btn-attack" onclick="triggerScenario('icmp_flood', 3, 10)">ICMP Storm</button>
+                        <button class="btn-scenario btn-attack" onclick="triggerScenario('burst_exhaustion', 4, 10)">Burst Spike</button>
+                        <button class="btn-scenario btn-attack" onclick="triggerScenario('slow_rate', 2, 12)">Slow-Rate</button>
+                        <button class="btn-scenario btn-attack" onclick="triggerScenario('coap_anomaly', 3, 10)">CoAP Anomaly</button>
+                        <button class="btn-scenario btn-attack" onclick="triggerScenario('mqtt_anomaly', 3, 10)">MQTT Anomaly</button>
+                        <button class="btn-scenario btn-attack" onclick="triggerScenario('modbus_anomaly', 3, 10)">Modbus Style</button>
+                        <button class="btn-scenario btn-attack" onclick="triggerScenario('mixed_vector', 4, 10)">Mixed Vector</button>
+                        <button class="btn-scenario btn-stop" onclick="stopCurrentSimulation()">■ Stop Profile</button>
+                    </div>
+                </div>
+
+                <!-- Operator Response Controls -->
+                <div class="operator-controls-bar">
+                    <div class="control-group">
+                        <span class="control-label">Response Policy:</span>
+                        <button id="btnResponseMode" class="btn-mode" onclick="toggleResponseMode()">AUTO: ON</button>
+                    </div>
+                    <div class="control-group">
+                        <span class="control-label">Simulated Actions:</span>
+                        <button class="btn-action-sim" onclick="executeManualAction('BLOCK')">Block</button>
+                        <button class="btn-action-sim" onclick="executeManualAction('RATE_LIMIT')">Rate Limit</button>
+                        <button class="btn-action-sim" onclick="executeManualAction('ISOLATE')">Isolate</button>
+                        <button class="btn-action-sim" style="border-color: var(--green); color: var(--green);" onclick="executeManualAction('RECOVER')">Verify Recover</button>
+                    </div>
+                </div>
 
                 <div class="demo-warning">
-                    Offline demonstration only — no packets are generated,
-                    no live traffic is modified, and enforcement is not implemented.
+                    Safety Boundary: All profiles run in-memory within the laboratory process. Host routing tables and firewall rules are NEVER altered.
                 </div>
 
             </div>
@@ -1042,9 +1259,9 @@
 
                 <div class="demo-placeholder">
                     <span>DEMO STATUS</span>
-                    <strong>READY</strong>
-                    <small>
-                        Click the button to run the validated scenario.
+                    <strong id="simStatusBanner">READY</strong>
+                    <small id="simStatusDetail">
+                        Click a scenario button or Single-Step Demo to begin.
                     </small>
                 </div>
 
@@ -1115,8 +1332,64 @@
 
 
     <!-- ===================================================== -->
-    <!-- CONTROLLED NS-3 ENERGY TELEMETRY -->
+    <!-- DURABLE INCIDENT JOURNAL -->
     <!-- ===================================================== -->
+
+    <section class="panel incident-panel" id="incident-journal-section">
+
+        <div class="panel-header">
+
+            <div>
+                <div class="panel-title">
+                    DURABLE INCIDENT JOURNAL &amp; CAMPAIGN CORRELATION
+                </div>
+
+                <div class="panel-subtitle">
+                    Correlated attack windows • Lifecycle: DETECTED → TRIAGED → RESPONDING → CONTAINED → RECOVERING → RESOLVED
+                </div>
+            </div>
+
+            <div class="event-counter">
+                INCIDENTS:
+                <span id="incidentCount">0</span>
+            </div>
+
+        </div>
+
+        <div class="table-wrapper">
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>INCIDENT ID</th>
+                        <th>UPDATED</th>
+                        <th>TARGET / DEVICE</th>
+                        <th>ATTACK TYPE</th>
+                        <th>SEVERITY</th>
+                        <th>CONFIDENCE</th>
+                        <th>LIFECYCLE STATE</th>
+                        <th>RECOVERY</th>
+                        <th>SIMULATED ACTION</th>
+                        <th>OPERATOR</th>
+                    </tr>
+                </thead>
+
+                <tbody id="incidentsTable">
+
+                    <tr>
+                        <td colspan="10" class="empty-state">
+                            No active or historical incidents recorded in historian.
+                        </td>
+                    </tr>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </section>
 
     <section class="panel energy-panel" id="energy-context-section">
 
@@ -1311,6 +1584,88 @@
             They are not physical hardware measurements and are
             not presented as real-time device power consumption.
 
+        </div>
+
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- AI / ML MODEL ASSURANCE & GROUPED EVALUATION EVIDENCE -->
+    <!-- ===================================================== -->
+
+    <section class="panel metrics-panel" id="ml-metrics-section">
+
+        <div class="panel-header">
+
+            <div>
+                <div class="panel-title">
+                    AI / ML MODEL ASSURANCE &amp; GROUPED EVALUATION EVIDENCE
+                </div>
+
+                <div class="panel-subtitle">
+                    Stratified Campaign-Grouped Split (0% leakage) • Platt-Calibrated Probabilities • Scenario Held-Out Generalization
+                </div>
+            </div>
+
+            <div class="panel-badge" style="background: rgba(57, 217, 138, 0.15); color: var(--green); border: 1px solid var(--green);">
+                VERIFIED EVALUATION
+            </div>
+
+        </div>
+
+        <div class="metrics-grid-view">
+            <div class="metrics-card-item">
+                <span>Model Architecture</span>
+                <strong id="metricModelName" style="font-size: 13px;">RF + Isolation Forest</strong>
+                <small style="color: var(--muted); font-size: 10px;">240 trees / 200 IF trees</small>
+            </div>
+            <div class="metrics-card-item">
+                <span>Test F1-Score</span>
+                <strong id="metricF1">—</strong>
+                <small style="color: var(--green); font-size: 10px;">Grouped Test Split</small>
+            </div>
+            <div class="metrics-card-item">
+                <span>Test Precision</span>
+                <strong id="metricPrecision">—</strong>
+                <small style="color: var(--muted); font-size: 10px;">Attack Class</small>
+            </div>
+            <div class="metrics-card-item">
+                <span>Test Recall</span>
+                <strong id="metricRecall">—</strong>
+                <small style="color: var(--muted); font-size: 10px;">Attack Class</small>
+            </div>
+            <div class="metrics-card-item">
+                <span>False Positive Rate</span>
+                <strong id="metricFPR">—</strong>
+                <small style="color: var(--cyan); font-size: 10px;">0% FPR on normal groups</small>
+            </div>
+            <div class="metrics-card-item">
+                <span>ROC-AUC / PR-AUC</span>
+                <strong id="metricAUC">—</strong>
+                <small style="color: var(--muted); font-size: 10px;">Discrimination</small>
+            </div>
+            <div class="metrics-card-item">
+                <span>Platt Calibration Brier</span>
+                <strong id="metricBrier">—</strong>
+                <small style="color: var(--green); font-size: 10px;">Calibrated Probability</small>
+            </div>
+            <div class="metrics-card-item">
+                <span>Scenario Held-Out</span>
+                <strong id="metricHeldOut">—</strong>
+                <small style="color: var(--yellow); font-size: 10px;">mixed_vector withheld</small>
+            </div>
+        </div>
+
+        <!-- Evidence & Telemetry Export Bar -->
+        <div style="margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px;">
+            <div class="control-label" style="margin-bottom: 8px;">Durable Laboratory Evidence &amp; Audit Logs Export:</div>
+            <div class="export-bar">
+                <a href="/api/export/telemetry.csv" download class="btn-export">📥 Export Telemetry (CSV)</a>
+                <a href="/api/export/telemetry.json" download class="btn-export">📥 Export Telemetry (JSON)</a>
+                <a href="/api/export/incidents.csv" download class="btn-export">📥 Export Incidents (CSV)</a>
+                <a href="/api/export/incidents.json" download class="btn-export">📥 Export Incidents (JSON)</a>
+                <a href="/api/export/actions.csv" download class="btn-export">📥 Export Actions (CSV)</a>
+            </div>
         </div>
 
     </section>

@@ -1039,8 +1039,17 @@ async function refreshDashboard() {
 
         updateTopology(topologyData);
 
+        const incidentsResponse = await fetch("/api/incidents", { cache: "no-store" });
+        if (incidentsResponse.ok) {
+            const incData = await incidentsResponse.json();
+            updateIncidents(incData.incidents);
+        }
 
-
+        const metricsResponse = await fetch("/api/metrics", { cache: "no-store" });
+        if (metricsResponse.ok) {
+            const metData = await metricsResponse.json();
+            updateMetrics(metData);
+        }
 
     } catch (error) {
 
@@ -1183,4 +1192,216 @@ if (controlledDemoButton) {
         runControlledDemo
     );
 }
+
+/* ============================================================
+   INCIDENT JOURNAL & LIFECYCLE
+   ============================================================ */
+
+function updateIncidents(incidents) {
+    const table = document.getElementById("incidentsTable");
+    const countEl = document.getElementById("incidentCount");
+    if (!table) return;
+    if (countEl) countEl.textContent = incidents ? incidents.length : 0;
+    if (!incidents || !incidents.length) {
+        table.innerHTML = `
+            <tr>
+                <td colspan="10" class="empty-state">
+                    No active or historical incidents recorded in historian.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    table.innerHTML = incidents.map(inc => {
+        const state = inc.lifecycle_state || "UNKNOWN";
+        const stateClass = `badge-${state.toLowerCase()}`;
+        const canResolve = ["CONTAINED", "RECOVERING", "RESPONDING"].includes(state);
+        const canClose = state === "RESOLVED";
+
+        let actionBtn = "—";
+        if (canResolve) {
+            actionBtn = `<button class="btn-action-sim" onclick="transitionIncidentState('${inc.incident_id}', 'RESOLVED')">Resolve</button>`;
+        } else if (canClose) {
+            actionBtn = `<button class="btn-action-sim" onclick="transitionIncidentState('${inc.incident_id}', 'CLOSED')">Close</button>`;
+        }
+
+        const dateStr = (inc.updated_at || inc.created_at || "").replace("T", " ").split(".")[0];
+        const confPct = inc.confidence ? (inc.confidence * 100).toFixed(1) + "%" : "—";
+        const sevClass = inc.severity === "CRITICAL" || inc.severity === "HIGH" ? "event-threat" : "event-normal";
+
+        return `
+            <tr>
+                <td style="font-family: monospace; font-size: 11px;">${inc.incident_id}</td>
+                <td style="font-size: 11px;">${dateStr}</td>
+                <td><strong>${inc.device_id || "NS3-NODE"}</strong></td>
+                <td>${inc.attack_type || "Attack Campaign"}</td>
+                <td class="${sevClass}"><strong>${inc.severity || "MEDIUM"}</strong></td>
+                <td>${confPct}</td>
+                <td><span class="badge-lifecycle ${stateClass}">${state}</span></td>
+                <td><span style="font-size: 10px; color: ${inc.recovery_state === 'VERIFIED' ? 'var(--green)' : 'var(--yellow)'}">${inc.recovery_state || "PENDING"}</span></td>
+                <td style="color: var(--cyan);">${inc.response_action || "ALERT"}</td>
+                <td>${actionBtn}</td>
+            </tr>
+        `;
+    }).join("");
+}
+
+/* ============================================================
+   ML MODEL ASSURANCE METRICS
+   ============================================================ */
+
+function updateMetrics(metrics) {
+    if (!metrics || metrics.status === "NOT_TRAINED") return;
+    const test = metrics.test || {};
+    const heldOut = metrics.scenario_held_out || {};
+    const cal = metrics.calibration || {};
+
+    const setT = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+    };
+
+    setT("metricModelName", metrics.model_version || "hybrid-rf-if-v2");
+    if (test.f1 && test.f1.ATTACK !== undefined) {
+        setT("metricF1", (test.f1.ATTACK * 100).toFixed(1) + "%");
+    }
+    if (test.precision && test.precision.ATTACK !== undefined) {
+        setT("metricPrecision", (test.precision.ATTACK * 100).toFixed(1) + "%");
+    }
+    if (test.recall && test.recall.ATTACK !== undefined) {
+        setT("metricRecall", (test.recall.ATTACK * 100).toFixed(1) + "%");
+    }
+    if (test.false_positive_rate !== undefined && test.false_positive_rate !== null) {
+        setT("metricFPR", (test.false_positive_rate * 100).toFixed(2) + "%");
+    }
+    if (test.roc_auc !== undefined) {
+        setT("metricAUC", `${test.roc_auc.toFixed(3)} / ${(test.pr_auc || 1.0).toFixed(3)}`);
+    }
+    if (cal.brier_score_calibrated !== undefined && cal.brier_score_calibrated !== null) {
+        setT("metricBrier", cal.brier_score_calibrated.toFixed(5));
+    }
+    if (heldOut.f1 && heldOut.f1.ATTACK !== undefined) {
+        setT("metricHeldOut", (heldOut.f1.ATTACK * 100).toFixed(1) + "% F1");
+    }
+}
+
+/* ============================================================
+   OPERATOR SCENARIO & MITIGATION CONTROLS
+   ============================================================ */
+
+window.triggerScenario = async function(scenarioId, intensity = 3, duration = 10) {
+    const banner = document.getElementById("simStatusBanner");
+    const detail = document.getElementById("simStatusDetail");
+    if (banner) banner.textContent = `STARTING ${scenarioId.toUpperCase()}...`;
+    try {
+        const res = await fetch("/api/simulations/start", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ scenario_id: scenarioId, intensity, duration })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            if (banner) {
+                banner.textContent = scenarioId === "normal" ? "NORMAL RHYTHM ACTIVE" : "SIMULATING ATTACK";
+                banner.className = scenarioId === "normal" ? "demo-normal" : "demo-threat";
+            }
+            if (detail) detail.textContent = `Profile: ${scenarioId} (Intensity: ${intensity}, Duration: ${duration}s)`;
+            refreshDashboard();
+        } else {
+            if (banner) banner.textContent = "SIMULATION FAILED";
+            if (detail) detail.textContent = data.error || "Request failed";
+        }
+    } catch (e) {
+        console.error("Simulation trigger failed:", e);
+    }
+};
+
+window.stopCurrentSimulation = async function() {
+    const banner = document.getElementById("simStatusBanner");
+    const detail = document.getElementById("simStatusDetail");
+    try {
+        await fetch("/api/simulations/stop", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({})
+        });
+        if (banner) {
+            banner.textContent = "SIMULATION STOPPED";
+            banner.className = "";
+        }
+        if (detail) detail.textContent = "Active profile halted. Baseline rhythm active.";
+        refreshDashboard();
+    } catch (e) {
+        console.error("Stop simulation failed:", e);
+    }
+};
+
+window.currentAutoResponse = true;
+window.toggleResponseMode = async function() {
+    window.currentAutoResponse = !window.currentAutoResponse;
+    const btn = document.getElementById("btnResponseMode");
+    const mode = window.currentAutoResponse ? "DRY_RUN" : "MANUAL";
+    try {
+        const res = await fetch("/api/settings/mode", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ mode: mode, auto: window.currentAutoResponse })
+        });
+        const data = await res.json();
+        if (btn) {
+            btn.textContent = data.auto ? "AUTO: ON" : "MANUAL: APPROVAL";
+            btn.classList.toggle("mode-manual", !data.auto);
+        }
+    } catch (e) {
+        console.error("Toggle response mode failed:", e);
+    }
+};
+
+window.executeManualAction = async function(action) {
+    try {
+        const res = await fetch("/api/manual/action", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ action: action, actor: "operator" })
+        });
+        const data = await res.json();
+        refreshDashboard();
+    } catch (e) {
+        console.error("Manual action failed:", e);
+    }
+};
+
+window.transitionIncidentState = async function(incidentId, targetState) {
+    try {
+        await fetch(`/api/incidents/${incidentId}/transition`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ state: targetState, actor: "operator", note: "Operator transitioned state via HMI" })
+        });
+        refreshDashboard();
+    } catch (e) {
+        console.error("Transition failed:", e);
+    }
+};
+
+/* ============================================================
+   SSE STREAM INTEGRATION
+   ============================================================ */
+
+function initSSE() {
+    if (typeof EventSource === "undefined") return;
+    try {
+        const source = new EventSource("/events");
+        source.addEventListener("telemetry", () => refreshDashboard());
+        source.addEventListener("incident", () => refreshDashboard());
+        source.addEventListener("response", () => refreshDashboard());
+        source.addEventListener("trust", () => refreshDashboard());
+        source.addEventListener("simulation", () => refreshDashboard());
+    } catch (err) {
+        console.warn("SSE connection error; falling back to polling", err);
+    }
+}
+initSSE();
+
 

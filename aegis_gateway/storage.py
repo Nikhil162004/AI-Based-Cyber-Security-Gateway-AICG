@@ -95,7 +95,7 @@ class GatewayStore:
         if source_type:
             query += " WHERE source_type = ?"
             params.append(source_type.upper())
-        query += " ORDER BY timestamp DESC LIMIT ?"
+        query += " ORDER BY timestamp DESC, rowid DESC LIMIT ?"
         params.append(max(1, min(limit, 5000)))
         with self.connection() as con:
             rows = con.execute(query, params).fetchall()
@@ -151,16 +151,70 @@ class GatewayStore:
         item["evidence"] = json.loads(item.pop("evidence_json"))
         return item
 
+    def find_active_incident(self, device_id: str | None = None, attack_type: str | None = None) -> dict[str, Any] | None:
+        """Find an unclosed, unresolved incident matching device_id or attack_type."""
+        clauses = ["lifecycle_state NOT IN ('RESOLVED', 'CLOSED')"]
+        params: list[Any] = []
+        sub_clauses = []
+        if device_id:
+            sub_clauses.append("device_id = ?")
+            params.append(device_id)
+        if attack_type:
+            sub_clauses.append("attack_type = ?")
+            params.append(attack_type)
+        if sub_clauses:
+            clauses.append(f"({' OR '.join(sub_clauses)})")
+        where = f"WHERE {' AND '.join(clauses)}"
+        with self.connection() as con:
+            row = con.execute(f"SELECT * FROM incidents {where} ORDER BY updated_at DESC LIMIT 1", params).fetchone()
+        return self._incident_row(row) if row else None
+
+    def correlate_incident(self, incident_id: str, event: TelemetryEvent, new_evidence: list[str], note: str = "Correlated ongoing campaign activity") -> dict[str, Any]:
+        """Correlate a subsequent telemetry window into an active incident."""
+        current = self.incident(incident_id)
+        if not current:
+            raise KeyError(f"Unknown incident: {incident_id}")
+        now = utc_now()
+        merged_evidence = list(dict.fromkeys(current.get("evidence", []) + new_evidence))
+        severity_rank = {"INFO": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+        curr_sev = current.get("severity") or "MEDIUM"
+        new_sev = event.severity or "MEDIUM"
+        effective_sev = new_sev if severity_rank.get(new_sev, 2) > severity_rank.get(curr_sev, 2) else curr_sev
+        effective_conf = max(float(current.get("confidence") or 0.0), float(event.confidence or 0.0))
+        with self.connection() as con:
+            con.execute(
+                "UPDATE incidents SET updated_at=?, event_id=?, severity=?, confidence=?, evidence_json=?, "
+                "energy_impact=?, iam_impact=?, trust_impact=?, response_action=? WHERE incident_id=?",
+                (now, event.event_id, effective_sev, round(effective_conf, 3), json.dumps(merged_evidence),
+                 event.energy_cause or current.get("energy_impact"),
+                 event.access_decision or current.get("iam_impact"),
+                 str(event.trust_score) if event.trust_score is not None else current.get("trust_impact"),
+                 event.response_action or current.get("response_action"),
+                 incident_id)
+            )
+            con.execute(
+                "INSERT INTO incident_history VALUES (?,?,?,?,?,?,?,?)",
+                (str(uuid4()), incident_id, now, current["lifecycle_state"], current["lifecycle_state"],
+                 "system", note, json.dumps(new_evidence))
+            )
+        return self.incident(incident_id)  # type: ignore[return-value]
+
     def transition_incident(self, incident_id: str, state: str, actor: str, note: str, evidence: list[str] | None = None) -> dict[str, Any]:
         allowed = {
-            "DETECTED": {"TRIAGED", "RESPONDING"}, "TRIAGED": {"RESPONDING", "CLOSED"},
-            "RESPONDING": {"CONTAINED", "RECOVERING"}, "CONTAINED": {"RECOVERING"},
-            "RECOVERING": {"RESOLVED", "RESPONDING"}, "RESOLVED": {"CLOSED"}, "CLOSED": set(),
+            "DETECTED": {"TRIAGED", "RESPONDING", "CONTAINED"},
+            "TRIAGED": {"RESPONDING", "CONTAINED", "CLOSED"},
+            "RESPONDING": {"CONTAINED", "RECOVERING"},
+            "CONTAINED": {"RECOVERING", "RESPONDING", "RESOLVED"},
+            "RECOVERING": {"RESOLVED", "RESPONDING", "CONTAINED"},
+            "RESOLVED": {"CLOSED", "RESPONDING"},
+            "CLOSED": {"RESPONDING", "DETECTED"},
         }
         current = self.incident(incident_id)
         if not current:
             raise KeyError(f"Unknown incident: {incident_id}")
         state = state.upper()
+        if state == current["lifecycle_state"]:
+            return current
         if state not in allowed.get(current["lifecycle_state"], set()):
             raise ValueError(f"Invalid transition {current['lifecycle_state']} -> {state}")
         now = utc_now()
@@ -185,7 +239,19 @@ class GatewayStore:
         return [dict(row) for row in rows]
 
     def record_iam(self, item: dict[str, Any]) -> None:
-        item = {"iam_event_id": str(uuid4()), "timestamp": utc_now(), "provenance": "DERIVED", **item}
+        defaults = {
+            "iam_event_id": str(uuid4()),
+            "timestamp": utc_now(),
+            "identity": None,
+            "role": None,
+            "authentication_status": "AUTHENTICATED",
+            "authorization_status": "AUTHORIZED",
+            "access_request": "TELEMETRY_INGEST",
+            "decision": "ALLOW",
+            "reason": "Normal operational access",
+            "provenance": "DERIVED",
+        }
+        item = {**defaults, **item}
         with self.connection() as con:
             con.execute("INSERT INTO iam_events VALUES (:iam_event_id,:timestamp,:identity,:role,:authentication_status,:authorization_status,:access_request,:decision,:reason,:provenance)", item)
 

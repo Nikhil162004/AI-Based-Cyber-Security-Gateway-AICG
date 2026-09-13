@@ -53,26 +53,37 @@ def generate_window(scenario_id: str, intensity: int = 3, sequence: int = 0, see
     rng = Random(f"{seed}:{scenario_id}:{sequence}")
     intensity = max(1, min(intensity, 6))
     normal = scenario_id == "normal"
-    rate = (18 + rng.uniform(-4, 5)) if normal else (30 * intensity ** 2 + rng.uniform(-8, 20))
-    if scenario_id == "slow_rate": rate = 25 + intensity * 8 + rng.uniform(-3, 4)
-    if scenario_id == "burst_exhaustion": rate *= 1.8 if sequence % 3 == 0 else .65
+    if normal:
+        base = 14.0 + (intensity % 4) * 2.5
+        rate = max(4.0, base + rng.uniform(-2.5, 2.5))
+    elif scenario_id == "slow_rate":
+        rate = 25 + intensity * 8 + rng.uniform(-3, 4)
+    elif scenario_id == "burst_exhaustion":
+        base_rate = 30 * intensity ** 2 + rng.uniform(-8, 20)
+        rate = base_rate * 1.8 if sequence % 3 == 0 else base_rate * .65
+    else:
+        rate = 30 * intensity ** 2 + rng.uniform(-8, 20)
     packet_count = max(1, round(rate))
     if scenario_id in {"coap_anomaly", "udp_flood", "burst_exhaustion"}: packet_size = rng.uniform(70, 240)
     elif scenario_id == "modbus_anomaly": packet_size = rng.uniform(90, 280)
     else: packet_size = rng.uniform(120, 800)
     protocol = "UDP" if normal else scenario.protocol
     if protocol == "MIXED": protocol = ("UDP", "TCP", "ICMP")[sequence % 3]
-    src_count = 2 if normal else max(1, min(20, intensity * 2 + rng.randint(0, 3)))
+    src_count = (1 + (sequence % 3)) if normal else max(1, min(20, intensity * 2 + rng.randint(0, 3)))
     dst_port = {"UDP": 5683, "TCP": 1883, "ICMP": None, "ICMPV6": None}.get(protocol, 9000)
     if scenario_id == "modbus_anomaly": dst_port = 502
     flags = "S" if scenario_id in {"syn_flood", "slow_rate"} else None
+    sensor_idx = 1 + (sequence % 3)
     return TelemetryEvent(
-        source_type=source_type, source_id="ATK-SIM-01" if not normal else "SENSOR-GROUP-A",
-        device_id="ATK-01" if not normal else "SENSOR-01", src_ip="10.42.0.250" if not normal else "10.42.0.11",
+        source_type=source_type, source_id="ATK-SIM-01" if not normal else f"SENSOR-NODE-0{sensor_idx}",
+        device_id="ATK-01" if not normal else f"SENSOR-0{sensor_idx}",
+        src_ip="10.42.0.250" if not normal else f"10.42.0.{10 + sensor_idx}",
         dst_ip="10.42.0.1", src_port=40000 + sequence % 1000, dst_port=dst_port, protocol=protocol,
         protocol_layer="TRANSPORT", packet_count=packet_count, byte_count=round(packet_count * packet_size),
-        packet_rate=rate, byte_rate=rate * packet_size, packet_size=packet_size, flow_id=f"{scenario_id}-{sequence}",
-        unique_sources=src_count, unique_destinations=1, tcp_flags=flags, icmp_type="RPL_CONTROL" if scenario_id == "rpl_anomaly" else None,
-        attack_type=None if normal else scenario_id, traffic_type="NORMAL" if normal else "CONTROLLED_ATTACK_SIMULATION",
+        packet_rate=round(rate, 2), byte_rate=round(rate * packet_size, 2), packet_size=round(packet_size, 2),
+        flow_id=f"{scenario_id}-{sequence}", unique_sources=src_count, unique_destinations=1, tcp_flags=flags,
+        icmp_type="RPL_CONTROL" if scenario_id == "rpl_anomaly" else None,
+        attack_type=None if normal else scenario_id,
+        traffic_type="NORMAL" if normal else "CONTROLLED_ATTACK_SIMULATION",
         label="NORMAL" if normal else "ATTACK", scenario_id=scenario_id, provenance=provenance,
     ).normalize()

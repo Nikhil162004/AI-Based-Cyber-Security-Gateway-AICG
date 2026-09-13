@@ -67,6 +67,13 @@ class GatewayRuntime:
         finally:
             with self._lock: self._subscribers.discard(subscriber)
 
+    def configure_response(self, mode: str | None = None, auto: bool | None = None) -> dict[str, Any]:
+        if mode is not None:
+            self.response.mode = mode.upper()
+        if auto is not None:
+            self.response.auto = bool(auto)
+        return {"mode": self.response.mode, "auto": self.response.auto}
+
     def ingest(self, event: TelemetryEvent | dict[str, Any]) -> dict[str, Any]:
         """Normalize and retain a source observation, returning evidence-backed result."""
         item = event if isinstance(event, TelemetryEvent) else TelemetryEvent.from_mapping(event)
@@ -94,12 +101,21 @@ class GatewayRuntime:
 
         incident = None
         if plan.requires_incident:
-            incident = self.store.create_incident(item, decision.evidence, "CPU/RAM/radio/energy are model-correlated")
+            active = self.store.find_active_incident(device_id=item.device_id, attack_type=item.attack_type)
+            if active:
+                incident = self.store.correlate_incident(
+                    active["incident_id"],
+                    item,
+                    decision.evidence,
+                    "Ongoing campaign correlated across observation windows"
+                )
+            else:
+                incident = self.store.create_incident(item, decision.evidence, "CPU/RAM/radio/energy are model-correlated")
+                if plan.mode != "MANUAL":
+                    self.response.apply_simulation(plan, item.device_id)
+                    incident = self.store.transition_incident(incident["incident_id"], "RESPONDING", "system", "Simulated response planned; no host enforcement.", decision.evidence)
+                    incident = self.store.transition_incident(incident["incident_id"], "CONTAINED", "system", "Containment state is simulated within the laboratory runtime.", decision.evidence)
             self.store.record_action(event_id=item.event_id, incident_id=incident["incident_id"], action=plan.action, reason=plan.reason, policy="hybrid-response-v1", mode=plan.mode, result=plan.result)
-            if plan.mode != "MANUAL":
-                self.response.apply_simulation(plan, item.device_id)
-                incident = self.store.transition_incident(incident["incident_id"], "RESPONDING", "system", "Simulated response planned; no host enforcement.", decision.evidence)
-                incident = self.store.transition_incident(incident["incident_id"], "CONTAINED", "system", "Containment state is simulated within the laboratory runtime.", decision.evidence)
             self.publish("incident", incident)
             self.publish("response", {"incident_id": incident["incident_id"], **plan.__dict__, "provenance": "SIMULATED"})
             self._normal_streak = 0
@@ -111,18 +127,31 @@ class GatewayRuntime:
         return result
 
     def _verify_recovery(self) -> None:
-        """Advance recovery only after three actual normal runtime observations."""
+        """Advance recovery only after actual consecutive normal runtime observations."""
         if self._normal_streak < 3:
             return
         for incident in self.store.incidents(limit=100):
             state = incident["lifecycle_state"]
             try:
-                if state == "CONTAINED":
-                    self.store.transition_incident(incident["incident_id"], "RECOVERING", "system", "Three consecutive normal observations verified traffic/resource recovery.", ["traffic returned toward modeled baseline"])
-                elif state == "RECOVERING":
-                    updated = self.store.transition_incident(incident["incident_id"], "RESOLVED", "system", "Recovery verified from observable normal traffic/resource state.", ["three normal observations"])
+                if state in {"CONTAINED", "RESPONDING", "DETECTED"}:
+                    updated = self.store.transition_incident(
+                        incident["incident_id"],
+                        "RECOVERING",
+                        "system",
+                        f"Consecutive normal observations (streak={self._normal_streak}) verified traffic/resource recovery.",
+                        ["traffic returned toward modeled baseline"]
+                    )
                     self.publish("incident", updated)
-            except ValueError:
+                elif state == "RECOVERING" and self._normal_streak >= 5:
+                    updated = self.store.transition_incident(
+                        incident["incident_id"],
+                        "RESOLVED",
+                        "system",
+                        f"Recovery verified from sustained normal baseline ({self._normal_streak} normal windows).",
+                        ["sustained normal observations verified"]
+                    )
+                    self.publish("incident", updated)
+            except (ValueError, KeyError):
                 continue
 
     def start_simulation(self, scenario_id: str, intensity: int = 3, duration: float | None = None) -> dict[str, Any]:

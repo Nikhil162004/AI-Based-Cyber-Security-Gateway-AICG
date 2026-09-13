@@ -47,6 +47,7 @@ class Decision:
     anomaly_score: float | None
     model_version: str
     feature_version: str = FEATURE_VERSION
+    calibrated_probability: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return self.__dict__.copy()
@@ -100,28 +101,37 @@ class HybridDetector:
             rule_score += .2
 
         supervised_prediction, anomaly_score, model_score = None, None, 0.0
+        calibrated_probability: float | None = None
         if self.bundle:
-            matrix = np.array([[values[name] for name in self.bundle["features"]]])
-            classifier = self.bundle["classifier"]
-            classes = list(classifier.classes_)
-            probabilities = classifier.predict_proba(matrix)[0]
+            import pandas as pd
+            features_list = self.bundle["features"]
+            row_data = {name: [values[name]] for name in features_list}
+            df_sample = pd.DataFrame(row_data)
+            clf = self.bundle.get("calibrated_classifier") or self.bundle["classifier"]
+            classes = list(clf.classes_)
+            probabilities = clf.predict_proba(df_sample)[0]
             supervised_prediction = str(classes[int(np.argmax(probabilities))])
             attack_index = classes.index("ATTACK") if "ATTACK" in classes else int(np.argmax(probabilities))
             model_score = float(probabilities[attack_index])
+            if self.bundle.get("calibrated"):
+                calibrated_probability = round(model_score, 4)
             anomaly = self.bundle.get("anomaly")
             scaler = self.bundle.get("anomaly_scaler")
             if anomaly is not None and scaler is not None:
-                # Higher values denote a less normal sample; bounded for UI only.
-                raw = -float(anomaly.score_samples(scaler.transform(matrix))[0])
+                scaled = scaler.transform(df_sample)
+                raw = -float(anomaly.score_samples(scaled)[0])
                 anomaly_score = max(0.0, min(1.0, (raw + .7) / 1.4))
                 if anomaly_score >= .6:
                     evidence.append("Isolation Forest found the window unlike benign training windows.")
 
-        score = min(1.0, .55 * rule_score + .35 * model_score + .10 * (anomaly_score or 0.0))
+        if self.bundle:
+            score = min(1.0, .55 * rule_score + .35 * model_score + .10 * (anomaly_score or 0.0))
+        else:
+            score = min(1.0, rule_score)
         attack = score >= .50 or (event.attack_type is not None and rule_score >= .20)
         if not evidence:
             evidence.append("Traffic is within the configured demonstration baseline; no attack signature fired.")
         if attack:
             severity = "CRITICAL" if score >= .85 else "HIGH" if score >= .68 else "MEDIUM"
-            return Decision("ATTACK", round(score, 3), severity, evidence, round(score, 3), supervised_prediction, anomaly_score, self.model_version)
-        return Decision("NORMAL", round(max(0.0, 1 - score), 3), "INFO", evidence, round(score, 3), supervised_prediction, anomaly_score, self.model_version)
+            return Decision("ATTACK", round(score, 3), severity, evidence, round(score, 3), supervised_prediction, anomaly_score, self.model_version, calibrated_probability=calibrated_probability)
+        return Decision("NORMAL", round(max(0.0, 1 - score), 3), "INFO", evidence, round(score, 3), supervised_prediction, anomaly_score, self.model_version, calibrated_probability=calibrated_probability)

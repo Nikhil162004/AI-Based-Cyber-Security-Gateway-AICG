@@ -1,0 +1,33 @@
+{
+  "campaigns": 37,
+  "class_distribution": {
+    "ATTACK": 1160,
+    "NORMAL": 320
+  },
+  "created_at": "2026-09-13T18:28:34.999006+00:00",
+  "dataset_id": "synthetic_lab_v2",
+  "dataset_version": "synthetic-lab-v2",
+  "feature_version": "window-features-v2",
+  "features": [
+    "packet_count",
+    "byte_count",
+    "packet_rate",
+    "byte_rate",
+    "unique_sources",
+    "unique_destinations",
+    "packet_size",
+    "udp_ratio",
+    "tcp_ratio",
+    "icmp_ratio",
+    "syn_ratio",
+    "flow_count",
+    "cpu_activity",
+    "memory_activity",
+    "energy_deviation"
+  ],
+  "generation": "safe in-process traffic-window profiles; no packets transmitted",
+  "provenance": "SYNTHETIC",
+  "random_seed": 20260913,
+  "rows": 1480,
+  "samples_per_campaign": 40
+}

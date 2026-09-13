@@ -1,0 +1,309 @@
+{
+  "calibration": {
+    "brier_score_calibrated": 0.00012829874910056903,
+    "brier_score_raw": 0.002576064265203544,
+    "calibrated": true,
+    "method": "sigmoid (Platt scaling) on held-out validation campaigns"
+  },
+  "class_distribution": {
+    "ATTACK": 1160,
+    "NORMAL": 320
+  },
+  "dataset": "/home/kali/AI-Edge-DDoS-Gateway/data/datasets/synthetic_lab_v2.csv",
+  "dataset_version": "synthetic-lab-v2",
+  "evaluation_protocol": "stratified campaign-grouped train/validation/test plus scenario-held-out evaluation",
+  "experiment_id": "EXP-bf4d2fe60d72",
+  "feature_importance": {
+    "byte_count": 0.09869381462650889,
+    "byte_rate": 0.08219015773810114,
+    "cpu_activity": 0.0,
+    "energy_deviation": 0.0,
+    "flow_count": 0.1631300189506608,
+    "icmp_ratio": 0.009447021212603776,
+    "memory_activity": 0.0,
+    "packet_count": 0.17977231453303932,
+    "packet_rate": 0.20278395884195852,
+    "packet_size": 0.008791976040724105,
+    "syn_ratio": 0.003828914504723609,
+    "tcp_ratio": 0.010979472181512741,
+    "udp_ratio": 0.038783823939512026,
+    "unique_destinations": 0.0,
+    "unique_sources": 0.20159852743065504
+  },
+  "feature_version": "window-features-v2",
+  "model_version": "hybrid-rf-if-v2",
+  "provenance": "SYNTHETIC",
+  "random_seed": 20260913,
+  "scenario_held_out": {
+    "classification_report": {
+      "ATTACK": {
+        "f1-score": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 120.0
+      },
+      "NORMAL": {
+        "f1-score": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "support": 0.0
+      },
+      "accuracy": 1.0,
+      "macro avg": {
+        "f1-score": 0.5,
+        "precision": 0.5,
+        "recall": 0.5,
+        "support": 120.0
+      },
+      "weighted avg": {
+        "f1-score": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 120.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        120
+      ]
+    ],
+    "f1": {
+      "ATTACK": 1.0,
+      "NORMAL": 0.0
+    },
+    "false_negative_rate": 0.0,
+    "false_negatives": 0,
+    "false_positive_rate": 0.0,
+    "false_positives": 0,
+    "labels": [
+      "NORMAL",
+      "ATTACK"
+    ],
+    "precision": {
+      "ATTACK": 1.0,
+      "NORMAL": 0.0
+    },
+    "recall": {
+      "ATTACK": 1.0,
+      "NORMAL": 0.0
+    },
+    "samples": 120,
+    "support": {
+      "ATTACK": 120,
+      "NORMAL": 0
+    }
+  },
+  "splits": {
+    "scenario_held_out": 120,
+    "test": 320,
+    "train": 760,
+    "validation": 280
+  },
+  "test": {
+    "brier_score": 0.00012829874910056903,
+    "classification_report": {
+      "ATTACK": {
+        "f1-score": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 240.0
+      },
+      "NORMAL": {
+        "f1-score": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 80.0
+      },
+      "accuracy": 1.0,
+      "macro avg": {
+        "f1-score": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 320.0
+      },
+      "weighted avg": {
+        "f1-score": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 320.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        80,
+        0
+      ],
+      [
+        0,
+        240
+      ]
+    ],
+    "f1": {
+      "ATTACK": 1.0,
+      "NORMAL": 1.0
+    },
+    "false_negative_rate": 0.0,
+    "false_negatives": 0,
+    "false_positive_rate": 0.0,
+    "false_positives": 0,
+    "labels": [
+      "NORMAL",
+      "ATTACK"
+    ],
+    "pr_auc": 1.0,
+    "precision": {
+      "ATTACK": 1.0,
+      "NORMAL": 1.0
+    },
+    "recall": {
+      "ATTACK": 1.0,
+      "NORMAL": 1.0
+    },
+    "roc_auc": 1.0,
+    "samples": 320,
+    "support": {
+      "ATTACK": 240,
+      "NORMAL": 80
+    }
+  },
+  "test_raw_rf": {
+    "brier_score": 0.002576064265203544,
+    "classification_report": {
+      "ATTACK": {
+        "f1-score": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 240.0
+      },
+      "NORMAL": {
+        "f1-score": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 80.0
+      },
+      "accuracy": 1.0,
+      "macro avg": {
+        "f1-score": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 320.0
+      },
+      "weighted avg": {
+        "f1-score": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 320.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        80,
+        0
+      ],
+      [
+        0,
+        240
+      ]
+    ],
+    "f1": {
+      "ATTACK": 1.0,
+      "NORMAL": 1.0
+    },
+    "false_negative_rate": 0.0,
+    "false_negatives": 0,
+    "false_positive_rate": 0.0,
+    "false_positives": 0,
+    "labels": [
+      "NORMAL",
+      "ATTACK"
+    ],
+    "pr_auc": 1.0,
+    "precision": {
+      "ATTACK": 1.0,
+      "NORMAL": 1.0
+    },
+    "recall": {
+      "ATTACK": 1.0,
+      "NORMAL": 1.0
+    },
+    "roc_auc": 1.0,
+    "samples": 320,
+    "support": {
+      "ATTACK": 240,
+      "NORMAL": 80
+    }
+  },
+  "timestamp": "2026-09-13T18:28:36.615336+00:00",
+  "validation": {
+    "brier_score": 9.864918302650694e-05,
+    "classification_report": {
+      "ATTACK": {
+        "f1-score": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 200.0
+      },
+      "NORMAL": {
+        "f1-score": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 80.0
+      },
+      "accuracy": 1.0,
+      "macro avg": {
+        "f1-score": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 280.0
+      },
+      "weighted avg": {
+        "f1-score": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 280.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        80,
+        0
+      ],
+      [
+        0,
+        200
+      ]
+    ],
+    "f1": {
+      "ATTACK": 1.0,
+      "NORMAL": 1.0
+    },
+    "false_negative_rate": 0.0,
+    "false_negatives": 0,
+    "false_positive_rate": 0.0,
+    "false_positives": 0,
+    "labels": [
+      "NORMAL",
+      "ATTACK"
+    ],
+    "pr_auc": 1.0,
+    "precision": {
+      "ATTACK": 1.0,
+      "NORMAL": 1.0
+    },
+    "recall": {
+      "ATTACK": 1.0,
+      "NORMAL": 1.0
+    },
+    "roc_auc": 1.0,
+    "samples": 280,
+    "support": {
+      "ATTACK": 200,
+      "NORMAL": 80
+    }
+  }
+}
