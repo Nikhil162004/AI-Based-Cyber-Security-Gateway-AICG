@@ -1,0 +1,222 @@
+from __future__ import annotations
+
+import csv
+from pathlib import Path
+from flask import Flask, jsonify, render_template
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+FEATURES_FILE = PROJECT_ROOT / "dataset" / "live_features_v1.csv"
+PREDICTIONS_FILE = PROJECT_ROOT / "dataset" / "live_predictions_v1.csv"
+SECURITY_FILE = PROJECT_ROOT / "results" / "live_security_decisions_v1.csv"
+MITIGATION_FILE = PROJECT_ROOT / "results" / "live_mitigation_decisions_v1.csv"
+
+
+app = Flask(__name__)
+
+
+def read_csv(path: Path) -> list[dict]:
+    """Read a CSV file and return rows as dictionaries."""
+    if not path.exists():
+        return []
+
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
+def to_float(value: str | None, default: float = 0.0) -> float:
+    """Safely convert a value to float."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def to_int(value: str | None, default: int = 0) -> int:
+    """Safely convert a value to integer."""
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def build_live_data() -> list[dict]:
+    """
+    Join the four synchronized V1 live CSV outputs using window_start.
+    """
+    features = read_csv(FEATURES_FILE)
+    predictions = read_csv(PREDICTIONS_FILE)
+    security = read_csv(SECURITY_FILE)
+    mitigation = read_csv(MITIGATION_FILE)
+
+    prediction_map = {
+        row["window_start"]: row
+        for row in predictions
+        if "window_start" in row
+    }
+
+    security_map = {
+        row["window_start"]: row
+        for row in security
+        if "window_start" in row
+    }
+
+    mitigation_map = {
+        row["window_start"]: row
+        for row in mitigation
+        if "window_start" in row
+    }
+
+    combined = []
+
+    for feature_row in features:
+        window = feature_row.get("window_start", "")
+
+        prediction = prediction_map.get(window, {})
+        security_row = security_map.get(window, {})
+        mitigation_row = mitigation_map.get(window, {})
+
+        combined.append(
+            {
+                "window_start": window,
+                "packet_count": to_int(feature_row.get("packet_count")),
+                "bytes_total": to_int(feature_row.get("bytes_total")),
+                "packets_per_second": to_float(
+                    feature_row.get("packets_per_second")
+                ),
+                "bytes_per_second": to_float(
+                    feature_row.get("bytes_per_second")
+                ),
+                "unique_sources": to_int(feature_row.get("unique_sources")),
+                "unique_destinations": to_int(
+                    feature_row.get("unique_destinations")
+                ),
+                "udp_count": to_int(feature_row.get("udp_count")),
+                "tcp_count": to_int(feature_row.get("tcp_count")),
+                "icmp_count": to_int(feature_row.get("icmp_count")),
+                "average_packet_size": to_float(
+                    feature_row.get("average_packet_size")
+                ),
+                "flow_count": to_int(feature_row.get("flow_count")),
+                "prediction": prediction.get("prediction", "UNKNOWN"),
+                "ddos_probability": to_float(
+                    prediction.get("ddos_probability")
+                ),
+                "normal_probability": to_float(
+                    prediction.get("normal_probability")
+                ),
+                "security_action": security_row.get("action", "UNKNOWN"),
+                "severity": security_row.get("severity", "UNKNOWN"),
+                "mitigation_action": mitigation_row.get(
+                    "mitigation_action", "UNKNOWN"
+                ),
+                "mitigation_reason": mitigation_row.get(
+                    "mitigation_reason", ""
+                ),
+            }
+        )
+
+    return combined
+
+
+def build_summary(rows: list[dict]) -> dict:
+    """Build dashboard KPIs from the joined live data."""
+    if not rows:
+        return {
+            "status": "NO_DATA",
+            "windows": 0,
+            "total_packets": 0,
+            "latest_packet_rate": 0,
+            "latest_bytes_per_second": 0,
+            "latest_ddos_probability": 0,
+            "latest_prediction": "NO_DATA",
+            "latest_security_action": "NO_DATA",
+            "latest_mitigation_action": "NO_DATA",
+            "alerts": 0,
+        }
+
+    latest = rows[-1]
+
+    alerts = sum(
+        1
+        for row in rows
+        if row["security_action"] == "ALERT"
+    )
+
+    return {
+        "status": "ONLINE",
+        "windows": len(rows),
+        "total_packets": sum(row["packet_count"] for row in rows),
+        "latest_packet_rate": latest["packets_per_second"],
+        "latest_bytes_per_second": latest["bytes_per_second"],
+        "latest_ddos_probability": latest["ddos_probability"],
+        "latest_prediction": latest["prediction"],
+        "latest_security_action": latest["security_action"],
+        "latest_mitigation_action": latest["mitigation_action"],
+        "alerts": alerts,
+    }
+
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+@app.route("/api/status")
+def api_status():
+    rows = build_live_data()
+
+    return jsonify(
+        {
+            "dashboard": "AI-Powered Edge Security Gateway",
+            "status": "ONLINE" if rows else "NO_DATA",
+            "pipeline": {
+                "traffic_features": FEATURES_FILE.exists(),
+                "ml_predictions": PREDICTIONS_FILE.exists(),
+                "security_decisions": SECURITY_FILE.exists(),
+                "mitigation_decisions": MITIGATION_FILE.exists(),
+            },
+            "summary": build_summary(rows),
+        }
+    )
+
+
+@app.route("/api/live-data")
+def api_live_data():
+    rows = build_live_data()
+
+    return jsonify(
+        {
+            "count": len(rows),
+            "rows": rows,
+        }
+    )
+
+
+@app.route("/api/events")
+def api_events():
+    rows = build_live_data()
+
+    events = [
+        row
+        for row in rows
+        if row["prediction"] != "NORMAL"
+        or row["security_action"] != "ALLOW"
+        or row["mitigation_action"] != "ALLOW"
+    ]
+
+    return jsonify(
+        {
+            "count": len(events),
+            "events": events,
+        }
+    )
+
+
+if __name__ == "__main__":
+    app.run(
+        host="127.0.0.1",
+        port=5000,
+        debug=False,
+    )

@@ -1,0 +1,19 @@
+{
+  "version": "1.0",
+  "description": "Local device identity registry for AI-Edge Security Gateway V1",
+  "mode": "LOCAL_CONTEXT_ONLY",
+  "devices": [
+    {
+      "device_id": "gateway-local",
+      "ip_address": "127.0.0.1",
+      "device_role": "GATEWAY",
+      "identity_status": "KNOWN",
+      "authentication_status": "NOT_VERIFIED",
+      "authorization_decision": "ALLOWED",
+      "trust_score": 1.0,
+      "failed_attempts": 0,
+      "suspicious": false,
+      "session_state": "ACTIVE"
+    }
+  ]
+}

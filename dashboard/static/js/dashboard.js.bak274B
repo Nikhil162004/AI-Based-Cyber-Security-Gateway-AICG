@@ -1,0 +1,838 @@
+let trafficChart = null;
+let threatChart = null;
+
+
+function percent(value) {
+    return `${(Number(value || 0) * 100).toFixed(1)}%`;
+}
+
+
+function number(value, digits = 1) {
+    return Number(value || 0).toLocaleString(
+        undefined,
+        {
+            maximumFractionDigits: digits
+        }
+    );
+}
+
+
+function setThreatState(isThreat) {
+    const threatStatus = document.getElementById("threatStatus");
+    const classification = document.getElementById("classification");
+    const securityAction = document.getElementById("securityAction");
+    const mitigationAction = document.getElementById("mitigationAction");
+
+    threatStatus.classList.toggle("status-normal", !isThreat);
+    threatStatus.classList.toggle("status-threat", isThreat);
+
+    classification.classList.toggle("normal", !isThreat);
+    classification.classList.toggle("threat", isThreat);
+
+    securityAction.classList.toggle("action-normal", !isThreat);
+    securityAction.classList.toggle("action-threat", isThreat);
+
+    mitigationAction.classList.toggle("action-normal", !isThreat);
+    mitigationAction.classList.toggle("action-threat", isThreat);
+}
+
+
+function updateSummary(summary) {
+    const prediction = summary.latest_prediction;
+    const isThreat = prediction !== "NORMAL";
+
+    document.getElementById("packetRate").textContent =
+        number(summary.latest_packet_rate);
+
+    document.getElementById("throughput").textContent =
+        number(summary.latest_bytes_per_second);
+
+    document.getElementById("ddosProbability").textContent =
+        (Number(summary.latest_ddos_probability || 0) * 100).toFixed(1);
+
+    document.getElementById("threatStatus").textContent =
+        prediction;
+
+    document.getElementById("threatMeta").textContent =
+        isThreat
+            ? "Threat classification active"
+            : "No active threat detected";
+
+    document.getElementById("securityAction").textContent =
+        summary.latest_security_action;
+
+    document.getElementById("mitigationAction").textContent =
+        summary.latest_mitigation_action;
+
+    setThreatState(isThreat);
+}
+
+
+function updateDetection(latest) {
+    const prediction = latest.prediction;
+    const isThreat = prediction !== "NORMAL";
+
+    document.getElementById("classification").textContent =
+        prediction;
+
+    document.getElementById("normalProbability").textContent =
+        percent(latest.normal_probability);
+
+    document.getElementById("ddosProbabilityDetail").textContent =
+        percent(latest.ddos_probability);
+
+    document.getElementById("normalBar").style.width =
+        `${Number(latest.normal_probability || 0) * 100}%`;
+
+    document.getElementById("ddosBar").style.width =
+        `${Number(latest.ddos_probability || 0) * 100}%`;
+
+    document.getElementById("securityActionDetail").textContent =
+        latest.security_action;
+
+    const severity = document.getElementById("severity");
+
+    severity.textContent = latest.severity;
+    severity.classList.toggle(
+        "severity-normal",
+        latest.severity === "NORMAL"
+    );
+    severity.classList.toggle(
+        "severity-high",
+        latest.severity === "HIGH"
+    );
+
+    document.getElementById("mitigationActionDetail").textContent =
+        latest.mitigation_action;
+
+    document.getElementById("mitigationReason").textContent =
+        latest.mitigation_reason || "No reason provided";
+
+    setThreatState(isThreat);
+}
+
+
+
+function updateIAM(identityContext) {
+    const context = identityContext || {};
+
+    const observedSources =
+        Number(context.observed_source_count || 0);
+
+    const knownDevices =
+        Number(context.known_device_count || 0);
+
+    const unknownDevices =
+        Number(context.unknown_device_count || 0);
+
+    const deviceContexts =
+        Array.isArray(context.device_contexts)
+            ? context.device_contexts
+            : [];
+
+    document.getElementById("iamObservedSources").textContent =
+        number(observedSources, 0);
+
+    document.getElementById("iamKnownDevices").textContent =
+        number(knownDevices, 0);
+
+    document.getElementById("iamUnknownDevices").textContent =
+        number(unknownDevices, 0);
+
+    const identityState =
+        document.getElementById("iamIdentityState");
+
+    if (observedSources === 0) {
+        identityState.textContent = "NO OBSERVED SOURCES";
+        identityState.classList.remove(
+            "iam-state-known",
+            "iam-state-unknown"
+        );
+        identityState.classList.add("iam-state-empty");
+    } else if (unknownDevices > 0) {
+        identityState.textContent = "PARTIAL / UNKNOWN";
+        identityState.classList.remove(
+            "iam-state-known",
+            "iam-state-empty"
+        );
+        identityState.classList.add("iam-state-unknown");
+    } else {
+        identityState.textContent = "RESOLVED";
+        identityState.classList.remove(
+            "iam-state-unknown",
+            "iam-state-empty"
+        );
+        identityState.classList.add("iam-state-known");
+    }
+
+    const deviceList =
+        document.getElementById("iamDeviceList");
+
+    if (!deviceContexts.length) {
+        deviceList.innerHTML = `
+            <div class="iam-empty-state">
+                No observed device identity context for the latest window.
+            </div>
+        `;
+        return;
+    }
+
+    deviceList.innerHTML = deviceContexts.map(device => {
+        const suspicious = device.suspicious === true;
+        const denied =
+            device.authorization_decision === "DENIED";
+
+        const stateClass =
+            suspicious || denied
+                ? "iam-device-threat"
+                : device.identity_status === "KNOWN"
+                    ? "iam-device-known"
+                    : "iam-device-unknown";
+
+        const identitySource =
+            device.identity_source || "LOCAL_REGISTRY";
+
+        const environment =
+            device.environment || "LIVE_CONTEXT";
+
+        return `
+            <div class="iam-device-card ${stateClass}">
+                <div class="iam-device-main">
+                    <strong>${device.device_id || "unknown-device"}</strong>
+                    <span>${device.ip_address || "NO IP"}</span>
+                </div>
+
+                <div class="iam-device-meta">
+                    <span>
+                        ROLE:
+                        ${device.device_role || "UNKNOWN"}
+                    </span>
+                    <span>
+                        IDENTITY:
+                        ${device.identity_status || "UNKNOWN"}
+                    </span>
+                    <span>
+                        AUTH:
+                        ${device.authentication_status || "NOT_VERIFIED"}
+                    </span>
+                    <span>
+                        AUTHZ:
+                        ${device.authorization_decision || "UNKNOWN"}
+                    </span>
+                </div>
+
+                <div class="iam-device-source">
+                    SOURCE: ${identitySource}
+                    · ENV: ${environment}
+                </div>
+            </div>
+        `;
+    }).join("");
+}
+
+function updateLifecycle(lifecycleContext) {
+    const state = document.getElementById("lifecycleState");
+    const stage = document.getElementById("lifecycleStage");
+    const implementation =
+        document.getElementById("lifecycleImplementation");
+    const enforcement =
+        document.getElementById("lifecycleEnforcement");
+    const recovery =
+        document.getElementById("lifecycleRecovery");
+    const windowStart =
+        document.getElementById("lifecycleWindowStart");
+    const banner =
+        document.getElementById("lifecycleStatusBanner");
+
+    if (!lifecycleContext || lifecycleContext.available !== true) {
+        state.textContent = "UNAVAILABLE";
+        stage.textContent = "—";
+        implementation.textContent = "—";
+        enforcement.textContent = "—";
+        recovery.textContent = "—";
+        windowStart.textContent = "—";
+
+        banner.classList.remove(
+            "lifecycle-normal",
+            "lifecycle-alert",
+            "lifecycle-response",
+            "lifecycle-unavailable"
+        );
+
+        banner.classList.add("lifecycle-unavailable");
+
+        return;
+    }
+
+    const lifecycleState =
+        lifecycleContext.lifecycle_state || "UNAVAILABLE";
+
+    const lifecycleStage =
+        lifecycleContext.lifecycle_stage || "—";
+
+    state.textContent = lifecycleState;
+    stage.textContent = lifecycleStage;
+    implementation.textContent =
+        lifecycleContext.implementation_status || "—";
+    enforcement.textContent =
+        lifecycleContext.enforcement_status || "—";
+    recovery.textContent =
+        lifecycleContext.recovery_status || "—";
+    windowStart.textContent =
+        lifecycleContext.window_start || "—";
+
+    banner.classList.remove(
+        "lifecycle-normal",
+        "lifecycle-alert",
+        "lifecycle-response",
+        "lifecycle-unavailable"
+    );
+
+    if (lifecycleState === "NORMAL") {
+        banner.classList.add("lifecycle-normal");
+    } else if (
+        lifecycleState === "ALERTED" ||
+        lifecycleState === "DETECTED"
+    ) {
+        banner.classList.add("lifecycle-alert");
+    } else if (
+        lifecycleState === "MITIGATION_RECOMMENDED"
+    ) {
+        banner.classList.add("lifecycle-response");
+    } else {
+        banner.classList.add("lifecycle-unavailable");
+    }
+}
+
+function updatePipeline(pipeline) {
+    const states = [
+        ["pipelineTraffic", pipeline.traffic_features],
+        ["pipelineFeatures", pipeline.traffic_features],
+        ["pipelineML", pipeline.ml_predictions],
+        ["pipelineSecurity", pipeline.security_decisions],
+        ["pipelineMitigation", pipeline.mitigation_decisions]
+    ];
+
+    for (const [id, active] of states) {
+        const element = document.getElementById(id);
+
+        element.textContent = active ? "ONLINE" : "OFFLINE";
+
+        element.style.color = active
+            ? "var(--green)"
+            : "var(--red)";
+    }
+}
+
+
+function createCharts(rows) {
+    const labels = rows.map(row => row.window_start);
+    const traffic = rows.map(row => row.packets_per_second);
+    const threat = rows.map(row => row.ddos_probability * 100);
+
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            x: {
+                ticks: {
+                    color: "#7890a8",
+                    maxTicksLimit: 6
+                },
+                grid: {
+                    color: "rgba(27,49,75,0.45)"
+                }
+            },
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    color: "#7890a8"
+                },
+                grid: {
+                    color: "rgba(27,49,75,0.45)"
+                }
+            }
+        }
+    };
+
+
+    if (trafficChart) {
+        trafficChart.destroy();
+    }
+
+    if (threatChart) {
+        threatChart.destroy();
+    }
+
+
+    trafficChart = new Chart(
+        document.getElementById("trafficChart"),
+        {
+            type: "line",
+
+            data: {
+                labels,
+
+                datasets: [
+                    {
+                        label: "Packets/sec",
+                        data: traffic,
+                        borderColor: "#35d4ff",
+                        backgroundColor: "rgba(53,212,255,0.08)",
+                        fill: true,
+                        tension: 0.25,
+                        pointRadius: 2
+                    }
+                ]
+            },
+
+            options: commonOptions
+        }
+    );
+
+
+    threatChart = new Chart(
+        document.getElementById("threatChart"),
+        {
+            type: "line",
+
+            data: {
+                labels,
+
+                datasets: [
+                    {
+                        label: "DDoS Probability",
+                        data: threat,
+                        borderColor: "#ff5577",
+                        backgroundColor: "rgba(255,85,119,0.08)",
+                        fill: true,
+                        tension: 0.25,
+                        pointRadius: 2
+                    }
+                ]
+            },
+
+            options: {
+                ...commonOptions,
+
+                scales: {
+                    ...commonOptions.scales,
+
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            color: "#7890a8",
+                            callback: value => `${value}%`
+                        },
+                        grid: {
+                            color: "rgba(27,49,75,0.45)"
+                        }
+                    }
+                }
+            }
+        }
+    );
+}
+
+
+function updateEvents(events) {
+    const table = document.getElementById("eventsTable");
+
+    document.getElementById("eventCount").textContent =
+        events.length;
+
+    if (!events.length) {
+        table.innerHTML = `
+            <tr>
+                <td colspan="7" class="empty-state">
+                    No security events detected
+                </td>
+            </tr>
+        `;
+
+        return;
+    }
+
+
+    table.innerHTML = events.map(event => {
+
+        const threat =
+            event.prediction !== "NORMAL";
+
+        return `
+            <tr>
+                <td>${event.window_start}</td>
+                <td>${number(event.packet_count, 0)}</td>
+                <td>${number(event.packets_per_second)}</td>
+                <td class="${threat ? "event-threat" : "event-normal"}">
+                    ${event.prediction}
+                </td>
+                <td>${percent(event.ddos_probability)}</td>
+                <td>${event.security_action}</td>
+                <td>${event.mitigation_action}</td>
+            </tr>
+        `;
+
+    }).join("");
+}
+
+
+function updateEnergy(energyData) {
+
+    const statusElement =
+        document.getElementById("energyTelemetryStatus");
+
+    const windowCountElement =
+        document.getElementById("energyWindowCount");
+
+    const fields = {
+        energyEstimate: document.getElementById("energyEstimate"),
+        energyRate: document.getElementById("energyRate"),
+        energyPerPacket: document.getElementById("energyPerPacket"),
+        energyBaseline: document.getElementById("energyBaseline"),
+        energyDeviation: document.getElementById("energyDeviation"),
+        energyIncrease: document.getElementById("energyIncrease"),
+        energyTxActivity: document.getElementById("energyTxActivity"),
+        energyRxActivity: document.getElementById("energyRxActivity"),
+        energyCpuActivity: document.getElementById("energyCpuActivity"),
+        energyCause: document.getElementById("energyCause"),
+        energyWindowStart: document.getElementById("energyWindowStart")
+    };
+
+
+    if (!energyData || !Array.isArray(energyData.rows)) {
+
+        statusElement.textContent = "UNAVAILABLE";
+        windowCountElement.textContent = "0";
+
+        Object.values(fields).forEach((element) => {
+            if (element) {
+                element.textContent = "—";
+            }
+        });
+
+        return;
+    }
+
+
+    const rows = energyData.rows;
+
+    windowCountElement.textContent =
+        energyData.count ?? rows.length;
+
+
+    if (!rows.length) {
+
+        statusElement.textContent = "NO DATA";
+
+        Object.values(fields).forEach((element) => {
+            if (element) {
+                element.textContent = "—";
+            }
+        });
+
+        return;
+    }
+
+
+    const latest =
+        rows[rows.length - 1];
+
+
+    const formatNumber = (value, digits = 2) => {
+
+        const number = Number(value);
+
+        if (!Number.isFinite(number)) {
+            return "—";
+        }
+
+        return number.toFixed(digits);
+    };
+
+
+    const formatPercent = (value) => {
+
+        const number = Number(value);
+
+        if (!Number.isFinite(number)) {
+            return "—";
+        }
+
+        return `${number.toFixed(2)}%`;
+    };
+
+
+    fields.energyEstimate.textContent =
+        formatNumber(latest.energy_estimate);
+
+    fields.energyRate.textContent =
+        formatNumber(latest.energy_rate);
+
+    fields.energyPerPacket.textContent =
+        formatNumber(latest.energy_per_packet, 6);
+
+    fields.energyBaseline.textContent =
+        formatNumber(latest.baseline_energy);
+
+    fields.energyDeviation.textContent =
+        formatNumber(latest.energy_deviation);
+
+    fields.energyIncrease.textContent =
+        formatPercent(latest.energy_increase_percent);
+
+    fields.energyTxActivity.textContent =
+        formatNumber(latest.tx_activity);
+
+    fields.energyRxActivity.textContent =
+        formatNumber(latest.rx_activity);
+
+    fields.energyCpuActivity.textContent =
+        formatNumber(latest.cpu_activity);
+
+    fields.energyCause.textContent =
+        latest.energy_cause || "—";
+
+    fields.energyWindowStart.textContent =
+        latest.window_start || "—";
+
+
+    if (
+        latest.measurement_status === "MODELLED" &&
+        latest.environment === "CONTROLLED_SIMULATION" &&
+        latest.hardware_measured === false
+    ) {
+        statusElement.textContent =
+            "MODELLED • CONTROLLED SIMULATION";
+    } else {
+        statusElement.textContent =
+            "DATA AVAILABLE";
+    }
+}
+
+
+async function refreshDashboard() {
+
+    try {
+
+        const statusResponse =
+            await fetch("/api/status", {
+                cache: "no-store"
+            });
+
+        const status =
+            await statusResponse.json();
+
+
+        const online =
+            status.status === "ONLINE";
+
+        const statusElement =
+            document.getElementById("systemStatus");
+
+        const dot =
+            document.getElementById("statusDot");
+
+        statusElement.textContent =
+            online ? "ONLINE" : "NO DATA";
+
+        dot.classList.toggle("online", online);
+        dot.classList.toggle("offline", !online);
+
+
+        updateSummary(status.summary);
+        updatePipeline(status.pipeline);
+
+
+        const liveResponse =
+            await fetch("/api/live-data", {
+                cache: "no-store"
+            });
+
+        const liveData =
+            await liveResponse.json();
+
+
+        if (liveData.rows.length) {
+
+            const latest =
+                liveData.rows[liveData.rows.length - 1];
+
+            updateDetection(latest);
+            updateIAM(latest.identity_context);
+            updateLifecycle(latest.lifecycle_context);
+            createCharts(liveData.rows);
+        }
+
+
+        const eventsResponse =
+            await fetch("/api/events", {
+                cache: "no-store"
+            });
+
+        const eventsData =
+            await eventsResponse.json();
+
+        updateEvents(eventsData.events);
+
+
+        const energyResponse =
+            await fetch("/api/energy-context", {
+                cache: "no-store"
+            });
+
+        const energyData =
+            await energyResponse.json();
+
+        updateEnergy(energyData);
+
+
+    } catch (error) {
+
+        console.error(
+            "Dashboard refresh failed:",
+            error
+        );
+
+        document.getElementById(
+            "systemStatus"
+        ).textContent = "OFFLINE";
+
+        document.getElementById(
+            "statusDot"
+        ).classList.add("offline");
+    }
+}
+
+
+refreshDashboard();
+
+setInterval(
+    refreshDashboard,
+    5000
+);
+
+/* ============================================================
+   CONTROLLED SECURITY DEMONSTRATION
+   ============================================================ */
+
+async function runControlledDemo() {
+
+    const button = document.getElementById("run-demo-btn");
+    const results = document.getElementById("demo-results");
+
+    if (!button || !results) {
+        return;
+    }
+
+    button.disabled = true;
+    button.textContent = "RUNNING DEMO...";
+
+    results.innerHTML = `
+        <div class="demo-placeholder">
+            <span>DEMO STATUS</span>
+            <strong>PROCESSING</strong>
+            <small>Running validated decision path...</small>
+        </div>
+    `;
+
+    try {
+
+        const response = await fetch("/api/demo-data", {
+            cache: "no-store"
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const demo = await response.json();
+
+        results.innerHTML = `
+            <div class="demo-result-grid">
+
+                <div class="demo-result-item">
+                    <span>PREDICTION</span>
+                    <strong class="demo-threat">
+                        ${demo.prediction}
+                    </strong>
+                </div>
+
+                <div class="demo-result-item">
+                    <span>DDoS PROBABILITY</span>
+                    <strong>
+                        ${(demo.ddos_probability * 100).toFixed(0)}%
+                    </strong>
+                </div>
+
+                <div class="demo-result-item">
+                    <span>SECURITY ACTION</span>
+                    <strong class="demo-threat">
+                        ${demo.security_action}
+                    </strong>
+                </div>
+
+                <div class="demo-result-item">
+                    <span>SEVERITY</span>
+                    <strong class="demo-threat">
+                        ${demo.severity}
+                    </strong>
+                </div>
+
+                <div class="demo-result-item demo-result-wide">
+                    <span>MITIGATION DECISION</span>
+                    <strong class="demo-threat">
+                        ${demo.mitigation_action}
+                    </strong>
+                </div>
+
+            </div>
+
+            <div class="demo-verification">
+                <span>✓ CONTROLLED</span>
+                <span>✓ OFFLINE ONLY</span>
+                <span>
+                    ✓ ENFORCEMENT:
+                    ${demo.enforcement ? "ACTIVE" : "NOT IMPLEMENTED"}
+                </span>
+            </div>
+        `;
+
+    } catch (error) {
+
+        console.error("Controlled demo failed:", error);
+
+        results.innerHTML = `
+            <div class="demo-placeholder demo-error">
+                <span>DEMO STATUS</span>
+                <strong>ERROR</strong>
+                <small>${error.message}</small>
+            </div>
+        `;
+
+    } finally {
+
+        button.disabled = false;
+        button.textContent = "RUN CONTROLLED DEMO";
+
+    }
+}
+
+
+const controlledDemoButton =
+    document.getElementById("run-demo-btn");
+
+if (controlledDemoButton) {
+    controlledDemoButton.addEventListener(
+        "click",
+        runControlledDemo
+    );
+}
+

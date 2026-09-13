@@ -1,0 +1,374 @@
+from __future__ import annotations
+
+import csv
+from pathlib import Path
+from flask import Flask, jsonify, render_template
+
+try:
+    from detection.observed_identity_context_v1 import (
+        get_observed_identity_context,
+    )
+except ImportError:
+    from ..detection.observed_identity_context_v1 import (
+        get_observed_identity_context,
+    )
+
+try:
+    from energy.energy_context_adapter_v1 import (
+        get_energy_context,
+    )
+except ImportError:
+    from ..energy.energy_context_adapter_v1 import (
+        get_energy_context,
+    )
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+FEATURES_FILE = PROJECT_ROOT / "dataset" / "live_features_v1.csv"
+PREDICTIONS_FILE = PROJECT_ROOT / "dataset" / "live_predictions_v1.csv"
+SECURITY_FILE = PROJECT_ROOT / "results" / "live_security_decisions_v1.csv"
+MITIGATION_FILE = PROJECT_ROOT / "results" / "live_mitigation_decisions_v1.csv"
+
+
+app = Flask(__name__)
+
+
+def read_csv(path: Path) -> list[dict]:
+    """Read a CSV file and return rows as dictionaries."""
+    if not path.exists():
+        return []
+
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
+def to_float(value: str | None, default: float = 0.0) -> float:
+    """Safely convert a value to float."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def to_int(value: str | None, default: int = 0) -> int:
+    """Safely convert a value to integer."""
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def build_live_data() -> list[dict]:
+    """
+    Join the four synchronized V1 live CSV outputs using window_start.
+    """
+    features = read_csv(FEATURES_FILE)
+    predictions = read_csv(PREDICTIONS_FILE)
+    security = read_csv(SECURITY_FILE)
+    mitigation = read_csv(MITIGATION_FILE)
+
+    prediction_map = {
+        row["window_start"]: row
+        for row in predictions
+        if "window_start" in row
+    }
+
+    security_map = {
+        row["window_start"]: row
+        for row in security
+        if "window_start" in row
+    }
+
+    mitigation_map = {
+        row["window_start"]: row
+        for row in mitigation
+        if "window_start" in row
+    }
+
+    combined = []
+
+    for feature_row in features:
+        window = feature_row.get("window_start", "")
+
+        prediction = prediction_map.get(window, {})
+        security_row = security_map.get(window, {})
+        mitigation_row = mitigation_map.get(window, {})
+
+        combined.append(
+            {
+                "window_start": window,
+                "packet_count": to_int(feature_row.get("packet_count")),
+                "bytes_total": to_int(feature_row.get("bytes_total")),
+                "packets_per_second": to_float(
+                    feature_row.get("packets_per_second")
+                ),
+                "bytes_per_second": to_float(
+                    feature_row.get("bytes_per_second")
+                ),
+                "unique_sources": to_int(feature_row.get("unique_sources")),
+                "unique_destinations": to_int(
+                    feature_row.get("unique_destinations")
+                ),
+                "udp_count": to_int(feature_row.get("udp_count")),
+                "tcp_count": to_int(feature_row.get("tcp_count")),
+                "icmp_count": to_int(feature_row.get("icmp_count")),
+                "average_packet_size": to_float(
+                    feature_row.get("average_packet_size")
+                ),
+                "flow_count": to_int(feature_row.get("flow_count")),
+                "prediction": prediction.get("prediction", "UNKNOWN"),
+                "ddos_probability": to_float(
+                    prediction.get("ddos_probability")
+                ),
+                "normal_probability": to_float(
+                    prediction.get("normal_probability")
+                ),
+                "security_action": security_row.get("action", "UNKNOWN"),
+                "severity": security_row.get("severity", "UNKNOWN"),
+                "mitigation_action": mitigation_row.get(
+                    "mitigation_action", "UNKNOWN"
+                ),
+                "mitigation_reason": mitigation_row.get(
+                    "mitigation_reason", ""
+                ),
+                "identity_context": get_observed_identity_context(window),
+                "energy_context": get_energy_context(window),
+            }
+        )
+
+    return combined
+
+
+def build_summary(rows: list[dict]) -> dict:
+    """Build dashboard KPIs from the joined live data."""
+    if not rows:
+        return {
+            "status": "NO_DATA",
+            "windows": 0,
+            "total_packets": 0,
+            "latest_packet_rate": 0,
+            "latest_bytes_per_second": 0,
+            "latest_ddos_probability": 0,
+            "latest_prediction": "NO_DATA",
+            "latest_security_action": "NO_DATA",
+            "latest_mitigation_action": "NO_DATA",
+            "alerts": 0,
+        }
+
+    latest = rows[-1]
+
+    alerts = sum(
+        1
+        for row in rows
+        if row["security_action"] == "ALERT"
+    )
+
+    return {
+        "status": "ONLINE",
+        "windows": len(rows),
+        "total_packets": sum(row["packet_count"] for row in rows),
+        "latest_packet_rate": latest["packets_per_second"],
+        "latest_bytes_per_second": latest["bytes_per_second"],
+        "latest_ddos_probability": latest["ddos_probability"],
+        "latest_prediction": latest["prediction"],
+        "latest_security_action": latest["security_action"],
+        "latest_mitigation_action": latest["mitigation_action"],
+        "alerts": alerts,
+    }
+
+
+
+@app.route("/api/demo-data")
+def api_demo_data():
+    """
+    Return a controlled, offline NS-3 demonstration scenario.
+
+    This endpoint does not replay packets or modify live data.
+    """
+
+    import subprocess
+    import sys
+    import json
+
+    demo_features = {
+        "packet_count": 230,
+        "bytes_total": 115300,
+        "unique_sources": 4,
+        "average_packet_size": 501.304348,
+        "flow_count": 4,
+    }
+
+    script = """
+import json
+from gateway_security_decision_v1 import evaluate_gateway_window
+
+features = {
+    "packet_count": 230,
+    "bytes_total": 115300,
+    "unique_sources": 4,
+    "average_packet_size": 501.304348,
+    "flow_count": 4,
+}
+
+print(json.dumps(evaluate_gateway_window(features)))
+"""
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=str(PROJECT_ROOT),
+        env={
+            **__import__("os").environ,
+            "PYTHONPATH": str(PROJECT_ROOT / "detection"),
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    lines = [
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip()
+    ]
+
+    decision = None
+
+    for line in reversed(lines):
+        if line.startswith("{") and line.endswith("}"):
+            decision = json.loads(line)
+            break
+
+    if decision is None:
+        raise RuntimeError(
+            "Controlled demo decision could not be parsed"
+        )
+
+    ddos_probability = float(
+        decision["ddos_probability"]
+    )
+
+    mitigation = (
+        "RATE_LIMIT_AND_DROP"
+        if (
+            decision["prediction"] == "DDOS_UDP"
+            and ddos_probability >= 0.80
+            and demo_features["packet_count"] >= 100
+        )
+        else "RATE_LIMIT"
+        if decision["prediction"] == "DDOS_UDP"
+        else "ALLOW"
+    )
+
+    return jsonify(
+        {
+            "mode": "CONTROLLED_DEMO",
+            "source": "NS-3 validated LOW_DDOS feature vector",
+            "offline_only": True,
+            "enforcement": False,
+            "features": demo_features,
+            "prediction": decision["prediction"],
+            "normal_probability": decision["normal_probability"],
+            "ddos_probability": decision["ddos_probability"],
+            "security_action": decision["action"],
+            "severity": decision["severity"],
+            "mitigation_action": mitigation,
+            "mitigation_reason": (
+                "High-confidence controlled DDoS scenario"
+                if mitigation == "RATE_LIMIT_AND_DROP"
+                else "Controlled DDoS scenario"
+                if mitigation == "RATE_LIMIT"
+                else "Normal traffic"
+            ),
+        }
+    )
+
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+@app.route("/api/status")
+def api_status():
+    rows = build_live_data()
+
+    return jsonify(
+        {
+            "dashboard": "AI-Powered Edge Security Gateway",
+            "status": "ONLINE" if rows else "NO_DATA",
+            "pipeline": {
+                "traffic_features": FEATURES_FILE.exists(),
+                "ml_predictions": PREDICTIONS_FILE.exists(),
+                "security_decisions": SECURITY_FILE.exists(),
+                "mitigation_decisions": MITIGATION_FILE.exists(),
+            },
+            "summary": build_summary(rows),
+        }
+    )
+
+
+@app.route("/api/live-data")
+def api_live_data():
+    rows = build_live_data()
+
+    return jsonify(
+        {
+            "count": len(rows),
+            "rows": rows,
+        }
+    )
+
+
+@app.route("/api/energy-context")
+def api_energy_context():
+    """
+    Expose controlled/modelled NS-3 energy telemetry separately
+    from the live security pipeline.
+    """
+    rows = []
+
+    for live_row in build_live_data():
+        context = live_row.get("energy_context", {})
+
+        if context.get("available"):
+            rows.append(context)
+
+    return jsonify(
+        {
+            "count": len(rows),
+            "rows": rows,
+            "source": "NS3_CURRENT_ENERGY_ANALYSIS",
+            "environment": "CONTROLLED_SIMULATION",
+            "measurement_status": "MODELLED",
+            "hardware_measured": False,
+        }
+    )
+
+
+@app.route("/api/events")
+def api_events():
+    rows = build_live_data()
+
+    events = [
+        row
+        for row in rows
+        if row["prediction"] != "NORMAL"
+        or row["security_action"] != "ALLOW"
+        or row["mitigation_action"] != "ALLOW"
+    ]
+
+    return jsonify(
+        {
+            "count": len(events),
+            "events": events,
+        }
+    )
+
+
+if __name__ == "__main__":
+    app.run(
+        host="127.0.0.1",
+        port=5000,
+        debug=False,
+    )

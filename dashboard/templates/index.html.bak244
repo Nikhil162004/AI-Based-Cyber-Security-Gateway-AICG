@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>AI Edge Security Gateway</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/dashboard.css') }}"
+    >
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <!-- ===================================================== -->
+    <!-- HEADER -->
+    <!-- ===================================================== -->
+
+    <header class="topbar">
+
+        <div class="brand">
+            <div class="brand-icon">AI</div>
+
+            <div>
+                <div class="brand-title">
+                    AI EDGE SECURITY GATEWAY
+                </div>
+
+                <div class="brand-subtitle">
+                    Industrial IoT / OT Threat Monitoring
+                </div>
+            </div>
+        </div>
+
+        <div class="system-status">
+            <span class="status-dot" id="statusDot"></span>
+
+            <div>
+                <div class="status-label">SYSTEM STATUS</div>
+                <div class="status-value" id="systemStatus">
+                    CONNECTING
+                </div>
+            </div>
+        </div>
+
+    </header>
+
+
+    <!-- ===================================================== -->
+    <!-- KPI CARDS -->
+    <!-- ===================================================== -->
+
+    <section class="kpi-grid">
+
+        <div class="kpi-card">
+            <div class="kpi-label">PACKET RATE</div>
+            <div class="kpi-value">
+                <span id="packetRate">0</span>
+                <span class="kpi-unit">pps</span>
+            </div>
+            <div class="kpi-meta">Latest analysis window</div>
+        </div>
+
+
+        <div class="kpi-card">
+            <div class="kpi-label">THROUGHPUT</div>
+            <div class="kpi-value">
+                <span id="throughput">0</span>
+                <span class="kpi-unit">B/s</span>
+            </div>
+            <div class="kpi-meta">Current traffic volume</div>
+        </div>
+
+
+        <div class="kpi-card">
+            <div class="kpi-label">DDoS PROBABILITY</div>
+            <div class="kpi-value">
+                <span id="ddosProbability">0</span>
+                <span class="kpi-unit">%</span>
+            </div>
+            <div class="kpi-meta">ML confidence</div>
+        </div>
+
+
+        <div class="kpi-card threat-card">
+            <div class="kpi-label">THREAT STATUS</div>
+            <div
+                class="kpi-value status-normal"
+                id="threatStatus"
+            >
+                NORMAL
+            </div>
+            <div class="kpi-meta" id="threatMeta">
+                No active threat detected
+            </div>
+        </div>
+
+
+        <div class="kpi-card">
+            <div class="kpi-label">SECURITY ACTION</div>
+            <div
+                class="kpi-value action-normal"
+                id="securityAction"
+            >
+                ALLOW
+            </div>
+            <div class="kpi-meta">Policy response</div>
+        </div>
+
+
+        <div class="kpi-card">
+            <div class="kpi-label">MITIGATION</div>
+            <div
+                class="kpi-value action-normal"
+                id="mitigationAction"
+            >
+                ALLOW
+            </div>
+            <div class="kpi-meta">Decision layer</div>
+        </div>
+
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- CHARTS -->
+    <!-- ===================================================== -->
+
+    <section class="chart-grid">
+
+        <div class="panel chart-panel">
+
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">
+                        NETWORK TRAFFIC
+                    </div>
+
+                    <div class="panel-subtitle">
+                        Packets per second
+                    </div>
+                </div>
+
+                <div class="panel-badge">
+                    LIVE DATA
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="trafficChart"></canvas>
+            </div>
+
+        </div>
+
+
+        <div class="panel chart-panel">
+
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">
+                        AI THREAT ANALYSIS
+                    </div>
+
+                    <div class="panel-subtitle">
+                        DDoS probability
+                    </div>
+                </div>
+
+                <div class="panel-badge">
+                    ML ENGINE
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="threatChart"></canvas>
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- AI + SECURITY -->
+    <!-- ===================================================== -->
+
+    <section class="analysis-grid">
+
+        <div class="panel">
+
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">
+                        AI DETECTION ENGINE
+                    </div>
+
+                    <div class="panel-subtitle">
+                        Machine-learning inference
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="detection-status">
+
+                <div class="detection-main">
+                    <div class="detection-label">
+                        CURRENT CLASSIFICATION
+                    </div>
+
+                    <div
+                        class="detection-value normal"
+                        id="classification"
+                    >
+                        NORMAL
+                    </div>
+                </div>
+
+
+                <div class="probability-row">
+
+                    <div class="probability-item">
+                        <span>Normal</span>
+                        <strong id="normalProbability">
+                            100%
+                        </strong>
+                    </div>
+
+                    <div class="probability-bar">
+                        <div
+                            class="probability-fill normal-fill"
+                            id="normalBar"
+                        ></div>
+                    </div>
+
+                </div>
+
+
+                <div class="probability-row">
+
+                    <div class="probability-item">
+                        <span>DDoS</span>
+                        <strong id="ddosProbabilityDetail">
+                            0%
+                        </strong>
+                    </div>
+
+                    <div class="probability-bar">
+                        <div
+                            class="probability-fill threat-fill"
+                            id="ddosBar"
+                        ></div>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="panel">
+
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">
+                        SECURITY RESPONSE
+                    </div>
+
+                    <div class="panel-subtitle">
+                        Policy and mitigation decision
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="security-response">
+
+                <div class="response-row">
+                    <span>Security action</span>
+
+                    <strong id="securityActionDetail">
+                        ALLOW
+                    </strong>
+                </div>
+
+
+                <div class="response-row">
+                    <span>Severity</span>
+
+                    <strong
+                        class="severity-normal"
+                        id="severity"
+                    >
+                        NORMAL
+                    </strong>
+                </div>
+
+
+                <div class="response-row">
+                    <span>Mitigation decision</span>
+
+                    <strong id="mitigationActionDetail">
+                        ALLOW
+                    </strong>
+                </div>
+
+
+                <div class="response-reason">
+                    <div class="response-reason-label">
+                        DECISION REASON
+                    </div>
+
+                    <div id="mitigationReason">
+                        Normal traffic
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- IAM / DEVICE IDENTITY CONTEXT -->
+    <!-- ===================================================== -->
+
+    <section class="panel iam-panel" id="iam-context-section">
+
+        <div class="panel-header">
+
+            <div>
+                <div class="panel-title">
+                    DEVICE IDENTITY &amp; IAM CONTEXT
+                </div>
+
+                <div class="panel-subtitle">
+                    Observed source identity and authorization context
+                </div>
+            </div>
+
+            <div class="panel-badge">
+                IAM CONTEXT
+            </div>
+
+        </div>
+
+        <div class="iam-summary-grid">
+
+            <div class="iam-metric">
+                <div class="iam-metric-label">
+                    OBSERVED SOURCES
+                </div>
+
+                <div class="iam-metric-value" id="iamObservedSources">
+                    0
+                </div>
+            </div>
+
+            <div class="iam-metric">
+                <div class="iam-metric-label">
+                    KNOWN DEVICES
+                </div>
+
+                <div class="iam-metric-value" id="iamKnownDevices">
+                    0
+                </div>
+            </div>
+
+            <div class="iam-metric">
+                <div class="iam-metric-label">
+                    UNKNOWN DEVICES
+                </div>
+
+                <div class="iam-metric-value" id="iamUnknownDevices">
+                    0
+                </div>
+            </div>
+
+            <div class="iam-metric">
+                <div class="iam-metric-label">
+                    IDENTITY STATE
+                </div>
+
+                <div class="iam-metric-value iam-state" id="iamIdentityState">
+                    NO OBSERVED CONTEXT
+                </div>
+            </div>
+
+        </div>
+
+        <div class="iam-device-list" id="iamDeviceList">
+
+            <div class="iam-empty-state">
+                No observed device identity context for the latest window.
+            </div>
+
+        </div>
+
+        <div class="iam-disclaimer">
+            IAM context is locally resolved from observed source addresses.
+            Authentication is not cryptographically verified by this dashboard.
+        </div>
+
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- PIPELINE STATUS -->
+    <!-- ===================================================== -->
+
+    <section class="panel">
+
+        <div class="panel-header">
+
+            <div>
+                <div class="panel-title">
+                    SECURITY PIPELINE
+                </div>
+
+                <div class="panel-subtitle">
+                    AI gateway processing stages
+                </div>
+            </div>
+
+        </div>
+
+
+        <div class="pipeline">
+
+            <div class="pipeline-node">
+                <div class="pipeline-icon">01</div>
+                <div class="pipeline-name">TRAFFIC</div>
+                <div class="pipeline-state" id="pipelineTraffic">
+                    CHECKING
+                </div>
+            </div>
+
+            <div class="pipeline-arrow">→</div>
+
+            <div class="pipeline-node">
+                <div class="pipeline-icon">02</div>
+                <div class="pipeline-name">FEATURES</div>
+                <div class="pipeline-state" id="pipelineFeatures">
+                    CHECKING
+                </div>
+            </div>
+
+            <div class="pipeline-arrow">→</div>
+
+            <div class="pipeline-node">
+                <div class="pipeline-icon">03</div>
+                <div class="pipeline-name">AI INFERENCE</div>
+                <div class="pipeline-state" id="pipelineML">
+                    CHECKING
+                </div>
+            </div>
+
+            <div class="pipeline-arrow">→</div>
+
+            <div class="pipeline-node">
+                <div class="pipeline-icon">04</div>
+                <div class="pipeline-name">SECURITY</div>
+                <div class="pipeline-state" id="pipelineSecurity">
+                    CHECKING
+                </div>
+            </div>
+
+            <div class="pipeline-arrow">→</div>
+
+            <div class="pipeline-node">
+                <div class="pipeline-icon">05</div>
+                <div class="pipeline-name">MITIGATION</div>
+                <div class="pipeline-state" id="pipelineMitigation">
+                    CHECKING
+                </div>
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- CONTROLLED SECURITY DEMONSTRATION -->
+    <!-- ===================================================== -->
+
+    <section class="panel demo-panel" id="controlled-demo-section">
+
+        <div class="panel-header">
+
+            <div>
+                <div class="panel-title">
+                    CONTROLLED ATTACK DEMONSTRATION
+                </div>
+
+                <div class="panel-subtitle">
+                    NS-3 validated LOW_DDOS decision-path demonstration
+                </div>
+            </div>
+
+            <div class="panel-badge demo-badge">
+                OFFLINE DEMO
+            </div>
+
+        </div>
+
+
+        <div class="demo-content">
+
+            <div class="demo-info">
+
+                <div class="demo-description">
+                    Run a validated NS-3 LOW_DDOS feature vector through
+                    the existing ML detection and security decision pipeline.
+                </div>
+
+                <button
+                    id="run-demo-btn"
+                    class="demo-button"
+                    type="button">
+                    RUN CONTROLLED DEMO
+                </button>
+
+                <div class="demo-warning">
+                    Offline demonstration only — no packets are generated,
+                    no live traffic is modified, and enforcement is not implemented.
+                </div>
+
+            </div>
+
+
+            <div class="demo-results" id="demo-results">
+
+                <div class="demo-placeholder">
+                    <span>DEMO STATUS</span>
+                    <strong>READY</strong>
+                    <small>
+                        Click the button to run the validated scenario.
+                    </small>
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- LIVE EVENTS -->
+    <!-- ===================================================== -->
+
+    <section class="panel events-panel">
+
+        <div class="panel-header">
+
+            <div>
+                <div class="panel-title">
+                    SECURITY EVENTS
+                </div>
+
+                <div class="panel-subtitle">
+                    Non-normal detections and responses
+                </div>
+            </div>
+
+            <div class="event-counter">
+                EVENTS:
+                <span id="eventCount">0</span>
+            </div>
+
+        </div>
+
+
+        <div class="table-wrapper">
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>WINDOW</th>
+                        <th>PACKETS</th>
+                        <th>RATE</th>
+                        <th>CLASSIFICATION</th>
+                        <th>DDoS PROB.</th>
+                        <th>ACTION</th>
+                        <th>MITIGATION</th>
+                    </tr>
+                </thead>
+
+                <tbody id="eventsTable">
+
+                    <tr>
+                        <td colspan="7" class="empty-state">
+                            No security events detected
+                        </td>
+                    </tr>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- FOOTER -->
+    <!-- ===================================================== -->
+
+    <footer class="footer">
+
+        <div>
+            AI-Powered Edge Security Gateway
+        </div>
+
+        <div>
+            V1 • Decision-layer monitoring •
+            Enforcement not implemented
+        </div>
+
+    </footer>
+
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+
+</body>
+</html>

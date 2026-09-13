@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+
+"""
+AI-Edge Security Gateway
+Live Pipeline Runner V1
+
+Orchestrates the existing validated pipeline:
+
+1. Traffic capture
+2. Feature extraction
+3. ML inference
+4. Security decision
+5. Dry-run mitigation decision
+
+IMPORTANT:
+- No packet blocking
+- No firewall modification
+- No device isolation
+- No active attack generation
+- Mitigation remains DRY-RUN only
+"""
+
+from pathlib import Path
+import argparse
+import subprocess
+import sys
+import time
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+TRAFFIC_MONITOR = PROJECT_ROOT / "gateway" / "traffic_monitor.py"
+FEATURE_ADAPTER = PROJECT_ROOT / "detection" / "live_feature_adapter_v1.py"
+ML_INFERENCE = PROJECT_ROOT / "detection" / "live_ml_inference_v1.py"
+SECURITY_DECISION = PROJECT_ROOT / "detection" / "live_security_decision_v1.py"
+MITIGATION_DECISION = PROJECT_ROOT / "detection" / "live_mitigation_decision_v1.py"
+
+
+def run_stage(script):
+    print()
+    print("=" * 70)
+    print(f"RUNNING: {script.relative_to(PROJECT_ROOT)}")
+    print("=" * 70)
+
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        cwd=PROJECT_ROOT,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Pipeline stage failed: {script.name} "
+            f"(exit code {result.returncode})"
+        )
+
+
+def run_capture(duration):
+    print()
+    print("=" * 70)
+    print("LIVE TRAFFIC CAPTURE")
+    print("=" * 70)
+    print(f"Interface: eth0")
+    print(f"Duration: {duration} seconds")
+    print("Capture is controlled and will stop automatically.")
+    print()
+
+    process = subprocess.Popen(
+        ["sudo", sys.executable, str(TRAFFIC_MONITOR)],
+        cwd=PROJECT_ROOT,
+    )
+
+    try:
+        time.sleep(duration)
+    finally:
+        print()
+        print("Stopping traffic capture...")
+        process.terminate()
+
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+
+    if process.returncode not in (0, -15):
+        raise RuntimeError(
+            f"Traffic monitor failed with exit code "
+            f"{process.returncode}"
+        )
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Run the AI-Edge live security pipeline."
+    )
+
+    parser.add_argument(
+        "--capture-seconds",
+        type=int,
+        default=10,
+        help="Controlled traffic capture duration in seconds "
+             "(default: 10).",
+    )
+
+    args = parser.parse_args()
+
+    if args.capture_seconds <= 0:
+        raise SystemExit(
+            "ERROR: --capture-seconds must be greater than 0."
+        )
+
+    required_scripts = [
+        TRAFFIC_MONITOR,
+        FEATURE_ADAPTER,
+        ML_INFERENCE,
+        SECURITY_DECISION,
+        MITIGATION_DECISION,
+    ]
+
+    for script in required_scripts:
+        if not script.exists():
+            raise SystemExit(
+                f"ERROR: Required pipeline component missing: {script}"
+            )
+
+    print("=" * 70)
+    print("AI-EDGE SECURITY GATEWAY")
+    print("LIVE PIPELINE RUNNER V1")
+    print("=" * 70)
+
+    print()
+    print("Pipeline:")
+    print("  Traffic Capture")
+    print("       -> Feature Extraction")
+    print("       -> ML Inference")
+    print("       -> Security Decision")
+    print("       -> Dry-Run Mitigation")
+
+    print()
+    print("Safety boundary:")
+    print("  Packet enforcement: DISABLED")
+    print("  Firewall changes:   DISABLED")
+    print("  Device isolation:   DISABLED")
+    print("  Attack generation:  DISABLED")
+    print("  Mitigation mode:    DRY-RUN")
+
+    run_capture(args.capture_seconds)
+
+    run_stage(FEATURE_ADAPTER)
+    run_stage(ML_INFERENCE)
+    run_stage(SECURITY_DECISION)
+    run_stage(MITIGATION_DECISION)
+
+    print()
+    print("=" * 70)
+    print("LIVE PIPELINE RUN COMPLETE")
+    print("=" * 70)
+
+
+if __name__ == "__main__":
+    main()

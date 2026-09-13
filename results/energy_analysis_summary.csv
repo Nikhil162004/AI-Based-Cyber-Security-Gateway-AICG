@@ -1,0 +1,3 @@
+scenario,windows,average_packet_rate,average_energy,average_tx_activity,average_rx_activity,average_cpu_activity,average_energy_increase_percent
+NORMAL,4,29.25,55.62,29.25,20.48,5.85,0.0
+DDOS_UDP,14,1029.79,1956.64,1029.79,720.85,205.96,3417.56

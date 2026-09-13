@@ -1,0 +1,55 @@
+NS-3 BASELINE EVALUATION REPORT
+================================================================================
+
+Model:
+detection/ns3_ddos_model_v1.pkl
+Model SHA-256: e8e0e9e4769c9d979395838fa212168f49e36ddfffc555ca1aa2276a3aafbbf5
+
+Dataset:
+dataset/ns3_ml_ready_primary_v1.csv
+Dataset SHA-256: 13b7bc3cbcdd1368e790ab9753a2c85443ce7ffb5133e059ee8bb744df768dde
+
+Feature schema:
+  - packet_count
+  - bytes_total
+  - unique_sources
+  - average_packet_size
+  - flow_count
+
+Total windows: 19
+NORMAL windows: 5
+DDOS_UDP windows: 14
+
+Important limitation:
+The dataset represents one controlled NS-3 DDoS scenario. Repeated windows are present, so these results do not establish generalization to unseen attack types, rates, topologies, or traffic patterns.
+
+In-sample inference:
+Correct predictions: 19/19
+Accuracy: 1.0000
+
+Confusion matrix
+Rows = actual, columns = predicted
+Labels: NORMAL, DDOS_UDP
+[[ 5  0]
+ [ 0 14]]
+
+Classification report:
+              precision    recall  f1-score   support
+
+      NORMAL     1.0000    1.0000    1.0000         5
+    DDOS_UDP     1.0000    1.0000    1.0000        14
+
+    accuracy                         1.0000        19
+   macro avg     1.0000    1.0000    1.0000        19
+weighted avg     1.0000    1.0000    1.0000        19
+
+
+Temporal sequence:
+Windows 00-03 : NORMAL
+Windows 04-17 : DDOS_UDP
+Window 18     : NORMAL
+
+Conclusion:
+The saved Random Forest model successfully performs inference using the defined five-feature NS-3 schema and correctly classifies all 19 controlled simulation windows. This validates the baseline ML pipeline and temporal transition behavior, but broader evaluation is required before claiming deployment-level generalization.
+
+================================================================================

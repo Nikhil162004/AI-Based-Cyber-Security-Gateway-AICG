@@ -1,0 +1,252 @@
+{
+  "version": "V1",
+  "comparison_type": "NORMAL_VS_CONTROLLED_ATTACK",
+  "status": "CONTROLLED_VALIDATED",
+  "environment": "NS3_CONTROLLED_SIMULATION",
+  "source_dataset": "dataset/ns3_ml_ready_combined_v4.csv",
+  "dataset_sha256": "2b409756ce3d2c2b0569c907a356ce4b470034d5de65e7541aa13d2e75b545e9",
+  "total_windows": 73,
+  "normal_windows": 17,
+  "controlled_attack_windows": 56,
+  "attack_label": "DDOS_UDP",
+  "scenarios": [
+    {
+      "scenario": "LOW_V1",
+      "status": "CONTROLLED_VALIDATED",
+      "environment": "NS3_CONTROLLED_SIMULATION",
+      "label_mapping": {
+        "NORMAL": "NORMAL",
+        "DDOS_UDP": "CONTROLLED_ATTACK"
+      },
+      "total_windows": 18,
+      "normal_windows": 4,
+      "attack_windows": 14,
+      "features": {
+        "packet_count": {
+          "overall_min": 27.0,
+          "overall_max": 230.0,
+          "normal_min": 27.0,
+          "normal_max": 30.0,
+          "attack_min": 230.0,
+          "attack_max": 230.0
+        },
+        "bytes_total": {
+          "overall_min": 6210.0,
+          "overall_max": 115300.0,
+          "normal_min": 6210.0,
+          "normal_max": 6900.0,
+          "attack_min": 115300.0,
+          "attack_max": 115300.0
+        },
+        "unique_sources": {
+          "overall_min": 3.0,
+          "overall_max": 4.0,
+          "normal_min": 3.0,
+          "normal_max": 3.0,
+          "attack_min": 4.0,
+          "attack_max": 4.0
+        },
+        "average_packet_size": {
+          "overall_min": 230.0,
+          "overall_max": 501.3043478260869,
+          "normal_min": 230.0,
+          "normal_max": 230.0,
+          "attack_min": 501.3043478260869,
+          "attack_max": 501.3043478260869
+        },
+        "flow_count": {
+          "overall_min": 3.0,
+          "overall_max": 4.0,
+          "normal_min": 3.0,
+          "normal_max": 3.0,
+          "attack_min": 4.0,
+          "attack_max": 4.0
+        }
+      }
+    },
+    {
+      "scenario": "MIDLOW_V1",
+      "status": "CONTROLLED_VALIDATED",
+      "environment": "NS3_CONTROLLED_SIMULATION",
+      "label_mapping": {
+        "NORMAL": "NORMAL",
+        "DDOS_UDP": "CONTROLLED_ATTACK"
+      },
+      "total_windows": 18,
+      "normal_windows": 4,
+      "attack_windows": 14,
+      "features": {
+        "packet_count": {
+          "overall_min": 27.0,
+          "overall_max": 364.0,
+          "normal_min": 27.0,
+          "normal_max": 30.0,
+          "attack_min": 363.0,
+          "attack_max": 364.0
+        },
+        "bytes_total": {
+          "overall_min": 6210.0,
+          "overall_max": 187928.0,
+          "normal_min": 6210.0,
+          "normal_max": 6900.0,
+          "attack_min": 187386.0,
+          "attack_max": 187928.0
+        },
+        "unique_sources": {
+          "overall_min": 3.0,
+          "overall_max": 4.0,
+          "normal_min": 3.0,
+          "normal_max": 3.0,
+          "attack_min": 4.0,
+          "attack_max": 4.0
+        },
+        "average_packet_size": {
+          "overall_min": 230.0,
+          "overall_max": 516.2857142857143,
+          "normal_min": 230.0,
+          "normal_max": 230.0,
+          "attack_min": 516.2148760330579,
+          "attack_max": 516.2857142857143
+        },
+        "flow_count": {
+          "overall_min": 3.0,
+          "overall_max": 4.0,
+          "normal_min": 3.0,
+          "normal_max": 3.0,
+          "attack_min": 4.0,
+          "attack_max": 4.0
+        }
+      }
+    },
+    {
+      "scenario": "MID_V1_CLEAN",
+      "status": "CONTROLLED_VALIDATED",
+      "environment": "NS3_CONTROLLED_SIMULATION",
+      "label_mapping": {
+        "NORMAL": "NORMAL",
+        "DDOS_UDP": "CONTROLLED_ATTACK"
+      },
+      "total_windows": 18,
+      "normal_windows": 4,
+      "attack_windows": 14,
+      "features": {
+        "packet_count": {
+          "overall_min": 27.0,
+          "overall_max": 479.0,
+          "normal_min": 27.0,
+          "normal_max": 30.0,
+          "attack_min": 477.0,
+          "attack_max": 479.0
+        },
+        "bytes_total": {
+          "overall_min": 6210.0,
+          "overall_max": 250258.0,
+          "normal_min": 6210.0,
+          "normal_max": 6900.0,
+          "attack_min": 249716.0,
+          "attack_max": 250258.0
+        },
+        "unique_sources": {
+          "overall_min": 3.0,
+          "overall_max": 4.0,
+          "normal_min": 3.0,
+          "normal_max": 3.0,
+          "attack_min": 4.0,
+          "attack_max": 4.0
+        },
+        "average_packet_size": {
+          "overall_min": 230.0,
+          "overall_max": 524.3396226415094,
+          "normal_min": 230.0,
+          "normal_max": 230.0,
+          "attack_min": 522.418410041841,
+          "attack_max": 524.3396226415094
+        },
+        "flow_count": {
+          "overall_min": 3.0,
+          "overall_max": 4.0,
+          "normal_min": 3.0,
+          "normal_max": 3.0,
+          "attack_min": 4.0,
+          "attack_max": 4.0
+        }
+      }
+    },
+    {
+      "scenario": "BASELINE_V1",
+      "status": "CONTROLLED_VALIDATED",
+      "environment": "NS3_CONTROLLED_SIMULATION",
+      "label_mapping": {
+        "NORMAL": "NORMAL",
+        "DDOS_UDP": "CONTROLLED_ATTACK"
+      },
+      "total_windows": 19,
+      "normal_windows": 5,
+      "attack_windows": 14,
+      "features": {
+        "packet_count": {
+          "overall_min": 6.0,
+          "overall_max": 1030.0,
+          "normal_min": 6.0,
+          "normal_max": 33.0,
+          "attack_min": 1024.0,
+          "attack_max": 1030.0
+        },
+        "bytes_total": {
+          "overall_min": 1380.0,
+          "overall_max": 548900.0,
+          "normal_min": 1380.0,
+          "normal_max": 8526.0,
+          "attack_min": 547274.0,
+          "attack_max": 548900.0
+        },
+        "unique_sources": {
+          "overall_min": 3.0,
+          "overall_max": 4.0,
+          "normal_min": 3.0,
+          "normal_max": 4.0,
+          "attack_min": 4.0,
+          "attack_max": 4.0
+        },
+        "average_packet_size": {
+          "overall_min": 230.0,
+          "overall_max": 534.6875,
+          "normal_min": 230.0,
+          "normal_max": 258.3636363636364,
+          "attack_min": 532.8860759493671,
+          "attack_max": 534.6875
+        },
+        "flow_count": {
+          "overall_min": 3.0,
+          "overall_max": 4.0,
+          "normal_min": 3.0,
+          "normal_max": 4.0,
+          "attack_min": 4.0,
+          "attack_max": 4.0
+        }
+      }
+    }
+  ],
+  "features": [
+    "packet_count",
+    "bytes_total",
+    "unique_sources",
+    "average_packet_size",
+    "flow_count"
+  ],
+  "validation_boundary": {
+    "controlled_scenarios_only": true,
+    "real_world_generalization": false,
+    "real_attack_traffic": false,
+    "live_pipeline": false,
+    "model_training": false,
+    "model_replacement": false,
+    "attack_generation": false
+  },
+  "provenance": {
+    "source": "EXISTING_NS3_V4_DATASET",
+    "measurement_status": "OFFLINE_DATASET",
+    "scenario_status": "CONTROLLED",
+    "validation_status": "VALIDATED"
+  }
+}

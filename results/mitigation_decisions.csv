@@ -1,0 +1,19 @@
+window_start,model_prediction,ddos_probability,packet_rate,energy_increase_percent,energy_cause,mitigation_action,mitigation_reason
+2026-08-21 05:00:01.002184,NORMAL,0.0,24.0,-17.93,Normal traffic activity,ALLOW,Normal traffic
+2026-08-21 05:00:02.002184,NORMAL,0.0,30.0,2.56,Elevated device activity,ALLOW,Normal traffic
+2026-08-21 05:00:03.002184,NORMAL,0.0,30.0,2.56,Elevated device activity,ALLOW,Normal traffic
+2026-08-21 05:00:04.002184,NORMAL,0.25,33.0,12.81,Elevated device activity,ALLOW,Normal traffic
+2026-08-21 05:00:05.002184,DDOS_UDP,1.0,1030.0,3418.29,High-rate UDP flooding,RATE_LIMIT_AND_DROP,High-confidence DDoS traffic
+2026-08-21 05:00:06.002184,DDOS_UDP,1.0,1030.0,3418.29,High-rate UDP flooding,RATE_LIMIT_AND_DROP,High-confidence DDoS traffic
+2026-08-21 05:00:07.002184,DDOS_UDP,1.0,1030.0,3418.29,High-rate UDP flooding,RATE_LIMIT_AND_DROP,High-confidence DDoS traffic
+2026-08-21 05:00:08.002184,DDOS_UDP,1.0,1030.0,3418.29,High-rate UDP flooding,RATE_LIMIT_AND_DROP,High-confidence DDoS traffic
+2026-08-21 05:00:09.002184,DDOS_UDP,1.0,1030.0,3418.29,High-rate UDP flooding,RATE_LIMIT_AND_DROP,High-confidence DDoS traffic
+2026-08-21 05:00:10.002184,DDOS_UDP,1.0,1030.0,3418.29,High-rate UDP flooding,RATE_LIMIT_AND_DROP,High-confidence DDoS traffic
+2026-08-21 05:00:11.002184,DDOS_UDP,1.0,1030.0,3418.29,High-rate UDP flooding,RATE_LIMIT_AND_DROP,High-confidence DDoS traffic
+2026-08-21 05:00:12.002184,DDOS_UDP,1.0,1030.0,3418.29,High-rate UDP flooding,RATE_LIMIT_AND_DROP,High-confidence DDoS traffic
+2026-08-21 05:00:13.002184,DDOS_UDP,1.0,1030.0,3418.29,High-rate UDP flooding,RATE_LIMIT_AND_DROP,High-confidence DDoS traffic
+2026-08-21 05:00:14.002184,DDOS_UDP,1.0,1030.0,3418.29,High-rate UDP flooding,RATE_LIMIT_AND_DROP,High-confidence DDoS traffic
+2026-08-21 05:00:15.002184,DDOS_UDP,1.0,1030.0,3418.29,High-rate UDP flooding,RATE_LIMIT_AND_DROP,High-confidence DDoS traffic
+2026-08-21 05:00:16.002184,DDOS_UDP,1.0,1030.0,3418.29,High-rate UDP flooding,RATE_LIMIT_AND_DROP,High-confidence DDoS traffic
+2026-08-21 05:00:17.002184,DDOS_UDP,1.0,1030.0,3418.29,High-rate UDP flooding,RATE_LIMIT_AND_DROP,High-confidence DDoS traffic
+2026-08-21 05:00:18.002184,DDOS_UDP,1.0,1027.0,3408.04,High-rate UDP flooding,RATE_LIMIT_AND_DROP,High-confidence DDoS traffic

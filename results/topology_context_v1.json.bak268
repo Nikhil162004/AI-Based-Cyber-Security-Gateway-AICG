@@ -1,0 +1,145 @@
+{
+  "topology_id": "CONTROLLED_NS3_IIOT_OT_V1",
+  "version": "1.0",
+  "status": "DECLARED",
+  "environment": "CONTROLLED_SIMULATION",
+  "topology_type": "IIOT_OT_EDGE_GATEWAY",
+  "gateway": {
+    "device_id": "gateway-local",
+    "ip_address": "127.0.0.1",
+    "device_role": "GATEWAY"
+  },
+  "sensors": [
+    {
+      "device_id": "iiot-sensor-01",
+      "ip_address": "10.0.1.1",
+      "device_role": "IIOT_SENSOR"
+    },
+    {
+      "device_id": "iiot-sensor-02",
+      "ip_address": "10.0.2.1",
+      "device_role": "IIOT_SENSOR"
+    },
+    {
+      "device_id": "iiot-sensor-03",
+      "ip_address": "10.0.3.1",
+      "device_role": "IIOT_SENSOR"
+    }
+  ],
+  "controlled_attack_nodes": [
+    {
+      "device_id": "ns3-attacker-01",
+      "ip_address": "10.0.4.1",
+      "device_role": "CONTROLLED_ATTACK_NODE",
+      "authorization_decision": "DENIED",
+      "simulation_only": true
+    }
+  ],
+  "ot_servers": [
+    {
+      "device_id": "ot-server-01",
+      "ip_address": "10.0.10.2",
+      "device_role": "OT_SERVER"
+    }
+  ],
+  "devices": [
+    {
+      "device_id": "gateway-local",
+      "ip_address": "127.0.0.1",
+      "device_role": "GATEWAY",
+      "identity_status": "KNOWN",
+      "authorization_decision": "ALLOWED",
+      "trust_score": 1.0,
+      "environment": "SIMULATED"
+    },
+    {
+      "device_id": "iiot-sensor-01",
+      "ip_address": "10.0.1.1",
+      "device_role": "IIOT_SENSOR",
+      "identity_status": "KNOWN",
+      "authorization_decision": "ALLOWED",
+      "trust_score": 0.9,
+      "environment": "SIMULATED"
+    },
+    {
+      "device_id": "iiot-sensor-02",
+      "ip_address": "10.0.2.1",
+      "device_role": "IIOT_SENSOR",
+      "identity_status": "KNOWN",
+      "authorization_decision": "ALLOWED",
+      "trust_score": 0.9,
+      "environment": "SIMULATED"
+    },
+    {
+      "device_id": "iiot-sensor-03",
+      "ip_address": "10.0.3.1",
+      "device_role": "IIOT_SENSOR",
+      "identity_status": "KNOWN",
+      "authorization_decision": "ALLOWED",
+      "trust_score": 0.9,
+      "environment": "SIMULATED"
+    },
+    {
+      "device_id": "ns3-attacker-01",
+      "ip_address": "10.0.4.1",
+      "device_role": "CONTROLLED_ATTACK_NODE",
+      "identity_status": "KNOWN",
+      "authorization_decision": "DENIED",
+      "trust_score": 0.1,
+      "environment": "SIMULATED"
+    },
+    {
+      "device_id": "ot-server-01",
+      "ip_address": "10.0.10.2",
+      "device_role": "OT_SERVER",
+      "identity_status": "KNOWN",
+      "authorization_decision": "ALLOWED",
+      "trust_score": 0.95,
+      "environment": "SIMULATED"
+    }
+  ],
+  "links": [
+    {
+      "source": "iiot-sensor-01",
+      "destination": "gateway-local",
+      "relationship": "SENSOR_TO_GATEWAY",
+      "status": "DECLARED",
+      "environment": "CONTROLLED_SIMULATION"
+    },
+    {
+      "source": "iiot-sensor-02",
+      "destination": "gateway-local",
+      "relationship": "SENSOR_TO_GATEWAY",
+      "status": "DECLARED",
+      "environment": "CONTROLLED_SIMULATION"
+    },
+    {
+      "source": "iiot-sensor-03",
+      "destination": "gateway-local",
+      "relationship": "SENSOR_TO_GATEWAY",
+      "status": "DECLARED",
+      "environment": "CONTROLLED_SIMULATION"
+    },
+    {
+      "source": "ns3-attacker-01",
+      "destination": "gateway-local",
+      "relationship": "CONTROLLED_ATTACK_TO_GATEWAY",
+      "status": "DECLARED",
+      "environment": "CONTROLLED_SIMULATION"
+    },
+    {
+      "source": "gateway-local",
+      "destination": "ot-server-01",
+      "relationship": "GATEWAY_TO_OT_SERVER",
+      "status": "DECLARED",
+      "environment": "CONTROLLED_SIMULATION"
+    }
+  ],
+  "provenance": {
+    "source": "CONTROLLED_NS3_TOPOLOGY_AND_IAM_REGISTRY",
+    "measurement_status": "DECLARED",
+    "live_discovery": false,
+    "hardware_measured": false,
+    "attack_node_is_real": false
+  }
+}\n
