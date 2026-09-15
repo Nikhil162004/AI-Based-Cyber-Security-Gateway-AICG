@@ -470,3 +470,101 @@ def test_sticky_header_scroll_margin_css():
     assert "top: 0" in css
 
 
+def test_incident_lifecycle_stepper_contracts(runtime_app):
+    """Regression test verifying contracts A through G for incident lifecycle:
+    1. Normal row with lifecycle_state = 'OBSERVED' does not trigger error;
+       /api/status returns canonical lifecycle_state = 'OBSERVED' or 'NORMAL', active_incident = None.
+    2. Attack begins -> incident created with initial DETECTED.
+    3. Autonomous policy transitions incident to CONTAINED -> /api/status returns lifecycle_state: 'CONTAINED'.
+    4. After 3 consecutive normal windows, incident transitions to RECOVERING -> /api/status returns lifecycle_state: 'RECOVERING'.
+    5. After 5 consecutive normal windows, incident transitions to RESOLVED -> /api/status returns lifecycle_state: 'RESOLVED'.
+    6. Explicit operator action transitions incident to CLOSED -> /api/status returns lifecycle_state: 'OBSERVED' (idle) and incident record is CLOSED.
+    7. Telemetry row historical lifecycle_state is NEVER overwritten by later incident state transitions (immutability preserved).
+    """
+    runtime, app = runtime_app
+    with app.test_client() as client:
+        # Contract 1: Initial baseline normal telemetry with lifecycle_state = "OBSERVED"
+        runtime.ingest(generate_window("normal", 1, 0))
+        res_status = client.get("/api/status")
+        assert res_status.status_code == 200
+        st = res_status.get_json()
+        assert st["lifecycle_state"] in {"OBSERVED", "NORMAL"}
+        assert st["active_incident"] is None
+
+        res_tel = client.get("/api/telemetry")
+        assert res_tel.status_code == 200
+        rows = res_tel.get_json()["rows"]
+        assert len(rows) == 1
+        assert rows[0]["lifecycle_context"]["lifecycle_state"] == "OBSERVED"
+        assert rows[0]["lifecycle_context"]["window_observation_state"] == "OBSERVED"
+
+        # Contracts 2 & 3: Attack begins -> incident created with initial DETECTED;
+        # Autonomous policy transitions incident to CONTAINED -> /api/status returns lifecycle_state: "CONTAINED".
+        runtime.ingest(generate_window("syn_flood", 3, 0))
+        res_status = client.get("/api/status")
+        st = res_status.get_json()
+        assert st["lifecycle_state"] == "CONTAINED"
+        assert st["active_incident"] is not None
+        inc_id = st["active_incident"]["incident_id"]
+        assert st["active_incident"]["lifecycle_state"] == "CONTAINED"
+
+        res_inc = client.get(f"/api/incidents/{inc_id}")
+        assert res_inc.status_code == 200
+        inc_data = res_inc.get_json()
+        assert inc_data["lifecycle_state"] == "CONTAINED"
+        history_states = [h["state"] for h in inc_data.get("history", [])]
+        assert "RESPONDING" in history_states
+        assert "CONTAINED" in history_states
+
+        # Contract 4: After 3 consecutive normal windows, incident transitions to RECOVERING ->
+        # /api/status returns lifecycle_state: "RECOVERING".
+        for i in range(1, 4):
+            runtime.ingest(generate_window("normal", 1, i))
+
+        res_status = client.get("/api/status")
+        st = res_status.get_json()
+        assert st["lifecycle_state"] == "RECOVERING"
+        assert st["active_incident"]["lifecycle_state"] == "RECOVERING"
+
+        # Contract 5: After 5 consecutive normal windows, incident transitions to RESOLVED ->
+        # /api/status returns lifecycle_state: "RESOLVED".
+        for i in range(4, 6):
+            runtime.ingest(generate_window("normal", 1, i))
+
+        res_status = client.get("/api/status")
+        st = res_status.get_json()
+        assert st["lifecycle_state"] == "RESOLVED"
+        assert st["active_incident"] is not None
+        assert st["active_incident"]["lifecycle_state"] == "RESOLVED"
+        assert st["active_incident"]["recovery_state"] == "VERIFIED"
+
+        # Contract 6: Explicit operator action transitions incident to CLOSED ->
+        # /api/status returns lifecycle_state: "OBSERVED" (idle) and incident record is CLOSED.
+        res_trans = client.post(f"/api/incidents/{inc_id}/transition", json={
+            "state": "CLOSED",
+            "actor": "operator_audit",
+            "note": "Operator signed off after recovery verification"
+        })
+        assert res_trans.status_code == 200
+        closed_inc = res_trans.get_json()
+        assert closed_inc["lifecycle_state"] == "CLOSED"
+
+        res_status = client.get("/api/status")
+        st = res_status.get_json()
+        assert st["active_incident"] is None
+        assert st["lifecycle_state"] in {"OBSERVED", "NORMAL"}
+
+        # Contract 7: Telemetry row historical lifecycle_state is NEVER overwritten by later
+        # incident state transitions (immutability preserved).
+        res_tel = client.get("/api/telemetry")
+        all_rows = res_tel.get_json()["rows"]
+        # 1 initial normal + 1 attack + 5 recovery normal = 7 windows
+        assert len(all_rows) == 7
+        # First window: normal baseline
+        assert all_rows[0]["lifecycle_context"]["lifecycle_state"] == "OBSERVED"
+        # Second window: attack window, STILL stamped DETECTED
+        assert all_rows[1]["lifecycle_context"]["lifecycle_state"] == "DETECTED"
+        assert all_rows[1]["lifecycle_context"]["window_observation_state"] == "DETECTED"
+        # Remaining windows: normal recovery windows
+        for row in all_rows[2:]:
+            assert row["lifecycle_context"]["lifecycle_state"] == "OBSERVED"

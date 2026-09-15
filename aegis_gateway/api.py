@@ -79,6 +79,7 @@ def _format_telemetry_row(event: dict[str, Any], runtime: GatewayRuntime) -> dic
         "lifecycle_context": {
             "available": True,
             "lifecycle_state": event.get("lifecycle_state") or ("CONTAINED" if is_attack else "NORMAL"),
+            "window_observation_state": event.get("lifecycle_state") or ("DETECTED" if is_attack else "OBSERVED"),
             "lifecycle_stage": "RESPONSE_SIMULATED" if is_attack else "BASELINE_OBSERVATION",
             "implementation_status": "SIMULATED / DRY-RUN",
             "enforcement_status": "HOST FIREWALL UNTOUCHED",
@@ -177,6 +178,21 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         dev_id = latest.get("device_id") or "SENSOR-01"
         trust_val = runtime.iam.get(dev_id).trust_score
 
+        active_inc = runtime.store.find_active_incident()
+        if not active_inc:
+            recent_incidents = runtime.store.incidents(limit=1)
+            if recent_incidents and recent_incidents[0].get("lifecycle_state") == "RESOLVED":
+                active_inc = recent_incidents[0]
+
+        active_inc_summary = {
+            "incident_id": active_inc["incident_id"],
+            "lifecycle_state": active_inc["lifecycle_state"],
+            "severity": active_inc.get("severity"),
+            "attack_type": active_inc.get("attack_type"),
+            "recovery_state": active_inc.get("recovery_state"),
+        } if active_inc else None
+        canonical_state = active_inc["lifecycle_state"] if active_inc else "OBSERVED"
+
         base_status["summary"] = {
             "latest_prediction": pred,
             "latest_packet_rate": float(latest.get("packet_rate") or 18.0),
@@ -185,7 +201,11 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             "latest_security_action": latest.get("response_action") or "ALERT",
             "latest_mitigation_action": latest.get("response_action") or "NONE",
             "trust_score": float(trust_val),
+            "active_incident": active_inc_summary,
+            "lifecycle_state": canonical_state,
         }
+        base_status["active_incident"] = active_inc_summary
+        base_status["lifecycle_state"] = canonical_state
         base_status["pipeline"] = {
             "traffic_features": True,
             "ml_predictions": True,

@@ -798,35 +798,112 @@ function updateIAM(iamData) {
 /* ==========================================================================
    8. INCIDENT LIFECYCLE (HORIZONTAL 7-STEP STEPPER)
    ========================================================================== */
-function updateLifecycle(lifecycle, summary) {
-    const rawState = (lifecycle ? lifecycle.lifecycle_state : (summary.lifecycle_state || "NORMAL")).toUpperCase();
-    const state = rawState === "NORMAL" ? "NORMAL" : rawState;
-    const isNormal = state === "NORMAL" || state === "IDLE";
+const LIFECYCLE_STEP_MAP = {
+    "DETECTED": 0,
+    "ANALYZING": 1,
+    "TRIAGED": 1,
+    "RESPONDING": 2,
+    "CONTAINED": 3,
+    "RECOVERING": 4,
+    "RESOLVED": 5,
+    "CLOSED": 6
+};
+
+function isBaselineState(state) {
+    if (!state) return true;
+    const s = String(state).toUpperCase();
+    return ["NORMAL", "IDLE", "OBSERVED", "BASELINE", "NONE"].includes(s);
+}
+
+// Global reference to track active or transitioning incident in HMI session
+let hmiTargetIncident = null;
+
+function updateLifecycle(targetIncident, summary, telemetryContext) {
+    let state = "NORMAL";
+    let isNormal = true;
+    let inc = targetIncident || (summary && summary.active_incident ? summary.active_incident : null);
+
+    if (inc && inc.lifecycle_state && !isBaselineState(inc.lifecycle_state)) {
+        state = inc.lifecycle_state.toUpperCase();
+        isNormal = false;
+    } else if (summary && summary.lifecycle_state && !isBaselineState(summary.lifecycle_state)) {
+        state = summary.lifecycle_state.toUpperCase();
+        isNormal = false;
+    }
 
     const stateBadge = document.getElementById("lifecycleState");
     const stageText = document.getElementById("lifecycleStage");
     const recoveryText = document.getElementById("lifecycleRecovery");
     const normalBadge = document.getElementById("lifecycleNormalBadge");
+    const activeIdEl = document.getElementById("activeIncId");
 
-    if (stateBadge) {
-        stateBadge.textContent = state;
-        stateBadge.style.color = isNormal ? "var(--green)" : "var(--red)";
-    }
-    if (stageText) {
-        stageText.textContent = (lifecycle && lifecycle.lifecycle_stage ? lifecycle.lifecycle_stage : (isNormal ? "BASELINE OBSERVATION" : "AUTONOMOUS RESPONSE")).replace(/_/g, " ");
-    }
-    if (recoveryText) {
-        recoveryText.textContent = summary.recovery_state || (isNormal ? "MONITORING" : "CONTAINED_IN_SOFTWARE");
-        recoveryText.style.color = isNormal ? "var(--green)" : "var(--amber)";
-    }
-
-    if (normalBadge) {
-        normalBadge.classList.toggle("active", isNormal);
+    if (isNormal) {
+        if (stateBadge) {
+            stateBadge.textContent = "NORMAL";
+            stateBadge.style.color = "var(--green)";
+        }
+        if (stageText) {
+            stageText.textContent = "BASELINE OBSERVATION";
+        }
+        if (recoveryText) {
+            recoveryText.textContent = (summary && summary.recovery_state) || "MONITORING";
+            recoveryText.style.color = "var(--green)";
+        }
+        if (normalBadge) {
+            normalBadge.classList.add("active");
+        }
+        if (activeIdEl && (!inc || ["RESOLVED", "CLOSED"].includes(inc.lifecycle_state))) {
+            activeIdEl.innerHTML = `<span style="color: var(--green);">NONE (BASELINE / SYSTEM CLEAR)</span>`;
+        }
+    } else {
+        if (stateBadge) {
+            stateBadge.textContent = state;
+            if (["DETECTED", "ANALYZING", "TRIAGED", "RESPONDING", "CONTAINED"].includes(state)) {
+                stateBadge.style.color = "var(--red)";
+            } else if (state === "RECOVERING") {
+                stateBadge.style.color = "var(--amber)";
+            } else {
+                stateBadge.style.color = "var(--green)";
+            }
+        }
+        if (stageText) {
+            const stageDesc = {
+                "DETECTED": "THREAT DETECTED • TRIAGING",
+                "ANALYZING": "EVIDENCE CORRELATION",
+                "TRIAGED": "EVIDENCE CORRELATION",
+                "RESPONDING": "AUTONOMOUS RESPONSE ENGAGED",
+                "CONTAINED": "SIMULATED MITIGATION ACTIVE (DRY_RUN)",
+                "RECOVERING": "OBSERVING RECOVERY STREAK",
+                "RESOLVED": "TELEMETRY RECOVERED • VERIFIED",
+                "CLOSED": "INCIDENT CLOSED • AUDIT FINALIZED"
+            }[state] || (telemetryContext && telemetryContext.lifecycle_stage ? telemetryContext.lifecycle_stage.replace(/_/g, " ") : "AUTONOMOUS RESPONSE");
+            stageText.textContent = stageDesc;
+        }
+        if (recoveryText) {
+            if (inc && inc.recovery_state) {
+                recoveryText.textContent = inc.recovery_state;
+                recoveryText.style.color = inc.recovery_state === "VERIFIED" ? "var(--green)" : "var(--amber)";
+            } else {
+                const recVal = (state === "RESOLVED" || state === "CLOSED") ? "VERIFIED" : (state === "RECOVERING" ? "PENDING" : "CONTAINED_IN_SOFTWARE");
+                recoveryText.textContent = recVal;
+                recoveryText.style.color = (state === "RESOLVED" || state === "CLOSED") ? "var(--green)" : "var(--amber)";
+            }
+        }
+        if (normalBadge) {
+            normalBadge.classList.remove("active");
+        }
+        if (activeIdEl && inc && inc.incident_id) {
+            if (["RESOLVED", "CLOSED"].includes(state)) {
+                activeIdEl.innerHTML = `<strong style="color: var(--green);">${escapeHtml(inc.incident_id)} (${escapeHtml(state)})</strong>`;
+            } else {
+                activeIdEl.innerHTML = `<strong style="color: var(--red);">${escapeHtml(inc.incident_id)} (${escapeHtml(state)})</strong>`;
+            }
+        }
     }
 
     // Horizontal 7-Step Progression
     const stepOrder = ["DETECTED", "ANALYZING", "RESPONDING", "CONTAINED", "RECOVERING", "RESOLVED", "CLOSED"];
-    const currentIdx = stepOrder.indexOf(state);
+    const currentIdx = LIFECYCLE_STEP_MAP.hasOwnProperty(state) ? LIFECYCLE_STEP_MAP[state] : -1;
 
     stepOrder.forEach((step, idx) => {
         const id = `stepNode${step.charAt(0) + step.slice(1).toLowerCase()}`;
@@ -834,7 +911,7 @@ function updateLifecycle(lifecycle, summary) {
         if (!node) return;
 
         node.className = "step-node";
-        if (isNormal) {
+        if (isNormal || currentIdx < 0) {
             // In baseline normal, stepper rests in ready/idle state
             return;
         }
@@ -886,12 +963,14 @@ function updateIncidents(incidents) {
 
     // Operator Action Quick Controls for active incident or latest resolved
     if (actionControls) {
-        const targetInc = activeInc || latest;
+        const targetInc = activeInc || (hmiTargetIncident && ["RESOLVED", "CLOSED"].includes(hmiTargetIncident.lifecycle_state) ? hmiTargetIncident : (latest && latest.lifecycle_state === "RESOLVED" ? latest : null));
         const st = targetInc ? targetInc.lifecycle_state : "";
         if (["CONTAINED", "RECOVERING", "RESPONDING", "DETECTED"].includes(st)) {
             actionControls.innerHTML = `<button class="btn-sim-action btn-recover" type="button" onclick="transitionIncidentState('${targetInc.incident_id}', 'RESOLVED')">Resolve ${targetInc.incident_id}</button>`;
         } else if (st === "RESOLVED") {
             actionControls.innerHTML = `<button class="btn-sim-action" type="button" onclick="transitionIncidentState('${targetInc.incident_id}', 'CLOSED')">Close ${targetInc.incident_id}</button>`;
+        } else if (st === "CLOSED" && hmiTargetIncident && hmiTargetIncident.incident_id === targetInc.incident_id) {
+            actionControls.innerHTML = `<button class="btn-sim-action btn-recover" type="button" onclick="resetLifecycleToBaseline()">Reset Stepper to Baseline</button>`;
         } else {
             actionControls.innerHTML = "";
         }
@@ -1228,13 +1307,22 @@ window.executeManualAction = async function(actionName) {
     }
 };
 
+window.resetLifecycleToBaseline = function() {
+    hmiTargetIncident = null;
+    refreshDashboard();
+};
+
 window.transitionIncidentState = async function(incidentId, targetState) {
     try {
-        await fetch(`/api/incidents/${incidentId}/transition`, {
+        const res = await fetch(`/api/incidents/${incidentId}/transition`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ state: targetState, actor: "operator", note: "Operator transitioned state via HMI" })
         });
+        if (res.ok) {
+            const updated = await res.json();
+            hmiTargetIncident = updated;
+        }
         refreshDashboard();
     } catch (e) {
         console.error("Transition failed:", e);
@@ -1248,31 +1336,32 @@ window.transitionIncidentState = async function(incidentId, targetState) {
 async function refreshDashboard() {
     try {
         // 1. Status & Summary
+        let statusObj = null;
         const statusRes = await fetch("/api/status", { cache: "no-store" });
         if (statusRes.ok) {
-            const status = await statusRes.json();
+            statusObj = await statusRes.json();
             const sysStatus = document.getElementById("systemStatus");
             const dot = document.getElementById("statusDot");
-            const isOnline = status.status === "ONLINE";
+            const isOnline = statusObj.status === "ONLINE";
             if (sysStatus) sysStatus.textContent = isOnline ? "ONLINE" : "NO DATA";
             if (dot) {
                 dot.classList.toggle("online", isOnline);
                 dot.classList.toggle("offline", !isOnline);
             }
-            updateSummary(status.summary || {}, status);
+            updateSummary(statusObj.summary || {}, statusObj);
         }
 
         // 2. Telemetry & Time-Series Charts
+        let latestTel = null;
         const liveRes = await fetch("/api/telemetry", { cache: "no-store" });
         let liveRows = [];
         if (liveRes.ok) {
             const liveData = await liveRes.json();
             liveRows = liveData.rows || [];
             if (liveRows.length) {
-                const latest = liveRows[liveRows.length - 1];
-                updateDetection(latest);
-                updateExplainability(latest.explainability_context);
-                updateLifecycle(latest.lifecycle_context, liveData);
+                latestTel = liveRows[liveRows.length - 1];
+                updateDetection(latestTel);
+                updateExplainability(latestTel.explainability_context);
                 updateSampleFlows(liveRows);
             }
             renderHistorianChart(document.getElementById("trafficChart"), liveRows);
@@ -1308,11 +1397,35 @@ async function refreshDashboard() {
         }
 
         // 7. Incidents Journal
+        let incidentsList = [];
         const incRes = await fetch("/api/incidents", { cache: "no-store" });
         if (incRes.ok) {
             const incData = await incRes.json();
-            updateIncidents(incData.incidents);
+            incidentsList = incData.incidents || [];
+            updateIncidents(incidentsList);
         }
+
+        // Determine active or transitioning incident for the 7-step stepper
+        const activeUnclosed = incidentsList.find(i => !["RESOLVED", "CLOSED"].includes(i.lifecycle_state));
+        let stepperIncident = null;
+        if (activeUnclosed) {
+            stepperIncident = activeUnclosed;
+            hmiTargetIncident = activeUnclosed;
+        } else if (hmiTargetIncident) {
+            const refreshedTarget = incidentsList.find(i => i.incident_id === hmiTargetIncident.incident_id);
+            if (refreshedTarget) {
+                hmiTargetIncident = refreshedTarget;
+                stepperIncident = refreshedTarget;
+            } else {
+                stepperIncident = hmiTargetIncident;
+            }
+        } else if (incidentsList.length && incidentsList[0].lifecycle_state === "RESOLVED") {
+            stepperIncident = incidentsList[0];
+            hmiTargetIncident = incidentsList[0];
+        }
+
+        // Update the 7-Step Stepper using the canonical incident state
+        updateLifecycle(stepperIncident, statusObj ? statusObj.summary : {}, latestTel ? latestTel.lifecycle_context : null);
 
         // 8. Recent Threat Events
         const evRes = await fetch("/api/events", { cache: "no-store" });
