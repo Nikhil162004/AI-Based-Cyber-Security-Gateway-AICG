@@ -100,6 +100,7 @@ class GatewayRuntime:
             self.publish("trust", {"identity": identity.identity, "score": identity.trust_score, "delta": delta, "reason": trust_reason, "provenance": "DERIVED"})
 
         incident = None
+        alert = None
         if plan.requires_incident:
             active = self.store.find_active_incident(device_id=item.device_id, attack_type=item.attack_type)
             if active:
@@ -115,14 +116,17 @@ class GatewayRuntime:
                     self.response.apply_simulation(plan, item.device_id)
                     incident = self.store.transition_incident(incident["incident_id"], "RESPONDING", "system", "Simulated response planned; no host enforcement.", decision.evidence)
                     incident = self.store.transition_incident(incident["incident_id"], "CONTAINED", "system", "Containment state is simulated within the laboratory runtime.", decision.evidence)
+            alert = self.store.create_or_update_alert(incident, item, decision, plan)
             self.store.record_action(event_id=item.event_id, incident_id=incident["incident_id"], action=plan.action, reason=plan.reason, policy="hybrid-response-v1", mode=plan.mode, result=plan.result)
             self.publish("incident", incident)
+            if alert:
+                self.publish("alert", alert)
             self.publish("response", {"incident_id": incident["incident_id"], **plan.__dict__, "provenance": "SIMULATED"})
             self._normal_streak = 0
         else:
             self._normal_streak += 1
             self._verify_recovery()
-        result = {"event": item.to_dict(), "decision": decision.as_dict(), "response": plan.__dict__, "incident": incident}
+        result = {"event": item.to_dict(), "decision": decision.as_dict(), "response": plan.__dict__, "incident": incident, "alert": alert}
         self.publish("telemetry", result)
         return result
 
@@ -142,6 +146,9 @@ class GatewayRuntime:
                         ["traffic returned toward modeled baseline"]
                     )
                     self.publish("incident", updated)
+                    alert = self.store.sync_alert_with_incident(updated)
+                    if alert:
+                        self.publish("alert", alert)
                 elif state == "RECOVERING" and self._normal_streak >= 5:
                     updated = self.store.transition_incident(
                         incident["incident_id"],
@@ -151,6 +158,9 @@ class GatewayRuntime:
                         ["sustained normal observations verified"]
                     )
                     self.publish("incident", updated)
+                    alert = self.store.sync_alert_with_incident(updated)
+                    if alert:
+                        self.publish("alert", alert)
             except (ValueError, KeyError):
                 continue
 
@@ -209,8 +219,11 @@ class GatewayRuntime:
                 incident = self.store.transition_incident(incident_id, "CONTAINED", actor, "Manual containment is simulated; no host policy changed.")
             result = "SIMULATED_NOT_ENFORCED"
         stored = self.store.record_action(event_id=incident["event_id"], incident_id=incident_id, action=action, reason="operator request", policy="manual-response-v1", mode="MANUAL", result=result)
+        alert = self.store.sync_alert_with_incident(incident)
         self.publish("response", stored); self.publish("incident", incident)
-        return {"action": stored, "incident": incident}
+        if alert:
+            self.publish("alert", alert)
+        return {"action": stored, "incident": incident, "alert": alert}
 
     def start_baseline(self, tick_seconds: float | None = None) -> None:
         """Continuously generate legitimate baseline OT traffic windows when no attack simulation is active."""

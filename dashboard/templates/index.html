@@ -68,6 +68,15 @@
                 <span id="threatStatus">CLEAR</span>
             </div>
 
+            <div class="header-user-session" id="headerUserBadge">
+                <span class="indicator-dot green" id="headerAuthDot"></span>
+                <span id="headerUserLabel" style="font-family: var(--font-mono); font-size: 11px; font-weight: 700;">ADMIN</span>
+                <span class="tag" id="headerRoleTag" style="font-size: 9px; padding: 1px 5px; border-color: rgba(56,189,248,0.4); color: var(--cyan);">ADMIN</span>
+                <a href="/logout" class="btn-header-tool" id="headerLogoutBtn" title="Terminate Session" style="padding: 3px 8px; font-size: 11px; margin-left: 2px;">
+                    🚪 <span>Logout</span>
+                </a>
+            </div>
+
             <a href="/api/export/telemetry.csv" download class="btn-header-tool" title="Quick CSV Export">
                 📥 <span>Export CSV</span>
             </a>
@@ -116,6 +125,32 @@
                 <a href="#sec-flows" class="hmi-sidebar-link" data-target="sec-flows" title="Raw Flows">
                     <span class="link-icon">🌊</span>
                     <span class="link-text">Raw Flows</span>
+                </a>
+            </div>
+
+            <!-- ADMINISTRATION -->
+            <div class="hmi-sidebar-group">
+                <div class="hmi-sidebar-title">ADMINISTRATION</div>
+                <a href="#sec-admin-overview" id="nav-admin-overview" class="hmi-sidebar-link" data-target="sec-admin-overview" title="Administrative Overview">
+                    <span class="link-icon">🛡️</span>
+                    <span class="link-text">Admin Overview</span>
+                </a>
+                <a href="#sec-admin-alerts" id="nav-admin-alerts" class="hmi-sidebar-link" data-target="sec-admin-alerts" title="Active Alerts &amp; Alert Center">
+                    <span class="link-icon">🚨</span>
+                    <span class="link-text">Active Alerts</span>
+                    <span class="badge-counter" id="sidebarAlertCounter" style="display: none; background: var(--red); color: white; font-size: 9px; padding: 1px 5px; border-radius: 8px; margin-left: 4px; font-weight: 700;">0</span>
+                </a>
+                <a href="#sec-admin-users" id="nav-admin-users" class="hmi-sidebar-link" data-target="sec-admin-users" title="Users &amp; Roles (Admin Only)">
+                    <span class="link-icon">👥</span>
+                    <span class="link-text">Users &amp; Roles</span>
+                </a>
+                <a href="#sec-admin-audit" id="nav-admin-audit" class="hmi-sidebar-link" data-target="sec-admin-audit" title="Administrative Audit Log">
+                    <span class="link-icon">📜</span>
+                    <span class="link-text">Audit Log</span>
+                </a>
+                <a href="#sec-admin-posture" id="nav-admin-posture" class="hmi-sidebar-link" data-target="sec-admin-posture" title="Security &amp; Zero Trust Posture">
+                    <span class="link-icon">⚙️</span>
+                    <span class="link-text">Security Posture</span>
                 </a>
             </div>
 
@@ -1456,6 +1491,355 @@
         </div>
     </section>
 
+
+    <!-- ===================================================== -->
+    <!-- ADMINISTRATIVE SECURITY LAYER CONSOLE -->
+    <!-- ===================================================== -->
+
+    <!-- Section A: Administrative Security Overview -->
+    <section class="panel" id="sec-admin-overview">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <div class="panel-title">
+                    <span>ADMINISTRATIVE SECURITY OVERVIEW</span>
+                    <span class="tag" style="background: rgba(56,189,248,0.1); color: var(--cyan); border-color: rgba(56,189,248,0.4);">AICG SOC</span>
+                </div>
+                <div class="panel-subtitle">
+                    Integrated Administrative Layer • Identity, Role-Based Access Control &amp; Threat Governance
+                </div>
+            </div>
+            <div class="panel-badge-group">
+                <span class="panel-badge" style="border-color: rgba(56, 189, 248, 0.4); color: var(--cyan);">LOCAL LAB IDENTITY</span>
+                <span class="panel-badge" style="border-color: rgba(245, 158, 11, 0.4); color: var(--amber);">SIMULATED MFA</span>
+                <span class="panel-badge" style="border-color: rgba(16, 185, 129, 0.4); color: var(--green);">DRY_RUN NON-ENFORCING</span>
+            </div>
+        </div>
+
+        <!-- 4 Key Administrative Cards -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 14px;">
+            <!-- Card 1: Auth & Role -->
+            <div class="kpi-card" style="padding: 12px 14px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between;">
+                    <span>Session Identity</span>
+                    <span id="adminSessionStatusTag" class="tag" style="color: var(--green); border-color: rgba(16,185,129,0.3);">AUTHENTICATED</span>
+                </div>
+                <div style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px;">
+                    <span id="adminOverviewUser" style="font-size: 18px; font-weight: 700; font-family: var(--font-mono); color: var(--text-primary);">admin</span>
+                    <span id="adminOverviewRoleBadge" class="tag" style="background: rgba(56,189,248,0.15); color: var(--cyan); border-color: var(--cyan); font-weight: 700;">ADMIN</span>
+                </div>
+                <div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px; font-family: var(--font-mono);" id="adminOverviewLoginTime">
+                    MFA: SIMULATED VERIFIED
+                </div>
+            </div>
+
+            <!-- Card 2: Active Alerts -->
+            <div class="kpi-card" style="padding: 12px 14px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between;">
+                    <span>Security Alerts</span>
+                    <span id="adminOverviewUnackBadge" class="tag" style="color: var(--amber); border-color: rgba(245,158,11,0.3);">0 UNACK</span>
+                </div>
+                <div style="margin-top: 6px; display: flex; align-items: baseline; gap: 6px;">
+                    <span id="adminOverviewActiveAlerts" style="font-size: 22px; font-weight: 700; font-family: var(--font-mono); color: var(--text-primary);">0</span>
+                    <span style="font-size: 11px; color: var(--text-muted);">ACTIVE ALERTS</span>
+                </div>
+                <div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px;">
+                    Total logged alerts: <strong id="adminOverviewTotalAlerts">0</strong>
+                </div>
+            </div>
+
+            <!-- Card 3: Incidents & Campaign State -->
+            <div class="kpi-card" style="padding: 12px 14px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between;">
+                    <span>Active Incidents</span>
+                    <span id="adminOverviewCritBadge" class="tag" style="color: var(--red); border-color: rgba(244,63,94,0.3);">0 CRITICAL</span>
+                </div>
+                <div style="margin-top: 6px; display: flex; align-items: baseline; gap: 6px;">
+                    <span id="adminOverviewOpenIncidents" style="font-size: 22px; font-weight: 700; font-family: var(--font-mono); color: var(--text-primary);">0</span>
+                    <span style="font-size: 11px; color: var(--text-muted);">OPEN INCIDENTS</span>
+                </div>
+                <div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px;">
+                    Canonical detection pipeline linked
+                </div>
+            </div>
+
+            <!-- Card 4: Operating Posture -->
+            <div class="kpi-card" style="padding: 12px 14px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between;">
+                    <span>Enforcement Boundary</span>
+                    <span class="tag" style="color: var(--cyan); border-color: rgba(56,189,248,0.3);">DRY_RUN</span>
+                </div>
+                <div style="margin-top: 6px; font-size: 14px; font-weight: 700; font-family: var(--font-mono); color: var(--cyan);">
+                    NON-ENFORCING LAB
+                </div>
+                <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">
+                    Host firewall untouched • 0 pkts transmitted
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Audit Events Mini-Log -->
+        <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.5px;">Recent Administrative Audit Activity</span>
+                <a href="#sec-admin-audit" style="font-size: 11px; color: var(--cyan); text-decoration: none;">View Full Audit Log →</a>
+            </div>
+            <div class="table-responsive">
+                <table class="data-table" style="font-size: 11px;">
+                    <thead>
+                        <tr>
+                            <th>TIME (UTC)</th>
+                            <th>USER</th>
+                            <th>ROLE</th>
+                            <th>ACTION</th>
+                            <th>RESOURCE</th>
+                            <th>RESULT</th>
+                            <th>DETAILS</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminOverviewAuditTbody">
+                        <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 10px;">Loading audit logs...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Section B: Administrative Alert Center -->
+    <section class="panel" id="sec-admin-alerts">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <div class="panel-title">
+                    <span>ADMINISTRATIVE ALERT CENTER</span>
+                    <span class="tag" style="background: rgba(244,63,94,0.15); color: var(--red); border-color: rgba(244,63,94,0.4);">LIVE</span>
+                </div>
+                <div class="panel-subtitle">
+                    Automated Administrative Notifications Generated from Canonical Incident Pipeline • Deduplicated 1:1 Correlation
+                </div>
+            </div>
+            <div class="panel-badge-group">
+                <button type="button" class="btn-filter active" id="filterAlertsAll" onclick="filterAdminAlerts('ALL')">ALL (<span id="countAlertsAll">0</span>)</button>
+                <button type="button" class="btn-filter" id="filterAlertsUnack" onclick="filterAdminAlerts('UNACK')">UNACK (<span id="countAlertsUnack">0</span>)</button>
+                <button type="button" class="btn-filter" id="filterAlertsActive" onclick="filterAdminAlerts('ACTIVE')">ACTIVE (<span id="countAlertsActive">0</span>)</button>
+                <button type="button" class="btn-filter" id="filterAlertsResolved" onclick="filterAdminAlerts('RESOLVED')">RESOLVED (<span id="countAlertsResolved">0</span>)</button>
+            </div>
+        </div>
+
+        <div class="table-responsive" style="margin-top: 6px;">
+            <table class="data-table" style="font-size: 11px;" id="adminAlertsTable">
+                <thead>
+                    <tr>
+                        <th>SEVERITY</th>
+                        <th>ALERT ID</th>
+                        <th>TIMESTAMP (UTC)</th>
+                        <th>ATTACK TYPE</th>
+                        <th>TARGET / DEVICE</th>
+                        <th>CONFIDENCE</th>
+                        <th>LIFECYCLE</th>
+                        <th>SIMULATED ACTION</th>
+                        <th>ACK STATUS</th>
+                        <th>OPERATIONS</th>
+                    </tr>
+                </thead>
+                <tbody id="adminAlertsTableBody">
+                    <tr>
+                        <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                            No active administrative alerts. Launch a scenario in the AICG Attack Simulator to generate alerts.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Section C: Users & Roles (Local Lab Identity Registry) -->
+    <section class="panel" id="sec-admin-users">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <div class="panel-title">
+                    <span>USERS &amp; ROLES • LOCAL LAB IDENTITY REGISTRY</span>
+                    <span class="tag" style="background: rgba(56,189,248,0.1); color: var(--cyan); border-color: rgba(56,189,248,0.4);">RBAC</span>
+                </div>
+                <div class="panel-subtitle">
+                    Server-Side Role-Based Access Control • Local Lab Operator &amp; Administrator Identities
+                </div>
+            </div>
+            <div class="panel-badge-group">
+                <button type="button" class="btn-header-tool" id="btnOpenAddUserModal" onclick="toggleAddUserForm()" style="color: var(--cyan); border-color: rgba(56,189,248,0.4);">
+                    + Add Lab User
+                </button>
+            </div>
+        </div>
+
+        <!-- Inline Add User Form (Admin Only, hidden by default) -->
+        <div id="addUserFormContainer" style="display: none; background: var(--bg-surface); border: 1px solid var(--border-medium); border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 12px;">
+            <div style="font-size: 11px; font-weight: 700; color: var(--cyan); text-transform: uppercase; margin-bottom: 10px;">
+                Create Local Laboratory User
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; align-items: end;">
+                <div>
+                    <label style="display: block; font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">USERNAME</label>
+                    <input type="text" id="newLabUsername" class="form-input" placeholder="e.g. auditor_01" style="padding: 6px 10px; font-size: 12px;">
+                </div>
+                <div>
+                    <label style="display: block; font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">PASSWORD</label>
+                    <input type="password" id="newLabPassword" class="form-input" placeholder="••••••••••••" style="padding: 6px 10px; font-size: 12px;">
+                </div>
+                <div>
+                    <label style="display: block; font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">ROLE</label>
+                    <select id="newLabRole" class="form-input" style="padding: 6px 10px; font-size: 12px;">
+                        <option value="OPERATOR">OPERATOR (Operational Access)</option>
+                        <option value="ADMIN">ADMIN (Full Console Privileges)</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn-sim-action btn-isolate" onclick="submitCreateUser()" style="padding: 6px 14px; font-size: 11px;">Save User</button>
+                    <button type="button" class="btn-sim-action" onclick="toggleAddUserForm()" style="padding: 6px 12px; font-size: 11px; background: var(--bg-card); color: var(--text-secondary); border-color: var(--border-subtle);">Cancel</button>
+                </div>
+            </div>
+            <div id="addUserMsg" style="font-size: 11px; margin-top: 8px; display: none;"></div>
+        </div>
+
+        <div id="operatorUserNotice" style="display: none; padding: 10px 14px; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 11px; color: #fef3c7;">
+            ℹ️ <strong>RBAC Policy Notice:</strong> You are authenticated as an <strong>OPERATOR</strong>. User management privileges (MANAGE_USERS) are restricted to <strong>ADMIN</strong>. Attempting modification calls will receive HTTP 403 Forbidden.
+        </div>
+
+        <div class="table-responsive">
+            <table class="data-table" style="font-size: 11px;">
+                <thead>
+                    <tr>
+                        <th>USER ID</th>
+                        <th>USERNAME</th>
+                        <th>ROLE</th>
+                        <th>ACCOUNT STATUS</th>
+                        <th>MFA POSTURE</th>
+                        <th>CREATED (UTC)</th>
+                        <th>LAST LOGIN (UTC)</th>
+                        <th>ACTIONS</th>
+                    </tr>
+                </thead>
+                <tbody id="adminUsersTableBody">
+                    <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 14px;">Loading user registry...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Section D: Administrative Audit Log -->
+    <section class="panel" id="sec-admin-audit">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <div class="panel-title">
+                    <span>ADMINISTRATIVE AUDIT LOG</span>
+                    <span class="tag" style="background: rgba(16,185,129,0.15); color: var(--green); border-color: rgba(16,185,129,0.4);">APPEND-ONLY</span>
+                </div>
+                <div class="panel-subtitle">
+                    Cryptographically Non-Rewriting Ledger of Privileged User, Alert &amp; Security State Actions • Passwords Redacted
+                </div>
+            </div>
+            <div class="panel-badge-group">
+                <input type="text" id="auditSearchInput" placeholder="Filter by action or user..." onkeyup="filterAuditTable()" style="background: var(--bg-input); border: 1px solid var(--border-subtle); color: var(--text-primary); border-radius: var(--radius-sm); padding: 4px 8px; font-size: 11px; font-family: var(--font-mono); width: 180px;">
+                <button type="button" class="btn-header-tool" onclick="refreshAuditLogs()" title="Refresh Audit Log">🔄 Refresh</button>
+            </div>
+        </div>
+
+        <div id="operatorAuditNotice" style="display: none; padding: 10px 14px; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 11px; color: #fef3c7;">
+            ℹ️ <strong>RBAC Policy Notice:</strong> Full Administrative Audit Log viewing is restricted to <strong>ADMIN</strong>. Operator view is limited.
+        </div>
+
+        <div class="table-responsive">
+            <table class="data-table" style="font-size: 11px;">
+                <thead>
+                    <tr>
+                        <th>EVENT ID</th>
+                        <th>TIMESTAMP (UTC)</th>
+                        <th>OPERATOR</th>
+                        <th>ROLE</th>
+                        <th>ACTION</th>
+                        <th>RESOURCE</th>
+                        <th>RESULT</th>
+                        <th>DETAILS / CONTEXT</th>
+                    </tr>
+                </thead>
+                <tbody id="adminAuditTableBody">
+                    <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 14px;">Loading administrative audit records...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Section E: Security & Zero Trust Posture -->
+    <section class="panel" id="sec-admin-posture">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <div class="panel-title">
+                    <span>SECURITY &amp; ZERO-TRUST POSTURE</span>
+                    <span class="tag" style="background: rgba(99,102,241,0.15); color: var(--purple); border-color: rgba(99,102,241,0.4);">POLICY CORE</span>
+                </div>
+                <div class="panel-subtitle">
+                    End-to-End Zero-Trust Decision Chain: Identity → Authentication → MFA → Authorization → Dynamic Trust → Access Decision
+                </div>
+            </div>
+            <div class="panel-badge-group">
+                <span class="panel-badge" style="border-color: var(--cyan); color: var(--cyan);">BOUNDED REPUTATION: 0..100</span>
+                <span class="panel-badge" style="border-color: var(--amber); color: var(--amber);">SIMULATED MFA</span>
+            </div>
+        </div>
+
+        <!-- 6-Stage Zero-Trust Decision Chain -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 16px;">
+            <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px;">
+                <div style="font-size: 9px; color: var(--cyan); font-family: var(--font-mono); font-weight: 700;">STEP 1</div>
+                <div style="font-size: 11px; font-weight: 700; margin: 4px 0 2px;">IDENTITY</div>
+                <div style="font-size: 10px; color: var(--text-muted);">Local Lab Registry</div>
+                <div style="margin-top: 6px;"><span class="tag" style="font-size: 9px; color: var(--green); border-color: rgba(16,185,129,0.3);">KNOWN</span></div>
+            </div>
+
+            <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px;">
+                <div style="font-size: 9px; color: var(--cyan); font-family: var(--font-mono); font-weight: 700;">STEP 2</div>
+                <div style="font-size: 11px; font-weight: 700; margin: 4px 0 2px;">AUTHENTICATION</div>
+                <div style="font-size: 10px; color: var(--text-muted);">PBKDF2/scrypt salted</div>
+                <div style="margin-top: 6px;"><span class="tag" style="font-size: 9px; color: var(--green); border-color: rgba(16,185,129,0.3);">VERIFIED</span></div>
+            </div>
+
+            <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px;">
+                <div style="font-size: 9px; color: var(--amber); font-family: var(--font-mono); font-weight: 700;">STEP 3</div>
+                <div style="font-size: 11px; font-weight: 700; margin: 4px 0 2px;">SIMULATED MFA</div>
+                <div style="font-size: 10px; color: var(--text-muted);">Lab Demonstration Token</div>
+                <div style="margin-top: 6px;"><span class="tag" style="font-size: 9px; color: var(--amber); border-color: rgba(245,158,11,0.4);">SIMULATED</span></div>
+            </div>
+
+            <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px;">
+                <div style="font-size: 9px; color: var(--cyan); font-family: var(--font-mono); font-weight: 700;">STEP 4</div>
+                <div style="font-size: 11px; font-weight: 700; margin: 4px 0 2px;">AUTHORIZATION</div>
+                <div style="font-size: 10px; color: var(--text-muted);">Server-side RBAC matrix</div>
+                <div style="margin-top: 6px;"><span class="tag" style="font-size: 9px; color: var(--cyan); border-color: rgba(56,189,248,0.3);">ENFORCED</span></div>
+            </div>
+
+            <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px;">
+                <div style="font-size: 9px; color: var(--cyan); font-family: var(--font-mono); font-weight: 700;">STEP 5</div>
+                <div style="font-size: 11px; font-weight: 700; margin: 4px 0 2px;">TRUST REPUTATION</div>
+                <div style="font-size: 10px; color: var(--text-muted);">Dynamic score (0..100)</div>
+                <div style="margin-top: 6px;"><span class="tag" style="font-size: 9px; color: var(--green); border-color: rgba(16,185,129,0.3);">BOUNDED</span></div>
+            </div>
+
+            <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px;">
+                <div style="font-size: 9px; color: var(--cyan); font-family: var(--font-mono); font-weight: 700;">STEP 6</div>
+                <div style="font-size: 11px; font-weight: 700; margin: 4px 0 2px;">ACCESS DECISION</div>
+                <div style="font-size: 10px; color: var(--text-muted);">DRY_RUN response</div>
+                <div style="margin-top: 6px;"><span class="tag" style="font-size: 9px; color: var(--cyan); border-color: rgba(56,189,248,0.3);">DRY_RUN</span></div>
+            </div>
+        </div>
+
+        <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div style="font-size: 11px; color: var(--text-secondary); max-width: 680px;">
+                <strong style="color: var(--text-primary);">Policy Enforcement Claim Boundary:</strong> All response decisions (BLOCK, RATE_LIMIT, ISOLATE) operate strictly in DRY_RUN software simulation mode. No host routing, NIC, iptables, nftables, or tc rules are touched.
+            </div>
+            <div style="display: flex; gap: 6px; flex-shrink: 0;">
+                <span class="tag" style="color: var(--green); border-color: rgba(16,185,129,0.3);">HOST FIREWALL UNTOUCHED</span>
+                <span class="tag" style="color: var(--cyan); border-color: rgba(56,189,248,0.3);">ZERO PACKET TRANSMISSION</span>
+            </div>
+        </div>
+    </section>
 
     <!-- ===================================================== -->
     <!-- 12. AICG ATTACK SIMULATOR (CONTROLLED IN-PROCESS) -->

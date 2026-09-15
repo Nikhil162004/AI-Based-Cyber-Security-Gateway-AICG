@@ -1679,6 +1679,9 @@ async function refreshDashboard() {
             updateModelAssurance(maData);
         }
 
+        // 10. Administrative Security Layer
+        await refreshAdminSection();
+
     } catch (error) {
         console.error("Dashboard refresh error:", error);
     }
@@ -1772,7 +1775,12 @@ function initSidebarNavigation() {
         "sec-incidents",
         "sec-comparison",
         "sec-assurance",
-        "sec-controls"
+        "sec-controls",
+        "sec-admin-overview",
+        "sec-admin-alerts",
+        "sec-admin-users",
+        "sec-admin-audit",
+        "sec-admin-posture"
     ];
 
     let ticking = false;
@@ -1819,6 +1827,10 @@ function initSSE() {
         source.addEventListener("response", () => refreshDashboard());
         source.addEventListener("trust", () => refreshDashboard());
         source.addEventListener("simulation", () => refreshDashboard());
+        source.addEventListener("alert", () => {
+            refreshAdminAlerts();
+            refreshAdminOverview();
+        });
         source.onerror = () => {
             // Reconnect handled automatically by EventSource
         };
@@ -1846,8 +1858,523 @@ window.addEventListener("resize", () => {
         .catch(() => {});
 });
 
+/* ==========================================================================
+   ADMINISTRATIVE SECURITY LAYER: AUTH, RBAC, ALERTS, AUDIT, USERS
+   ========================================================================== */
+
+let currentAuthSession = null;
+let currentAlertFilterMode = "ALL";
+let cachedAdminAlerts = [];
+
+async function checkAuthStatus() {
+    try {
+        const res = await fetch("/api/auth/status", { cache: "no-store" });
+        if (res.ok) {
+            const data = await res.json();
+            currentAuthSession = data.authenticated ? data.user : null;
+            renderAuthBadge(data);
+        }
+    } catch (e) {
+        console.warn("Auth status fetch error:", e);
+    }
+}
+
+function renderAuthBadge(authData) {
+    const badge = document.getElementById("headerUserBadge");
+    const userLabel = document.getElementById("headerUserLabel");
+    const roleTag = document.getElementById("headerRoleTag");
+    const dot = document.getElementById("headerAuthDot");
+    const logoutBtn = document.getElementById("headerLogoutBtn");
+    const addUserBtn = document.getElementById("btnOpenAddUserModal");
+    const opNotice = document.getElementById("operatorUserNotice");
+    const opAuditNotice = document.getElementById("operatorAuditNotice");
+
+    if (!badge) return;
+
+    if (authData.authenticated && authData.user) {
+        const u = authData.user;
+        if (userLabel) userLabel.textContent = u.username;
+        if (roleTag) {
+            roleTag.textContent = u.role;
+            if (u.role === "ADMIN") {
+                roleTag.style.color = "var(--cyan)";
+                roleTag.style.borderColor = "rgba(56,189,248,0.4)";
+                roleTag.style.background = "rgba(56,189,248,0.12)";
+            } else {
+                roleTag.style.color = "var(--amber)";
+                roleTag.style.borderColor = "rgba(245,158,11,0.4)";
+                roleTag.style.background = "rgba(245,158,11,0.12)";
+            }
+        }
+        if (dot) dot.className = "indicator-dot green";
+        if (logoutBtn) {
+            logoutBtn.innerHTML = '🚪 <span>Logout</span>';
+            logoutBtn.href = "/logout";
+            logoutBtn.title = "Terminate Administrative Session";
+        }
+
+        // RBAC UI constraints
+        const isAdmin = u.role === "ADMIN";
+        if (addUserBtn) addUserBtn.style.display = isAdmin ? "inline-block" : "none";
+        if (opNotice) opNotice.style.display = isAdmin ? "none" : "block";
+        if (opAuditNotice) opAuditNotice.style.display = isAdmin ? "none" : "block";
+
+    } else {
+        if (userLabel) userLabel.textContent = "ANONYMOUS";
+        if (roleTag) {
+            roleTag.textContent = "UNAUTHENTICATED";
+            roleTag.style.color = "var(--text-muted)";
+            roleTag.style.borderColor = "var(--border-subtle)";
+        }
+        if (dot) dot.className = "indicator-dot amber";
+        if (logoutBtn) {
+            logoutBtn.innerHTML = '🔒 <span>Login</span>';
+            logoutBtn.href = "/login";
+            logoutBtn.title = "Authenticate Session";
+        }
+        if (addUserBtn) addUserBtn.style.display = "none";
+        if (opNotice) opNotice.style.display = "block";
+        if (opAuditNotice) opAuditNotice.style.display = "block";
+    }
+}
+
+async function refreshAdminSection() {
+    await checkAuthStatus();
+    await Promise.all([
+        refreshAdminOverview(),
+        refreshAdminAlerts(),
+        refreshAdminUsers(),
+        refreshAdminAuditLogs()
+    ]);
+}
+
+async function refreshAdminOverview() {
+    try {
+        const res = await fetch("/api/admin/overview", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // Update Overview Cards
+        const u = data.user;
+        const userEl = document.getElementById("adminOverviewUser");
+        const roleBadge = document.getElementById("adminOverviewRoleBadge");
+        const loginTimeEl = document.getElementById("adminOverviewLoginTime");
+        if (userEl && u) userEl.textContent = u.username;
+        if (roleBadge && u) {
+            roleBadge.textContent = u.role;
+            roleBadge.className = `tag ${u.role === "ADMIN" ? "tag-cyan" : "tag-amber"}`;
+        }
+        if (loginTimeEl && u) {
+            loginTimeEl.textContent = `MFA: ${u.mfa_status || "SIMULATED VERIFIED"}`;
+        }
+
+        const k = data.kpis || {};
+        const actAlertsEl = document.getElementById("adminOverviewActiveAlerts");
+        const unackBadge = document.getElementById("adminOverviewUnackBadge");
+        const totalAlertsEl = document.getElementById("adminOverviewTotalAlerts");
+        if (actAlertsEl) actAlertsEl.textContent = k.active_alerts ?? 0;
+        if (unackBadge) {
+            unackBadge.textContent = `${k.unacknowledged_alerts ?? 0} UNACK`;
+            unackBadge.style.display = (k.unacknowledged_alerts > 0) ? "inline-block" : "none";
+        }
+        if (totalAlertsEl) totalAlertsEl.textContent = k.total_alerts ?? 0;
+
+        const openIncEl = document.getElementById("adminOverviewOpenIncidents");
+        const critBadge = document.getElementById("adminOverviewCritBadge");
+        if (openIncEl) openIncEl.textContent = k.open_incidents ?? 0;
+        if (critBadge) {
+            critBadge.textContent = `${k.critical_incidents ?? 0} CRITICAL`;
+            critBadge.style.display = (k.critical_incidents > 0) ? "inline-block" : "none";
+        }
+
+        // Mini Audit Log
+        renderMiniAuditLogs(data.recent_audits || []);
+    } catch (e) {
+        console.warn("Admin overview error:", e);
+    }
+}
+
+function renderMiniAuditLogs(audits) {
+    const tbody = document.getElementById("adminOverviewAuditTbody");
+    if (!tbody) return;
+    if (!audits.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 10px;">No audit events recorded yet.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = audits.slice(0, 5).map(a => {
+        const isSuccess = a.result === "SUCCESS";
+        const resultColor = isSuccess ? "var(--green)" : (a.result === "DENIED" ? "var(--amber)" : "var(--red)");
+        const timeFormatted = a.timestamp ? a.timestamp.substring(11, 19) : "--:--:--";
+        return `<tr>
+            <td style="font-family: var(--font-mono); color: var(--text-muted);">${timeFormatted}</td>
+            <td style="font-weight: 600;">${escapeHtml(a.username)}</td>
+            <td><span class="tag" style="font-size: 9px;">${escapeHtml(a.role)}</span></td>
+            <td style="font-family: var(--font-mono); font-weight: 700; color: var(--cyan);">${escapeHtml(a.action)}</td>
+            <td style="color: var(--text-muted);">${escapeHtml(a.resource || "system")}</td>
+            <td><span class="tag" style="color: ${resultColor}; border-color: ${resultColor}44; font-size: 9px;">${escapeHtml(a.result)}</span></td>
+            <td style="color: var(--text-secondary); max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(a.details)}">${escapeHtml(a.details)}</td>
+        </tr>`;
+    }).join("");
+}
+
+async function refreshAdminAlerts() {
+    try {
+        const res = await fetch("/api/admin/alerts?limit=200", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        cachedAdminAlerts = data.alerts || [];
+
+        // Update counts
+        const allCount = cachedAdminAlerts.length;
+        const unackCount = cachedAdminAlerts.filter(a => a.acknowledgement_state === "UNACKNOWLEDGED").length;
+        const activeCount = cachedAdminAlerts.filter(a => a.status === "ACTIVE").length;
+        const resolvedCount = cachedAdminAlerts.filter(a => a.status === "RESOLVED" || a.status === "CLOSED").length;
+
+        const cAll = document.getElementById("countAlertsAll");
+        const cUnack = document.getElementById("countAlertsUnack");
+        const cActive = document.getElementById("countAlertsActive");
+        const cResolved = document.getElementById("countAlertsResolved");
+        const sbBadge = document.getElementById("sidebarAlertCounter");
+
+        if (cAll) cAll.textContent = allCount;
+        if (cUnack) cUnack.textContent = unackCount;
+        if (cActive) cActive.textContent = activeCount;
+        if (cResolved) cResolved.textContent = resolvedCount;
+
+        if (sbBadge) {
+            sbBadge.textContent = unackCount;
+            sbBadge.style.display = unackCount > 0 ? "inline-block" : "none";
+        }
+
+        renderFilteredAlerts();
+    } catch (e) {
+        console.warn("Admin alerts error:", e);
+    }
+}
+
+function filterAdminAlerts(mode) {
+    currentAlertFilterMode = mode;
+    ["filterAlertsAll", "filterAlertsUnack", "filterAlertsActive", "filterAlertsResolved"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove("active");
+    });
+    const map = {
+        "ALL": "filterAlertsAll",
+        "UNACK": "filterAlertsUnack",
+        "ACTIVE": "filterAlertsActive",
+        "RESOLVED": "filterAlertsResolved"
+    };
+    const activeEl = document.getElementById(map[mode]);
+    if (activeEl) activeEl.classList.add("active");
+    renderFilteredAlerts();
+}
+
+function renderFilteredAlerts() {
+    const tbody = document.getElementById("adminAlertsTableBody");
+    if (!tbody) return;
+
+    let filtered = cachedAdminAlerts;
+    if (currentAlertFilterMode === "UNACK") {
+        filtered = cachedAdminAlerts.filter(a => a.acknowledgement_state === "UNACKNOWLEDGED");
+    } else if (currentAlertFilterMode === "ACTIVE") {
+        filtered = cachedAdminAlerts.filter(a => a.status === "ACTIVE");
+    } else if (currentAlertFilterMode === "RESOLVED") {
+        filtered = cachedAdminAlerts.filter(a => a.status === "RESOLVED" || a.status === "CLOSED");
+    }
+
+    if (!filtered.length) {
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 20px;">
+            No alerts matching filter '${currentAlertFilterMode}'.
+        </td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(a => {
+        const sev = (a.severity || "MEDIUM").toUpperCase();
+        let sevColor = "var(--cyan)";
+        let sevBg = "rgba(56,189,248,0.12)";
+        if (sev === "CRITICAL") { sevColor = "var(--red)"; sevBg = "rgba(244,63,94,0.18)"; }
+        else if (sev === "HIGH") { sevColor = "var(--amber)"; sevBg = "rgba(245,158,11,0.16)"; }
+        else if (sev === "LOW") { sevColor = "var(--text-muted)"; sevBg = "rgba(100,116,139,0.15)"; }
+
+        const isUnack = a.acknowledgement_state === "UNACKNOWLEDGED";
+        const ackColor = isUnack ? "var(--amber)" : "var(--green)";
+        const ackText = isUnack ? "UNACKNOWLEDGED" : `ACK (${escapeHtml(a.acknowledged_by || "user")})`;
+
+        const timeFormatted = a.timestamp ? a.timestamp.substring(11, 19) : "--:--:--";
+        const confPercent = (Number(a.confidence || 0.95) * 100).toFixed(1) + "%";
+
+        const ackButton = isUnack ?
+            `<button type="button" class="btn-sim-action btn-ack" data-alert-id="${escapeHtml(a.alert_id)}" onclick="acknowledgeAlert('${a.alert_id}')" style="padding: 3px 8px; font-size: 10px; background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.5); color: var(--amber); border-radius: 3px; cursor: pointer;">ACKNOWLEDGE</button>` :
+            `<span style="font-size: 10px; color: var(--green);">✓ ACKNOWLEDGED</span>`;
+
+        return `<tr>
+            <td><span class="tag" style="color:${sevColor}; background:${sevBg}; border-color:${sevColor}66; font-weight:700;">${sev}</span></td>
+            <td style="font-family: var(--font-mono); font-weight:600; color:var(--text-primary);">${escapeHtml(a.alert_id)}</td>
+            <td style="font-family: var(--font-mono); color:var(--text-muted);">${timeFormatted}</td>
+            <td><strong style="color:var(--text-primary);">${escapeHtml(a.attack_type)}</strong></td>
+            <td style="font-family: var(--font-mono); color:var(--text-secondary);">${escapeHtml(a.device_id || a.target)}</td>
+            <td style="font-family: var(--font-mono);">${confPercent}</td>
+            <td><span class="tag tag-lifecycle" style="font-size: 9px;">${escapeHtml(a.lifecycle_state)}</span></td>
+            <td><span class="tag" style="font-size: 9px; color:var(--cyan); border-color:rgba(56,189,248,0.3);">${escapeHtml(a.current_action)}</span></td>
+            <td><span class="tag" style="color:${ackColor}; border-color:${ackColor}44; font-size:9px;">${ackText}</span></td>
+            <td style="white-space: nowrap;">
+                <div style="display: flex; gap: 4px; align-items: center;">
+                    ${ackButton}
+                    <a href="#sec-incidents" onclick="highlightIncidentInJournal('${a.incident_id}')" style="padding: 3px 6px; font-size: 10px; background: var(--bg-card); border: 1px solid var(--border-subtle); color: var(--text-secondary); text-decoration: none; border-radius: 3px;">VIEW INCIDENT</a>
+                </div>
+            </td>
+        </tr>`;
+    }).join("");
+}
+
+async function acknowledgeAlert(alertId) {
+    try {
+        const res = await fetch(`/api/admin/alerts/${alertId}/acknowledge`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+        });
+        if (res.ok) {
+            await refreshAdminAlerts();
+            await refreshAdminOverview();
+            await refreshAdminAuditLogs();
+        } else {
+            const err = await res.json();
+            alert(`Unable to acknowledge alert: ${err.error || "Permission denied"}`);
+        }
+    } catch (e) {
+        console.error("Acknowledge alert error:", e);
+    }
+}
+
+function highlightIncidentInJournal(incidentId) {
+    const el = document.getElementById("sec-incidents");
+    if (el) {
+        el.scrollIntoView({ behavior: "smooth" });
+        setTimeout(() => {
+            const rows = document.querySelectorAll("#incidentsTableBody tr");
+            rows.forEach(r => {
+                if (r.textContent.includes(incidentId)) {
+                    r.style.outline = "2px solid var(--cyan)";
+                    r.style.background = "rgba(56, 189, 248, 0.15)";
+                    setTimeout(() => {
+                        r.style.outline = "";
+                        r.style.background = "";
+                    }, 3500);
+                }
+            });
+        }, 400);
+    }
+}
+
+async function refreshAdminUsers() {
+    const tbody = document.getElementById("adminUsersTableBody");
+    if (!tbody) return;
+
+    if (!currentAuthSession) {
+        await checkAuthStatus();
+    }
+
+    if (!currentAuthSession || currentAuthSession.role !== "ADMIN") {
+        tbody.innerHTML = `<tr>
+            <td>USR-OPERATOR-01</td>
+            <td><strong>operator</strong></td>
+            <td><span class="tag" style="color:var(--amber); border-color:rgba(245,158,11,0.4);">OPERATOR</span></td>
+            <td><span class="tag" style="color:var(--green);">ACTIVE</span></td>
+            <td><span class="tag" style="color:var(--amber);">SIMULATED MFA</span></td>
+            <td style="font-family:var(--font-mono); color:var(--text-muted);">2026-09-15</td>
+            <td style="font-family:var(--font-mono); color:var(--text-muted);">Recent</td>
+            <td style="color:var(--text-muted); font-size:10px;">READ-ONLY VIEW</td>
+        </tr>`;
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/admin/users", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const users = data.users || [];
+
+        if (!users.length) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:14px;">No users registered.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = users.map(u => {
+            const isActive = u.status === "ACTIVE";
+            const roleColor = u.role === "ADMIN" ? "var(--cyan)" : "var(--amber)";
+            const toggleAction = isActive ? "DISABLED" : "ACTIVE";
+            const toggleBtnText = isActive ? "Disable" : "Enable";
+            const toggleBtnStyle = isActive ? "background:rgba(244,63,94,0.1); border-color:rgba(244,63,94,0.3); color:var(--red);" : "background:rgba(16,185,129,0.1); border-color:rgba(16,185,129,0.3); color:var(--green);";
+
+            return `<tr>
+                <td style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted);">${escapeHtml(u.user_id)}</td>
+                <td style="font-weight:700; color:var(--text-primary);">${escapeHtml(u.username)}</td>
+                <td><span class="tag" style="color:${roleColor}; border-color:${roleColor}55;">${escapeHtml(u.role)}</span></td>
+                <td><span class="tag" style="color:${isActive ? 'var(--green)' : 'var(--red)'}; border-color:${isActive ? 'var(--green)' : 'var(--red)'}44;">${escapeHtml(u.status)}</span></td>
+                <td><span class="tag" style="color:var(--amber); border-color:rgba(245,158,11,0.3); font-size:9px;">${escapeHtml(u.mfa_status || "SIMULATED")}</span></td>
+                <td style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted);">${u.created_at ? u.created_at.substring(0, 10) : "--"}</td>
+                <td style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted);">${u.last_login ? u.last_login.substring(11, 19) : "Never"}</td>
+                <td>
+                    <button type="button" onclick="toggleUserStatus('${u.user_id}', '${toggleAction}')" style="padding:2px 8px; font-size:10px; border-radius:3px; cursor:pointer; ${toggleBtnStyle}">
+                        ${toggleBtnText}
+                    </button>
+                </td>
+            </tr>`;
+        }).join("");
+    } catch (e) {
+        console.warn("Admin users error:", e);
+    }
+}
+
+function toggleAddUserForm() {
+    const el = document.getElementById("addUserFormContainer");
+    if (el) el.style.display = (el.style.display === "none" || !el.style.display) ? "block" : "none";
+}
+
+async function submitCreateUser() {
+    const user = document.getElementById("newLabUsername").value.trim();
+    const pass = document.getElementById("newLabPassword").value;
+    const role = document.getElementById("newLabRole").value;
+    const msg = document.getElementById("addUserMsg");
+
+    if (!user || !pass) {
+        if (msg) {
+            msg.style.display = "block";
+            msg.style.color = "var(--red)";
+            msg.textContent = "Username and password required.";
+        }
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/admin/users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: user, password: pass, role: role })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            document.getElementById("newLabUsername").value = "";
+            document.getElementById("newLabPassword").value = "";
+            toggleAddUserForm();
+            await refreshAdminUsers();
+            await refreshAdminOverview();
+            await refreshAdminAuditLogs();
+        } else {
+            if (msg) {
+                msg.style.display = "block";
+                msg.style.color = "var(--red)";
+                msg.textContent = data.error || "User creation failed.";
+            }
+        }
+    } catch (e) {
+        console.error("Create user error:", e);
+    }
+}
+
+async function toggleUserStatus(userId, newStatus) {
+    try {
+        const res = await fetch(`/api/admin/users/${userId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: newStatus })
+        });
+        if (res.ok) {
+            await refreshAdminUsers();
+            await refreshAdminOverview();
+            await refreshAdminAuditLogs();
+        } else {
+            const err = await res.json();
+            alert(`Status change failed: ${err.error || "Permission denied"}`);
+        }
+    } catch (e) {
+        console.error("Toggle user status error:", e);
+    }
+}
+
+let cachedAuditRecords = [];
+
+async function refreshAdminAuditLogs() {
+    const tbody = document.getElementById("adminAuditTableBody");
+    if (!tbody) return;
+
+    try {
+        const res = await fetch("/api/admin/audit?limit=100", { cache: "no-store" });
+        if (!res.ok) {
+            if (res.status === 403) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:14px;">Audit log access is restricted to ADMIN role. Operator access is denied (HTTP 403).</td></tr>';
+            }
+            return;
+        }
+        const data = await res.json();
+        cachedAuditRecords = data.audit_events || [];
+        renderAuditTable(cachedAuditRecords);
+    } catch (e) {
+        console.warn("Audit logs error:", e);
+    }
+}
+
+function renderAuditTable(records) {
+    const tbody = document.getElementById("adminAuditTableBody");
+    if (!tbody) return;
+
+    if (!records.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:16px;">No administrative audit records logged yet.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = records.map(a => {
+        const isSuccess = a.result === "SUCCESS";
+        const resultColor = isSuccess ? "var(--green)" : (a.result === "DENIED" ? "var(--amber)" : "var(--red)");
+        const timeFormatted = a.timestamp ? a.timestamp.substring(0, 19).replace("T", " ") : "--";
+
+        return `<tr>
+            <td style="font-family: var(--font-mono); font-size:10px; color:var(--cyan);">${escapeHtml(a.event_id)}</td>
+            <td style="font-family: var(--font-mono); font-size:10px; color:var(--text-muted);">${timeFormatted}</td>
+            <td style="font-weight:700; color:var(--text-primary);">${escapeHtml(a.username)}</td>
+            <td><span class="tag" style="font-size:9px;">${escapeHtml(a.role)}</span></td>
+            <td style="font-family: var(--font-mono); font-weight:700; color:var(--cyan);">${escapeHtml(a.action)}</td>
+            <td style="color:var(--text-muted);">${escapeHtml(a.resource || "system")}</td>
+            <td><span class="tag" style="color:${resultColor}; border-color:${resultColor}44; font-size:9px;">${escapeHtml(a.result)}</span></td>
+            <td style="color:var(--text-secondary); max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(a.details)}">${escapeHtml(a.details)}</td>
+        </tr>`;
+    }).join("");
+}
+
+function filterAuditTable() {
+    const query = (document.getElementById("auditSearchInput")?.value || "").toLowerCase();
+    if (!query) {
+        renderAuditTable(cachedAuditRecords);
+        return;
+    }
+    const filtered = cachedAuditRecords.filter(a => {
+        return (a.action && a.action.toLowerCase().includes(query)) ||
+               (a.username && a.username.toLowerCase().includes(query)) ||
+               (a.details && a.details.toLowerCase().includes(query)) ||
+               (a.resource && a.resource.toLowerCase().includes(query));
+    });
+    renderAuditTable(filtered);
+}
+
+// Expose Admin Security Layer functions to window
+window.refreshAdminSection = refreshAdminSection;
+window.refreshAdminOverview = refreshAdminOverview;
+window.refreshAdminAlerts = refreshAdminAlerts;
+window.refreshAdminUsers = refreshAdminUsers;
+window.refreshAdminAuditLogs = refreshAdminAuditLogs;
+window.filterAdminAlerts = filterAdminAlerts;
+window.acknowledgeAlert = acknowledgeAlert;
+window.toggleAddUserForm = toggleAddUserForm;
+window.submitCreateUser = submitCreateUser;
+window.toggleUserStatus = toggleUserStatus;
+window.filterAuditTable = filterAuditTable;
+window.refreshAuditLogs = refreshAdminAuditLogs;
+
 // Boot HMI
 initSidebarNavigation();
+checkAuthStatus();
 refreshDashboard();
 setInterval(refreshDashboard, 3500);
 initSSE();
+

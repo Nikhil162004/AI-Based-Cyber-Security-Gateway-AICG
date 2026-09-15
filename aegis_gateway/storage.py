@@ -76,7 +76,44 @@ class GatewayStore:
                     created_at TEXT NOT NULL, payload_json TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS metadata_kind_idx ON metadata(kind, created_at DESC);
+                CREATE TABLE IF NOT EXISTS admin_users (
+                    user_id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
+                    role TEXT NOT NULL, status TEXT NOT NULL, mfa_enabled INTEGER NOT NULL DEFAULT 1,
+                    mfa_status TEXT NOT NULL DEFAULT 'SIMULATED_VERIFIED', created_at TEXT NOT NULL, last_login TEXT
+                );
+                CREATE INDEX IF NOT EXISTS admin_users_username_idx ON admin_users(username);
+                CREATE TABLE IF NOT EXISTS admin_alerts (
+                    alert_id TEXT PRIMARY KEY, incident_id TEXT NOT NULL UNIQUE, timestamp TEXT NOT NULL,
+                    severity TEXT NOT NULL, attack_type TEXT NOT NULL, device_id TEXT, source_id TEXT,
+                    target TEXT NOT NULL, confidence REAL NOT NULL, detection_reason TEXT NOT NULL,
+                    lifecycle_state TEXT NOT NULL, recommended_action TEXT NOT NULL, current_action TEXT NOT NULL,
+                    acknowledgement_state TEXT NOT NULL DEFAULT 'UNACKNOWLEDGED', acknowledged_by TEXT,
+                    acknowledged_at TEXT, status TEXT NOT NULL DEFAULT 'ACTIVE', evidence_json TEXT NOT NULL DEFAULT '[]'
+                );
+                CREATE INDEX IF NOT EXISTS admin_alerts_incident_idx ON admin_alerts(incident_id);
+                CREATE INDEX IF NOT EXISTS admin_alerts_status_idx ON admin_alerts(status, acknowledgement_state);
+                CREATE TABLE IF NOT EXISTS admin_audit_log (
+                    event_id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, username TEXT NOT NULL,
+                    role TEXT NOT NULL, action TEXT NOT NULL, resource TEXT NOT NULL, resource_id TEXT,
+                    result TEXT NOT NULL, source_ip TEXT, details TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS admin_audit_timestamp_idx ON admin_audit_log(timestamp DESC);
+                CREATE INDEX IF NOT EXISTS admin_audit_action_idx ON admin_audit_log(action);
                 """
+            )
+            self._seed_default_users(con)
+
+    def _seed_default_users(self, con: sqlite3.Connection) -> None:
+        from .security import hash_password
+        now = utc_now()
+        defaults = [
+            ("USR-ADMIN-01", "admin", hash_password("Admin@AICG2026!"), "ADMIN", "ACTIVE", 1, "SIMULATED_VERIFIED", now, None),
+            ("USR-OPERATOR-01", "operator", hash_password("Operator@AICG2026!"), "OPERATOR", "ACTIVE", 1, "SIMULATED_VERIFIED", now, None),
+        ]
+        for row in defaults:
+            con.execute(
+                "INSERT OR IGNORE INTO admin_users (user_id, username, password_hash, role, status, mfa_enabled, mfa_status, created_at, last_login) VALUES (?,?,?,?,?,?,?,?,?)",
+                row
             )
 
     def append_telemetry(self, event: TelemetryEvent) -> None:
@@ -299,3 +336,297 @@ class GatewayStore:
         if not flattened: return ""
         result = StringIO(); writer = csv.DictWriter(result, fieldnames=sorted({key for row in flattened for key in row}), extrasaction="ignore")
         writer.writeheader(); writer.writerows(flattened); return result.getvalue()
+
+    # =========================================================================
+    # ADMINISTRATIVE USER IDENTITY REGISTRY (LOCAL LAB)
+    # =========================================================================
+
+    def get_admin_user(self, username: str) -> dict[str, Any] | None:
+        with self.connection() as con:
+            row = con.execute("SELECT * FROM admin_users WHERE username = ?", (username,)).fetchone()
+        return dict(row) if row else None
+
+    def get_admin_user_by_id(self, user_id: str) -> dict[str, Any] | None:
+        with self.connection() as con:
+            row = con.execute("SELECT * FROM admin_users WHERE user_id = ?", (user_id,)).fetchone()
+        return dict(row) if row else None
+
+    def list_admin_users(self) -> list[dict[str, Any]]:
+        with self.connection() as con:
+            rows = con.execute("SELECT user_id, username, role, status, mfa_enabled, mfa_status, created_at, last_login FROM admin_users ORDER BY created_at ASC").fetchall()
+        return [dict(row) for row in rows]
+
+    def create_admin_user(self, username: str, password_hash: str, role: str, status: str = "ACTIVE", mfa_enabled: int = 1) -> dict[str, Any]:
+        user_id = f"USR-{uuid4().hex[:8].upper()}"
+        now = utc_now()
+        with self.connection() as con:
+            con.execute(
+                "INSERT INTO admin_users (user_id, username, password_hash, role, status, mfa_enabled, mfa_status, created_at, last_login) VALUES (?,?,?,?,?,?,?,?,?)",
+                (user_id, username, password_hash, role.upper(), status.upper(), mfa_enabled, "SIMULATED_VERIFIED", now, None)
+            )
+        return {
+            "user_id": user_id,
+            "username": username,
+            "role": role.upper(),
+            "status": status.upper(),
+            "mfa_enabled": mfa_enabled,
+            "mfa_status": "SIMULATED_VERIFIED",
+            "created_at": now,
+            "last_login": None,
+        }
+
+    def update_admin_user_status(self, user_id: str, status: str) -> dict[str, Any]:
+        status = status.upper()
+        if status not in {"ACTIVE", "DISABLED"}:
+            raise ValueError(f"Invalid status: {status}")
+        with self.connection() as con:
+            con.execute("UPDATE admin_users SET status = ? WHERE user_id = ?", (status, user_id))
+        user = self.get_admin_user_by_id(user_id)
+        if not user:
+            raise KeyError(f"User not found: {user_id}")
+        user.pop("password_hash", None)
+        return user
+
+    def update_admin_user_role(self, user_id: str, role: str) -> dict[str, Any]:
+        role = role.upper()
+        if role not in {"ADMIN", "OPERATOR"}:
+            raise ValueError(f"Invalid role: {role}")
+        with self.connection() as con:
+            con.execute("UPDATE admin_users SET role = ? WHERE user_id = ?", (role, user_id))
+        user = self.get_admin_user_by_id(user_id)
+        if not user:
+            raise KeyError(f"User not found: {user_id}")
+        user.pop("password_hash", None)
+        return user
+
+    def record_admin_login(self, username: str) -> None:
+        now = utc_now()
+        with self.connection() as con:
+            con.execute("UPDATE admin_users SET last_login = ? WHERE username = ?", (now, username))
+
+    # =========================================================================
+    # ADMINISTRATIVE SECURITY ALERTS & ALERT CENTER
+    # =========================================================================
+
+    def _alert_row(self, row: sqlite3.Row) -> dict[str, Any]:
+        item = dict(row)
+        try:
+            item["evidence"] = json.loads(item.pop("evidence_json", "[]"))
+        except Exception:
+            item["evidence"] = []
+        return item
+
+    def get_alert(self, alert_id: str) -> dict[str, Any] | None:
+        with self.connection() as con:
+            row = con.execute("SELECT * FROM admin_alerts WHERE alert_id = ?", (alert_id,)).fetchone()
+        return self._alert_row(row) if row else None
+
+    def get_alert_by_incident(self, incident_id: str) -> dict[str, Any] | None:
+        with self.connection() as con:
+            row = con.execute("SELECT * FROM admin_alerts WHERE incident_id = ?", (incident_id,)).fetchone()
+        return self._alert_row(row) if row else None
+
+    def create_or_update_alert(
+        self,
+        incident: dict[str, Any],
+        event: TelemetryEvent | dict[str, Any] | None = None,
+        decision: Any = None,
+        plan: Any = None
+    ) -> dict[str, Any]:
+        incident_id = incident["incident_id"]
+        existing = self.get_alert_by_incident(incident_id)
+
+        severity_rank = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+        now = utc_now()
+
+        # Evidence
+        new_evidence = []
+        if decision and hasattr(decision, "evidence") and decision.evidence:
+            new_evidence = list(decision.evidence)
+        elif incident.get("evidence"):
+            new_evidence = list(incident["evidence"])
+
+        # Determine severity
+        inc_sev = (incident.get("severity") or "MEDIUM").upper()
+        evt_sev = (getattr(event, "severity", None) or (event.get("severity") if isinstance(event, dict) else None) or "MEDIUM").upper()
+        effective_sev = inc_sev if severity_rank.get(inc_sev, 2) >= severity_rank.get(evt_sev, 2) else evt_sev
+
+        conf = float(incident.get("confidence") or (getattr(decision, "confidence", None) or 0.95))
+        act = (getattr(plan, "action", None) or incident.get("response_action") or "ISOLATE")
+
+        if existing:
+            # Update existing alert (NO duplicates!)
+            prev_sev = existing.get("severity", "MEDIUM")
+            if severity_rank.get(effective_sev, 2) < severity_rank.get(prev_sev, 2):
+                effective_sev = prev_sev
+            effective_conf = max(float(existing.get("confidence") or 0.0), conf)
+            merged_evidence = list(dict.fromkeys(existing.get("evidence", []) + new_evidence))
+            new_state = incident.get("lifecycle_state") or existing.get("lifecycle_state", "DETECTED")
+            new_status = "RESOLVED" if new_state == "RESOLVED" else ("CLOSED" if new_state == "CLOSED" else existing.get("status", "ACTIVE"))
+
+            with self.connection() as con:
+                con.execute(
+                    "UPDATE admin_alerts SET timestamp = ?, severity = ?, confidence = ?, lifecycle_state = ?, "
+                    "current_action = ?, status = ?, evidence_json = ? WHERE alert_id = ?",
+                    (
+                        now,
+                        effective_sev,
+                        round(effective_conf, 3),
+                        new_state,
+                        f"{act} (DRY_RUN)",
+                        new_status,
+                        json.dumps(merged_evidence),
+                        existing["alert_id"],
+                    )
+                )
+            return self.get_alert(existing["alert_id"])  # type: ignore[return-value]
+
+        # Generate new alert for this incident
+        alert_id = f"ALT-{datetime.now(timezone.utc):%Y%m%d}-{uuid4().hex[:6].upper()}"
+        attack_type = incident.get("attack_type") or (getattr(event, "attack_type", None) if event else "ANOMALY") or "ANOMALY"
+        dev_id = incident.get("device_id") or (getattr(event, "device_id", None) if event else None) or "SENSOR-01"
+        src_id = incident.get("source_id") or (getattr(event, "source_id", None) if event else None)
+        reason = new_evidence[0] if new_evidence else f"Automated detection of {attack_type} campaign"
+        state = incident.get("lifecycle_state") or "DETECTED"
+        status = "RESOLVED" if state == "RESOLVED" else ("CLOSED" if state == "CLOSED" else "ACTIVE")
+
+        with self.connection() as con:
+            con.execute(
+                "INSERT INTO admin_alerts (alert_id, incident_id, timestamp, severity, attack_type, device_id, "
+                "source_id, target, confidence, detection_reason, lifecycle_state, recommended_action, "
+                "current_action, acknowledgement_state, acknowledged_by, acknowledged_at, status, evidence_json) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    alert_id,
+                    incident_id,
+                    now,
+                    effective_sev,
+                    attack_type,
+                    dev_id,
+                    src_id,
+                    "AICG-GW-01 / OT Cell",
+                    round(conf, 3),
+                    reason,
+                    state,
+                    f"{act} (DRY_RUN)",
+                    f"{act} (DRY_RUN)",
+                    "UNACKNOWLEDGED",
+                    None,
+                    None,
+                    status,
+                    json.dumps(new_evidence),
+                )
+            )
+        return self.get_alert(alert_id)  # type: ignore[return-value]
+
+    def sync_alert_with_incident(self, incident: dict[str, Any]) -> dict[str, Any] | None:
+        existing = self.get_alert_by_incident(incident["incident_id"])
+        if not existing:
+            return None
+        new_state = incident.get("lifecycle_state") or existing["lifecycle_state"]
+        new_status = "RESOLVED" if new_state == "RESOLVED" else ("CLOSED" if new_state == "CLOSED" else existing["status"])
+        now = utc_now()
+        with self.connection() as con:
+            con.execute(
+                "UPDATE admin_alerts SET lifecycle_state = ?, status = ?, timestamp = ? WHERE alert_id = ?",
+                (new_state, new_status, now, existing["alert_id"])
+            )
+        return self.get_alert(existing["alert_id"])
+
+    def acknowledge_alert(self, alert_id: str, username: str) -> dict[str, Any]:
+        existing = self.get_alert(alert_id)
+        if not existing:
+            raise KeyError(f"Unknown alert: {alert_id}")
+        now = utc_now()
+        with self.connection() as con:
+            con.execute(
+                "UPDATE admin_alerts SET acknowledgement_state = 'ACKNOWLEDGED', acknowledged_by = ?, acknowledged_at = ? WHERE alert_id = ?",
+                (username, now, alert_id)
+            )
+        return self.get_alert(alert_id)  # type: ignore[return-value]
+
+    def list_alerts(
+        self,
+        limit: int = 100,
+        status: str | None = None,
+        ack_state: str | None = None,
+        severity: str | None = None
+    ) -> list[dict[str, Any]]:
+        clauses, params = [], []
+        if status:
+            clauses.append("status = ?")
+            params.append(status.upper())
+        if ack_state:
+            clauses.append("acknowledgement_state = ?")
+            params.append(ack_state.upper())
+        if severity:
+            clauses.append("severity = ?")
+            params.append(severity.upper())
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(max(1, min(limit, 1000)))
+        with self.connection() as con:
+            rows = con.execute(f"SELECT * FROM admin_alerts{where} ORDER BY timestamp DESC LIMIT ?", params).fetchall()
+        return [self._alert_row(row) for row in rows]
+
+    # =========================================================================
+    # ADMINISTRATIVE AUDIT LOG
+    # =========================================================================
+
+    def record_audit(
+        self,
+        username: str,
+        role: str,
+        action: str,
+        resource: str,
+        resource_id: str | None = None,
+        result: str = "SUCCESS",
+        details: str = "",
+        source_ip: str | None = None
+    ) -> dict[str, Any]:
+        event_id = f"AUD-{datetime.now(timezone.utc):%Y%m%d}-{uuid4().hex[:8].upper()}"
+        now = utc_now()
+        # Security sanitization: never store passwords or authorization tokens
+        safe_details = str(details)
+        for keyword in ["password", "token", "hash", "secret"]:
+            if keyword in safe_details.lower() and "=" in safe_details:
+                import re
+                safe_details = re.sub(rf"{keyword}\s*=\s*[^\s,]+", f"{keyword}=[REDACTED]", safe_details, flags=re.IGNORECASE)
+
+        item = {
+            "event_id": event_id,
+            "timestamp": now,
+            "username": username or "system",
+            "role": (role or "UNKNOWN").upper(),
+            "action": action.upper(),
+            "resource": resource,
+            "resource_id": resource_id,
+            "result": result.upper(),
+            "source_ip": source_ip or "127.0.0.1",
+            "details": safe_details,
+        }
+        with self.connection() as con:
+            con.execute(
+                "INSERT INTO admin_audit_log (event_id, timestamp, username, role, action, resource, resource_id, result, source_ip, details) "
+                "VALUES (:event_id, :timestamp, :username, :role, :action, :resource, :resource_id, :result, :source_ip, :details)",
+                item
+            )
+        return item
+
+    def list_audit_logs(
+        self,
+        limit: int = 100,
+        action: str | None = None,
+        username: str | None = None
+    ) -> list[dict[str, Any]]:
+        clauses, params = [], []
+        if action:
+            clauses.append("action = ?")
+            params.append(action.upper())
+        if username:
+            clauses.append("username = ?")
+            params.append(username)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(max(1, min(limit, 1000)))
+        with self.connection() as con:
+            rows = con.execute(f"SELECT * FROM admin_audit_log{where} ORDER BY timestamp DESC LIMIT ?", params).fetchall()
+        return [dict(row) for row in rows]

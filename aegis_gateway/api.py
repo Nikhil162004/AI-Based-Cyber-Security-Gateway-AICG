@@ -2,15 +2,40 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import json
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, redirect, render_template, request, session
 
 from .adapters import cooja_csv_events, ns3_csv_events, pcap_events, pcap_window_events
 from .runtime import GatewayRuntime
 from .scenarios import catalogue, generate_window
+from .schema import utc_now
+from .security import (
+    ALL_ROLES,
+    PERM_ACK_ALERT,
+    PERM_ADMIN_CONTROLS,
+    PERM_CLOSE_INCIDENT,
+    PERM_MANAGE_INCIDENT,
+    PERM_MANAGE_USERS,
+    PERM_VIEW_AUDIT,
+    PERM_VIEW_DASHBOARD,
+    PERM_VIEW_INCIDENTS,
+    PERM_VIEW_SECURITY_POSTURE,
+    PERM_VIEW_SYSTEM_STATUS,
+    ROLE_ADMIN,
+    ROLE_OPERATOR,
+    ROLE_PERMISSIONS,
+    get_current_user,
+    hash_password,
+    login_required,
+    permission_required,
+    roles_required,
+    verify_password,
+    verify_simulated_mfa,
+)
 
 
 def _number(value: Any, default: int = 3) -> int:
@@ -150,6 +175,440 @@ def create_app(runtime: GatewayRuntime) -> Flask:
     app.config["runtime"] = runtime
     app.config["TEMPLATES_AUTO_RELOAD"] = True
     app.jinja_env.auto_reload = True
+    app.secret_key = "aicg-edge-gateway-lab-secret-key-2026"
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=4)
+
+    @app.get("/login")
+    def login_page():
+        if get_current_user():
+            return redirect("/")
+        return render_template("login.html")
+
+    @app.route("/login", methods=["POST"])
+    @app.route("/api/auth/login", methods=["POST"])
+    def login():
+        data = request.get_json(silent=True) if request.is_json else request.form.to_dict()
+        if not data:
+            data = request.get_json(silent=True, force=True) or {}
+
+        username = str(data.get("username", "")).strip()
+        password = str(data.get("password", ""))
+        mfa_code = data.get("mfa_code")
+
+        if not username or not password:
+            return jsonify({"error": "Invalid administrative credentials", "code": "AUTH_FAILED"}), 401
+
+        user = runtime.store.get_admin_user(username)
+        if not user:
+            # Constant-time dummy verification
+            verify_password("dummy_password", "scrypt:32768:8:1$dummy$dummypasswordhashforconstanttimecheck123456")
+            runtime.store.record_audit(
+                username=username,
+                role="UNKNOWN",
+                action="LOGIN_FAILURE",
+                resource="session",
+                resource_id=None,
+                result="FAILURE",
+                details="Failed login attempt: invalid administrative credentials",
+                source_ip=request.remote_addr,
+            )
+            return jsonify({"error": "Invalid administrative credentials", "code": "AUTH_FAILED"}), 401
+
+        if not verify_password(password, user["password_hash"]):
+            runtime.store.record_audit(
+                username=user["username"],
+                role=user["role"],
+                action=f"{user['role']}_LOGIN_FAILURE",
+                resource="session",
+                resource_id=None,
+                result="FAILURE",
+                details="Failed login attempt: invalid administrative credentials",
+                source_ip=request.remote_addr,
+            )
+            return jsonify({"error": "Invalid administrative credentials", "code": "AUTH_FAILED"}), 401
+
+        if user.get("status") == "DISABLED":
+            runtime.store.record_audit(
+                username=user["username"],
+                role=user["role"],
+                action=f"{user['role']}_LOGIN_DENIED",
+                resource="session",
+                resource_id=None,
+                result="DENIED",
+                details="Login rejected: administrative account is disabled",
+                source_ip=request.remote_addr,
+            )
+            return jsonify({"error": "Administrative account is disabled", "code": "ACCOUNT_DISABLED"}), 403
+
+        # Simulated MFA verification step
+        if user.get("mfa_enabled", 1):
+            if not mfa_code:
+                return jsonify({
+                    "mfa_required": True,
+                    "username": user["username"],
+                    "role": user["role"],
+                    "token_hint": "123456",
+                    "message": "Primary credentials verified. Enter simulated MFA verification code (123456)."
+                }), 200
+
+            if not verify_simulated_mfa(str(mfa_code)):
+                runtime.store.record_audit(
+                    username=user["username"],
+                    role=user["role"],
+                    action="MFA_VERIFY_FAILURE",
+                    resource="session",
+                    resource_id=None,
+                    result="FAILURE",
+                    details="Simulated MFA verification failed: invalid token",
+                    source_ip=request.remote_addr,
+                )
+                return jsonify({"error": "Invalid simulated MFA verification token", "code": "MFA_INVALID"}), 401
+
+        # Successful login
+        session.permanent = True
+        user_session = {
+            "user_id": user["user_id"],
+            "username": user["username"],
+            "role": user["role"],
+            "authenticated": True,
+            "mfa_verified": True,
+            "mfa_status": "SIMULATED_VERIFIED",
+            "login_time": utc_now(),
+        }
+        session["user"] = user_session
+        runtime.store.record_admin_login(user["username"])
+        runtime.store.record_audit(
+            username=user["username"],
+            role=user["role"],
+            action=f"{user['role']}_LOGIN_SUCCESS",
+            resource="session",
+            resource_id=None,
+            result="SUCCESS",
+            details="Authenticated gateway administrative session via simulated MFA",
+            source_ip=request.remote_addr,
+        )
+
+        if request.is_json or request.path.startswith("/api/"):
+            return jsonify({
+                "ok": True,
+                "authenticated": True,
+                "user": user_session,
+                "permissions": sorted(list(ROLE_PERMISSIONS.get(user["role"], set()))),
+                "redirect": request.args.get("next") or "/"
+            })
+        return redirect(request.args.get("next") or "/")
+
+    @app.post("/api/auth/mfa/verify")
+    def verify_mfa_endpoint():
+        data = request.get_json(silent=True) or request.form.to_dict()
+        username = str(data.get("username", "")).strip()
+        mfa_code = str(data.get("mfa_code", ""))
+
+        if not username or not mfa_code:
+            return jsonify({"error": "Username and mfa_code are required"}), 400
+
+        user = runtime.store.get_admin_user(username)
+        if not user:
+            return jsonify({"error": "Invalid user", "code": "USER_NOT_FOUND"}), 404
+
+        if not verify_simulated_mfa(mfa_code):
+            runtime.store.record_audit(
+                username=user["username"],
+                role=user["role"],
+                action="MFA_VERIFY_FAILURE",
+                resource="session",
+                resource_id=None,
+                result="FAILURE",
+                details="Simulated MFA verification failed: invalid token",
+                source_ip=request.remote_addr,
+            )
+            return jsonify({"error": "Invalid simulated MFA verification token", "code": "MFA_INVALID"}), 401
+
+        session.permanent = True
+        user_session = {
+            "user_id": user["user_id"],
+            "username": user["username"],
+            "role": user["role"],
+            "authenticated": True,
+            "mfa_verified": True,
+            "mfa_status": "SIMULATED_VERIFIED",
+            "login_time": utc_now(),
+        }
+        session["user"] = user_session
+        runtime.store.record_admin_login(user["username"])
+        runtime.store.record_audit(
+            username=user["username"],
+            role=user["role"],
+            action=f"{user['role']}_LOGIN_SUCCESS",
+            resource="session",
+            resource_id=None,
+            result="SUCCESS",
+            details="Authenticated gateway administrative session via simulated MFA",
+            source_ip=request.remote_addr,
+        )
+        return jsonify({
+            "ok": True,
+            "authenticated": True,
+            "user": user_session,
+            "permissions": sorted(list(ROLE_PERMISSIONS.get(user["role"], set()))),
+            "redirect": "/"
+        })
+
+    @app.get("/api/auth/status")
+    def auth_status():
+        user = get_current_user()
+        if not user:
+            return jsonify({
+                "authenticated": False,
+                "user": None,
+                "permissions": [],
+                "environment": "CONTROLLED_LAB",
+                "scope": "LOCAL LAB IDENTITY / SIMULATED MFA / DRY_RUN"
+            })
+        perms = list(ROLE_PERMISSIONS.get(user.get("role", ""), set()))
+        return jsonify({
+            "authenticated": True,
+            "user": user,
+            "permissions": sorted(perms),
+            "environment": "CONTROLLED_LAB",
+            "scope": "LOCAL LAB IDENTITY / SIMULATED MFA / DRY_RUN"
+        })
+
+    @app.route("/logout", methods=["GET", "POST"])
+    @app.route("/api/auth/logout", methods=["POST"])
+    def logout():
+        user = session.pop("user", None)
+        if user:
+            runtime.store.record_audit(
+                username=user.get("username", "unknown"),
+                role=user.get("role", "UNKNOWN"),
+                action="LOGOUT",
+                resource="session",
+                resource_id=None,
+                result="SUCCESS",
+                details="User ended administrative session",
+                source_ip=request.remote_addr,
+            )
+        if request.is_json or request.path.startswith("/api/"):
+            return jsonify({"ok": True, "message": "Session terminated", "authenticated": False})
+        return redirect("/login")
+
+    # =========================================================================
+    # ADMINISTRATIVE CONSOLE & ALERT CENTER ENDPOINTS
+    # =========================================================================
+
+    @app.get("/api/admin/overview")
+    @login_required
+    def admin_overview():
+        user = get_current_user()
+        alerts = runtime.store.list_alerts(limit=500)
+        incidents = runtime.store.incidents(limit=100)
+        audits = runtime.store.list_audit_logs(limit=8)
+
+        active_alerts = [a for a in alerts if a.get("status") == "ACTIVE"]
+        unack_alerts = [a for a in alerts if a.get("acknowledgement_state") == "UNACKNOWLEDGED"]
+        open_incidents = [i for i in incidents if i.get("lifecycle_state") not in ("RESOLVED", "CLOSED")]
+        crit_incidents = [i for i in incidents if i.get("severity") == "CRITICAL" and i.get("lifecycle_state") not in ("RESOLVED", "CLOSED")]
+
+        return jsonify({
+            "user": user,
+            "kpis": {
+                "total_alerts": len(alerts),
+                "active_alerts": len(active_alerts),
+                "unacknowledged_alerts": len(unack_alerts),
+                "open_incidents": len(open_incidents),
+                "critical_incidents": len(crit_incidents),
+                "registered_users": len(runtime.store.list_admin_users()),
+            },
+            "recent_audits": audits,
+            "gateway_mode": runtime.response.mode,
+            "host_enforcement": False,
+            "dry_run": True,
+            "labels": {
+                "identity": "LOCAL LAB IDENTITY",
+                "mfa": "SIMULATED MFA",
+                "mode": "DRY_RUN",
+                "enforcement": "NON-ENFORCING",
+                "environment": "CONTROLLED LAB SIMULATION"
+            },
+            "zero_trust_posture": {
+                "identity_registry": "LOCAL LAB IDENTITY REGISTRY",
+                "mfa": "SIMULATED MFA (VERIFIED)",
+                "rbac": "SERVER-SIDE ENFORCED",
+                "trust_model": "DYNAMIC OT TRUST REPUTATION (0..100)",
+                "access_mode": "POLICY ENGINE DRY_RUN",
+                "enforcement": "NON-ENFORCING / LAB ENVIRONMENT"
+            }
+        })
+
+    @app.get("/api/admin/alerts")
+    @login_required
+    def list_admin_alerts():
+        status = request.args.get("status")
+        ack_state = request.args.get("ack_state")
+        severity = request.args.get("severity")
+        limit = _number(request.args.get("limit"), 100)
+        items = runtime.store.list_alerts(limit=limit, status=status, ack_state=ack_state, severity=severity)
+        return jsonify({"alerts": items, "count": len(items)})
+
+    @app.get("/api/admin/alerts/<alert_id>")
+    @login_required
+    def get_admin_alert(alert_id: str):
+        item = runtime.store.get_alert(alert_id)
+        return (jsonify(item), 200) if item else (jsonify({"error": "Alert not found"}), 404)
+
+    @app.post("/api/admin/alerts/<alert_id>/acknowledge")
+    @login_required
+    @permission_required(PERM_ACK_ALERT)
+    def acknowledge_admin_alert(alert_id: str):
+        user = get_current_user() or {"username": "operator", "role": "OPERATOR"}
+        try:
+            updated = runtime.store.acknowledge_alert(alert_id, user["username"])
+            runtime.store.record_audit(
+                username=user["username"],
+                role=user["role"],
+                action="ALERT_ACKNOWLEDGED",
+                resource="alert",
+                resource_id=alert_id,
+                result="SUCCESS",
+                details=f"Alert {alert_id} acknowledged by {user['username']}",
+                source_ip=request.remote_addr,
+            )
+            runtime.publish("alert", updated)
+            return jsonify(updated)
+        except KeyError:
+            return jsonify({"error": f"Unknown alert: {alert_id}"}), 404
+
+    @app.get("/api/admin/users")
+    @login_required
+    @roles_required(ROLE_ADMIN)
+    def get_admin_users():
+        users = runtime.store.list_admin_users()
+        return jsonify({"users": users, "count": len(users)})
+
+    @app.post("/api/admin/users")
+    @login_required
+    @roles_required(ROLE_ADMIN)
+    def create_admin_user_endpoint():
+        curr_user = get_current_user() or {"username": "admin", "role": "ADMIN"}
+        body = request.get_json(silent=True) or {}
+        username = str(body.get("username", "")).strip()
+        password = str(body.get("password", ""))
+        role = str(body.get("role", "OPERATOR")).upper()
+        if not username or not password:
+            return jsonify({"error": "Username and password are required"}), 400
+        if role not in ALL_ROLES:
+            return jsonify({"error": f"Role must be one of {ALL_ROLES}"}), 400
+        if runtime.store.get_admin_user(username):
+            return jsonify({"error": "Username already exists"}), 409
+        created = runtime.store.create_admin_user(
+            username=username,
+            password_hash=hash_password(password),
+            role=role,
+        )
+        runtime.store.record_audit(
+            username=curr_user["username"],
+            role=curr_user["role"],
+            action="USER_CREATED",
+            resource="user",
+            resource_id=created["user_id"],
+            result="SUCCESS",
+            details=f"Created local lab user '{username}' with role '{role}'",
+            source_ip=request.remote_addr,
+        )
+        return jsonify(created), 201
+
+    @app.patch("/api/admin/users/<user_id>")
+    @login_required
+    @roles_required(ROLE_ADMIN)
+    def update_admin_user_endpoint(user_id: str):
+        curr_user = get_current_user() or {"username": "admin", "role": "ADMIN"}
+        body = request.get_json(silent=True) or {}
+        status = body.get("status")
+        role = body.get("role")
+        try:
+            if status:
+                runtime.store.update_admin_user_status(user_id, status)
+                runtime.store.record_audit(
+                    username=curr_user["username"],
+                    role=curr_user["role"],
+                    action="USER_STATUS_CHANGED",
+                    resource="user",
+                    resource_id=user_id,
+                    result="SUCCESS",
+                    details=f"User {user_id} status changed to {status}",
+                    source_ip=request.remote_addr,
+                )
+            if role:
+                runtime.store.update_admin_user_role(user_id, role)
+                runtime.store.record_audit(
+                    username=curr_user["username"],
+                    role=curr_user["role"],
+                    action="USER_ROLE_CHANGED",
+                    resource="user",
+                    resource_id=user_id,
+                    result="SUCCESS",
+                    details=f"User {user_id} role changed to {role}",
+                    source_ip=request.remote_addr,
+                )
+            updated = runtime.store.get_admin_user_by_id(user_id)
+            if updated:
+                updated.pop("password_hash", None)
+            return jsonify(updated)
+        except (KeyError, ValueError) as error:
+            return jsonify({"error": str(error)}), 400
+
+    @app.get("/api/admin/audit")
+    @login_required
+    @roles_required(ROLE_ADMIN)
+    def get_admin_audit():
+        action = request.args.get("action")
+        username = request.args.get("username")
+        limit = _number(request.args.get("limit"), 100)
+        items = runtime.store.list_audit_logs(limit=limit, action=action, username=username)
+        return jsonify({"audit_events": items, "count": len(items)})
+
+    @app.get("/api/admin/security/posture")
+    @login_required
+    def get_security_posture():
+        user = get_current_user()
+        return jsonify({
+            "identity": {
+                "user": user.get("username") if user else "ANONYMOUS",
+                "role": user.get("role") if user else "NONE",
+                "status": "VERIFIED" if user else "UNAUTHENTICATED",
+                "type": "LOCAL LAB IDENTITY REGISTRY"
+            },
+            "authentication": {
+                "status": "AUTHENTICATED" if user else "UNAUTHENTICATED",
+                "scheme": "PASSWORD_HASH_PBKDF2_SCRYPT"
+            },
+            "mfa": {
+                "status": user.get("mfa_status", "NOT_VERIFIED") if user else "NOT_VERIFIED",
+                "scheme": "SIMULATED_MFA_TOKEN",
+                "label": "SIMULATED MFA"
+            },
+            "authorization": {
+                "scheme": "RBAC",
+                "enforced": True,
+                "role": user.get("role") if user else "NONE",
+                "permissions": sorted(list(ROLE_PERMISSIONS.get(user.get("role", ""), set()))) if user else []
+            },
+            "trust": {
+                "score": 100.0 if (user and user.get("role") == ROLE_ADMIN) else (90.0 if user else 0.0),
+                "posture": "TRUSTED_ADMIN_SESSION" if (user and user.get("role") == ROLE_ADMIN) else ("OPERATIONAL_SESSION" if user else "UNTRUSTED"),
+                "model": "BOUNDED_ZERO_TRUST_0_TO_100"
+            },
+            "access_decision": {
+                "decision": "ALLOW" if user else "DENY",
+                "mode": runtime.response.mode,
+                "host_enforcement": False,
+                "network_transmission": False,
+                "safety": "DRY_RUN NON-ENFORCING LAB ENVIRONMENT"
+            }
+        })
 
     @app.get("/")
     def dashboard():
@@ -246,32 +705,81 @@ def create_app(runtime: GatewayRuntime) -> Flask:
     @app.post("/api/incidents/<incident_id>/transition")
     def transition_incident(incident_id: str):
         body = request.get_json(silent=True) or {}
-        try:
-            item = runtime.store.transition_incident(
-                incident_id,
-                str(body.get("state", "")),
-                str(body.get("actor", "operator")),
-                str(body.get("note", "operator transition"))
+        state = str(body.get("state", "")).upper()
+        curr_user = get_current_user()
+
+        # Enforce RBAC: Only ADMIN can close incidents
+        if state == "CLOSED" and curr_user and curr_user.get("role") != ROLE_ADMIN:
+            runtime.store.record_audit(
+                username=curr_user.get("username", "operator"),
+                role=curr_user.get("role", "OPERATOR"),
+                action="ACCESS_DENIED",
+                resource="incident",
+                resource_id=incident_id,
+                result="DENIED",
+                details=f"Denied permission to close incident {incident_id}: ADMIN role required",
+                source_ip=request.remote_addr,
             )
+            return jsonify({
+                "error": "Forbidden: ADMIN role required to close incidents",
+                "code": "FORBIDDEN_ROLE",
+                "role": curr_user.get("role"),
+                "required_permission": PERM_CLOSE_INCIDENT,
+            }), 403
+
+        actor = str(body.get("actor") or (curr_user["username"] if curr_user else "operator"))
+        note = str(body.get("note", "operator transition"))
+        try:
+            item = runtime.store.transition_incident(incident_id, state, actor, note)
             runtime.publish("incident", item)
+            alert = runtime.store.sync_alert_with_incident(item)
+            if alert:
+                runtime.publish("alert", alert)
+
+            action_name = "INCIDENT_CLOSED" if state == "CLOSED" else "INCIDENT_TRANSITIONED"
+            runtime.store.record_audit(
+                username=actor,
+                role=curr_user["role"] if curr_user else "OPERATOR",
+                action=action_name,
+                resource="incident",
+                resource_id=incident_id,
+                result="SUCCESS",
+                details=f"Incident {incident_id} transitioned to {state}: {note}",
+                source_ip=request.remote_addr,
+            )
             return jsonify(item)
         except (KeyError, ValueError) as error:
             return jsonify({"error": str(error)}), 400
 
     @app.post("/api/incidents/<incident_id>/action")
     def incident_action(incident_id: str):
+        curr_user = get_current_user()
         body = request.get_json(silent=True) or {}
+        actor = str(body.get("actor") or (curr_user["username"] if curr_user else "operator"))
+        action_name = str(body.get("action", ""))
         try:
-            return jsonify(runtime.manual_action(incident_id, str(body.get("action", "")), str(body.get("actor", "operator"))))
+            res = runtime.manual_action(incident_id, action_name, actor)
+            runtime.store.record_audit(
+                username=actor,
+                role=curr_user["role"] if curr_user else "OPERATOR",
+                action="MANUAL_ACTION_EXECUTED",
+                resource="incident",
+                resource_id=incident_id,
+                result="SUCCESS",
+                details=f"Executed manual response action '{action_name}' on incident {incident_id}",
+                source_ip=request.remote_addr,
+            )
+            return jsonify(res)
         except (KeyError, ValueError) as error:
             return jsonify({"error": str(error)}), 400
 
     @app.post("/api/manual/action")
     def manual_action():
+        curr_user = get_current_user()
         body = request.get_json(silent=True) or {}
         action = str(body.get("action", "")).upper()
         incident_id = body.get("incident_id")
-        actor = str(body.get("actor", "operator"))
+        actor = str(body.get("actor") or (curr_user["username"] if curr_user else "operator"))
         if not incident_id:
             active = runtime.store.find_active_incident()
             if active:
@@ -282,7 +790,18 @@ def create_app(runtime: GatewayRuntime) -> Flask:
                     incident_id = incidents_list[0]["incident_id"]
         if incident_id:
             try:
-                return jsonify(runtime.manual_action(incident_id, action, actor))
+                res = runtime.manual_action(incident_id, action, actor)
+                runtime.store.record_audit(
+                    username=actor,
+                    role=curr_user["role"] if curr_user else "OPERATOR",
+                    action="MANUAL_ACTION_EXECUTED",
+                    resource="incident",
+                    resource_id=incident_id,
+                    result="SUCCESS",
+                    details=f"Executed manual action '{action}' on incident {incident_id}",
+                    source_ip=request.remote_addr,
+                )
+                return jsonify(res)
             except Exception as e:
                 return jsonify({"error": str(e)}), 400
         stored = runtime.store.record_action(
@@ -323,20 +842,46 @@ def create_app(runtime: GatewayRuntime) -> Flask:
 
     @app.post("/api/simulations/start")
     def start_simulation():
+        curr_user = get_current_user()
         body = request.get_json(silent=True) or {}
+        scenario_id = str(body.get("scenario_id", ""))
+        intensity = _number(body.get("intensity"), 3)
+        duration = body.get("duration")
+        actor = curr_user["username"] if curr_user else "system"
         try:
-            return jsonify(runtime.start_simulation(
-                str(body.get("scenario_id", "")),
-                _number(body.get("intensity"), 3),
-                body.get("duration")
-            )), 202
+            payload = runtime.start_simulation(scenario_id, intensity, duration)
+            runtime.store.record_audit(
+                username=actor,
+                role=curr_user["role"] if curr_user else "OPERATOR",
+                action="SIMULATION_STARTED",
+                resource="simulation",
+                resource_id=scenario_id,
+                result="SUCCESS",
+                details=f"Launched controlled in-process simulation: {scenario_id} (intensity={intensity})",
+                source_ip=request.remote_addr,
+            )
+            return jsonify(payload), 202
         except (KeyError, ValueError) as error:
             return jsonify({"error": str(error)}), 400
 
     @app.post("/api/simulations/stop")
     def stop_simulation():
+        curr_user = get_current_user()
         body = request.get_json(silent=True) or {}
-        return jsonify({"stopped": runtime.stop_simulation(body.get("scenario_id")), "network_transmission": False})
+        scenario_id = body.get("scenario_id")
+        stopped = runtime.stop_simulation(scenario_id)
+        actor = curr_user["username"] if curr_user else "system"
+        runtime.store.record_audit(
+            username=actor,
+            role=curr_user["role"] if curr_user else "OPERATOR",
+            action="SIMULATION_STOPPED",
+            resource="simulation",
+            resource_id=str(scenario_id),
+            result="SUCCESS",
+            details=f"Stopped simulation: {stopped}",
+            source_ip=request.remote_addr,
+        )
+        return jsonify({"stopped": stopped, "network_transmission": False})
 
     @app.post("/api/demo-data")
     def demo_data():
@@ -359,10 +904,41 @@ def create_app(runtime: GatewayRuntime) -> Flask:
 
     @app.post("/api/settings/mode")
     def set_mode():
+        curr_user = get_current_user()
+        # Enforce RBAC: Only ADMIN can configure operating mode
+        if curr_user and curr_user.get("role") != ROLE_ADMIN:
+            runtime.store.record_audit(
+                username=curr_user.get("username", "operator"),
+                role=curr_user.get("role", "OPERATOR"),
+                action="ACCESS_DENIED",
+                resource="response_policy",
+                resource_id=None,
+                result="DENIED",
+                details="Denied permission to modify gateway mode: ADMIN role required",
+                source_ip=request.remote_addr,
+            )
+            return jsonify({
+                "error": "Forbidden: ADMIN role required for ADMIN_CONTROLS",
+                "code": "FORBIDDEN_ROLE",
+                "role": curr_user.get("role"),
+                "required_permission": PERM_ADMIN_CONTROLS,
+            }), 403
+
         body = request.get_json(silent=True) or {}
         mode = body.get("mode")
         auto = body.get("auto")
         cfg = runtime.configure_response(mode=mode, auto=auto)
+        actor = curr_user["username"] if curr_user else "system"
+        runtime.store.record_audit(
+            username=actor,
+            role=curr_user["role"] if curr_user else "ADMIN",
+            action="SECURITY_SETTING_CHANGED",
+            resource="response_policy",
+            resource_id=str(mode or ("AUTO" if auto else "MANUAL")),
+            result="SUCCESS",
+            details=f"Modified gateway operating mode: mode={cfg.get('mode')}, auto={cfg.get('auto')}",
+            source_ip=request.remote_addr,
+        )
         return jsonify(cfg)
 
     @app.post("/api/iam/access")

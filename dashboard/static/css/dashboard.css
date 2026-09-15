@@ -1719,18 +1719,21 @@ body {
     border-radius: var(--radius-sm);
 }
 
-.hmi-table {
+.hmi-table,
+table.data-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 11px;
     text-align: left;
     white-space: nowrap;
 }
-.hmi-table thead {
+.hmi-table thead,
+table.data-table thead {
     background: var(--bg-surface);
     border-bottom: 1px solid var(--border-medium);
 }
-.hmi-table th {
+.hmi-table th,
+table.data-table th {
     padding: 8px 10px;
     color: var(--text-muted);
     font-size: 9.5px;
@@ -2105,6 +2108,18 @@ body {
     .hmi-body-layout {
         display: block;
     }
+    .hmi-header {
+        grid-template-columns: auto 1fr;
+        gap: 12px;
+    }
+    .header-badges {
+        display: none;
+    }
+    .header-actions {
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
 }
 
 @media (max-width: 900px) {
@@ -2234,4 +2249,71 @@ tr.active-incident-row {
 tr.active-incident-row td {
     border-bottom-color: rgba(244, 63, 94, 0.3);
 }
+
+/* ==========================================================================
+   ADMINISTRATIVE SECURITY LAYER STYLES
+   ========================================================================== */
+
+.header-user-session {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+}
+
+.badge-counter {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: center;
+}
+
+.btn-filter {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-filter:hover {
+    color: var(--text-primary);
+    border-color: var(--border-medium);
+    background: var(--bg-panel-elevated);
+}
+
+.btn-filter.active {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: var(--cyan);
+    color: var(--cyan);
+    font-weight: 700;
+}
+
+.btn-ack {
+    transition: all 0.15s ease;
+}
+
+.btn-ack:hover {
+    background: rgba(245, 158, 11, 0.3) !important;
+    border-color: var(--amber) !important;
+    color: #ffffff !important;
+}
+
+.tag-lifecycle {
+    background: rgba(99, 102, 241, 0.12);
+    border-color: rgba(99, 102, 241, 0.4);
+    color: var(--purple);
+}
+
 

@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI EDGE SECURITY GATEWAY • AICG Administrative Login</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <style>
+        .login-page-wrapper {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(14, 45, 85, 0.45), transparent),
+                        radial-gradient(circle at 100% 100%, rgba(10, 25, 45, 0.35), transparent),
+                        var(--bg-base);
+        }
+        .login-card {
+            width: 100%;
+            max-width: 460px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-medium);
+            border-radius: var(--radius-lg);
+            box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.75), 0 0 0 1px var(--border-subtle);
+            overflow: hidden;
+        }
+        .login-header {
+            padding: 24px 28px 20px;
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border-subtle);
+            text-align: center;
+        }
+        .login-brand-shield {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid var(--border-bright);
+            border-radius: 10px;
+            color: var(--cyan);
+        }
+        .login-brand-shield svg {
+            width: 28px;
+            height: 28px;
+            fill: currentColor;
+        }
+        .login-title {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .login-subtitle {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 4px;
+        }
+        .login-scope-banner {
+            background: rgba(56, 189, 248, 0.08);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 8px 16px;
+            font-size: 11px;
+            font-family: var(--font-mono);
+            color: var(--cyan);
+            text-align: center;
+            letter-spacing: 0.3px;
+        }
+        .login-body {
+            padding: 24px 28px;
+        }
+        .form-group {
+            margin-bottom: 18px;
+        }
+        .form-label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+        .form-input {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 10px 14px;
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-input:focus {
+            border-color: var(--cyan);
+            box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+        }
+        .mfa-box {
+            background: rgba(245, 158, 11, 0.07);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: var(--radius-md);
+            padding: 14px;
+            margin-bottom: 18px;
+        }
+        .mfa-box-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--amber);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .mfa-hint {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+        .mfa-input {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            border-radius: var(--radius-sm);
+            padding: 10px;
+            text-align: center;
+            font-family: var(--font-mono);
+            font-size: 18px;
+            letter-spacing: 6px;
+            font-weight: 700;
+            color: var(--amber);
+            outline: none;
+        }
+        .mfa-input:focus {
+            border-color: var(--amber);
+            box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+        }
+        .btn-login-submit {
+            width: 100%;
+            background: linear-gradient(135deg, #0284c7, #0369a1);
+            border: 1px solid var(--border-bright);
+            color: #ffffff;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 12px 18px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+        }
+        .btn-login-submit:hover {
+            background: linear-gradient(135deg, #0369a1, #075985);
+            box-shadow: 0 6px 18px rgba(2, 132, 199, 0.5);
+            transform: translateY(-1px);
+        }
+        .btn-login-submit:active {
+            transform: translateY(0);
+        }
+        .login-msg-box {
+            display: none;
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            font-size: 12px;
+            margin-bottom: 16px;
+            line-height: 1.4;
+        }
+        .login-msg-box.error {
+            display: block;
+            background: var(--red-dim);
+            border: 1px solid var(--red);
+            color: #fecdd3;
+        }
+        .login-msg-box.success {
+            display: block;
+            background: var(--green-dim);
+            border: 1px solid var(--green);
+            color: #a7f3d0;
+        }
+        .login-demo-helper {
+            margin-top: 20px;
+            padding-top: 18px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        .helper-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .helper-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .btn-quick-fill {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 8px 10px;
+            color: var(--text-primary);
+            font-size: 11px;
+            text-align: left;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .btn-quick-fill:hover {
+            border-color: var(--cyan);
+            background: var(--bg-panel-elevated);
+        }
+        .btn-quick-fill .qf-role {
+            font-size: 10px;
+            color: var(--cyan);
+            font-weight: 700;
+            font-family: var(--font-mono);
+        }
+        .btn-quick-fill .qf-creds {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 2px;
+            font-family: var(--font-mono);
+        }
+        .login-footer-honesty {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 10px;
+            color: var(--text-muted);
+            max-width: 460px;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+<div class="login-page-wrapper">
+
+    <div class="login-card">
+        <!-- Card Header -->
+        <div class="login-header">
+            <div class="login-brand-shield">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+                </svg>
+            </div>
+            <div class="login-title">
+                <span>AI EDGE SECURITY GATEWAY</span>
+                <span class="tag">AICG</span>
+            </div>
+            <div class="login-subtitle">Industrial SOC &amp; OT Operations Console</div>
+        </div>
+
+        <!-- Scope & Safety Badge -->
+        <div class="login-scope-banner">
+            LOCAL LAB IDENTITY • SIMULATED MFA • DRY_RUN
+        </div>
+
+        <!-- Form Body -->
+        <div class="login-body">
+            <div id="loginStatusMsg" class="login-msg-box" role="alert"></div>
+
+            <form id="loginForm" onsubmit="handleLoginSubmit(event)" autocomplete="off">
+                <div class="form-group">
+                    <label class="form-label" for="username">Username / Operator Identity</label>
+                    <input type="text" id="username" name="username" class="form-input" placeholder="admin or operator" required autofocus autocomplete="username">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <input type="password" id="password" name="password" class="form-input" placeholder="••••••••••••" required autocomplete="current-password">
+                </div>
+
+                <!-- Simulated MFA Box -->
+                <div class="mfa-box" id="mfaContainer">
+                    <div class="mfa-box-title">
+                        <span>Simulated MFA Token</span>
+                        <span class="tag" style="background:rgba(245,158,11,0.15); color:var(--amber); border-color:rgba(245,158,11,0.4);">LAB MFA</span>
+                    </div>
+                    <div class="mfa-hint">
+                        Zero-Trust verification step. Enter laboratory verification token: <strong>123456</strong>
+                    </div>
+                    <input type="text" id="mfaCode" name="mfa_code" class="mfa-input" placeholder="123456" maxlength="6" value="123456" autocomplete="one-time-code">
+                </div>
+
+                <button type="submit" id="loginSubmitBtn" class="btn-login-submit">
+                    Authenticate Gateway Session
+                </button>
+            </form>
+
+            <!-- Demonstration Lab Credentials -->
+            <div class="login-demo-helper">
+                <div class="helper-title">
+                    <span>Demonstration Lab Accounts</span>
+                    <span class="tag" style="color:var(--text-muted); border-color:var(--border-subtle);">LOCAL LAB</span>
+                </div>
+                <div class="helper-buttons">
+                    <button type="button" class="btn-quick-fill" id="btnQuickAdmin" onclick="quickFill('admin', 'Admin@AICG2026!')" title="Load Administrator Credentials">
+                        <div class="qf-role">ADMINISTRATOR</div>
+                        <div class="qf-creds">admin / Admin@AICG2026!</div>
+                    </button>
+                    <button type="button" class="btn-quick-fill" id="btnQuickOperator" onclick="quickFill('operator', 'Operator@AICG2026!')" title="Load Operator Credentials">
+                        <div class="qf-role">OPERATOR</div>
+                        <div class="qf-creds">operator / Operator@AICG2026!</div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Honesty & Scope Footer -->
+    <div class="login-footer-honesty">
+        ACADEMIC / LAB PROTOTYPE • Non-enforcing simulation • Zero external attack packet transmission • Host firewall unmodified
+    </div>
+
+</div>
+
+<script>
+function quickFill(user, pass) {
+    document.getElementById("username").value = user;
+    document.getElementById("password").value = pass;
+    document.getElementById("mfaCode").value = "123456";
+    const msg = document.getElementById("loginStatusMsg");
+    msg.className = "login-msg-box success";
+    msg.textContent = `Loaded demonstration credentials for role: ${user.toUpperCase()}`;
+    msg.style.display = "block";
+}
+
+async function handleLoginSubmit(event) {
+    event.preventDefault();
+    const submitBtn = document.getElementById("loginSubmitBtn");
+    const msg = document.getElementById("loginStatusMsg");
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
+    const mfaCode = document.getElementById("mfaCode").value.trim();
+
+    msg.style.display = "none";
+    msg.className = "login-msg-box";
+    submitBtn.disabled = true;
+    submitBtn.textContent = "VERIFYING CREDENTIALS...";
+
+    try {
+        const res = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: username,
+                password: password,
+                mfa_code: mfaCode || null
+            })
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.ok) {
+            msg.className = "login-msg-box success";
+            msg.textContent = `Authenticated as ${data.user.username} (${data.user.role}). Redirecting to HMI console...`;
+            msg.style.display = "block";
+            setTimeout(() => {
+                const params = new URLSearchParams(window.location.search);
+                window.location.href = params.get("next") || "/";
+            }, 500);
+            return;
+        }
+
+        if (res.ok && data.mfa_required) {
+            msg.className = "login-msg-box";
+            msg.style.border = "1px solid var(--amber)";
+            msg.style.background = "rgba(245, 158, 11, 0.1)";
+            msg.style.color = "#fef3c7";
+            msg.textContent = data.message || "Enter simulated MFA code.";
+            msg.style.display = "block";
+            document.getElementById("mfaContainer").style.display = "block";
+            document.getElementById("mfaCode").focus();
+            submitBtn.disabled = false;
+            submitBtn.textContent = "VERIFY SIMULATED MFA";
+            return;
+        }
+
+        // Error
+        msg.className = "login-msg-box error";
+        msg.textContent = data.error || "Authentication failed. Please check credentials.";
+        msg.style.display = "block";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "AUTHENTICATE GATEWAY SESSION";
+    } catch (err) {
+        msg.className = "login-msg-box error";
+        msg.textContent = "Gateway communication error. Please try again.";
+        msg.style.display = "block";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "AUTHENTICATE GATEWAY SESSION";
+    }
+}
+</script>
+
+</body>
+</html>
