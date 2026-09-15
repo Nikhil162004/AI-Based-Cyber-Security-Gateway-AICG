@@ -57,7 +57,7 @@
     --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace;
 
     /* Sticky Header Geometry & Scroll Offsets */
-    --hmi-header-height: 64px;
+    --hmi-header-height: 84px;
 }
 
 /* ==========================================================================
@@ -339,25 +339,48 @@ body {
     color: #fff;
     box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
 }
+.btn-sidebar-toggle:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
+}
 .btn-sidebar-toggle .btn-toggle-label {
     font-size: 10px;
     letter-spacing: 0.8px;
 }
 
 /* ==========================================================================
-   HMI BODY LAYOUT: COLLAPSIBLE SIDEBAR + MAIN WORKSPACE AREA
+   HMI BODY LAYOUT: COMPACT NAVIGATION RAIL (58px) + MAIN WORKSPACE
    ========================================================================== */
 .hmi-body-layout {
     display: flex;
-    gap: 18px;
+    gap: 16px;
     align-items: flex-start;
     position: relative;
     width: 100%;
 }
 
-/* Collapsible Left-Side Quick Navigation */
+/* Sidebar Backdrop (for Expanded Drawer Mode) */
+.sidebar-backdrop {
+    position: fixed;
+    top: var(--hmi-header-height);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 88;
+    background: rgba(4, 8, 16, 0.55);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+.sidebar-backdrop.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Navigation Sidebar: Default Compact Rail (58px wide) */
 .hmi-sidebar {
-    width: 220px;
+    width: 58px;
     flex-shrink: 0;
     position: sticky;
     top: calc(var(--hmi-header-height) + 12px);
@@ -367,114 +390,161 @@ body {
     background: var(--bg-panel);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
-    padding: 12px 8px;
+    padding: 8px 5px;
     box-shadow: var(--shadow-panel);
-    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-                padding 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-                opacity 0.2s ease,
-                transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 90;
+    transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.22s ease,
+                background-color 0.22s ease;
+    z-index: 85;
     scrollbar-width: thin;
 }
 
-.hmi-sidebar.collapsed {
-    width: 0;
-    padding: 0;
-    margin: 0;
-    border: none;
-    opacity: 0;
-    pointer-events: none;
-    overflow: hidden;
+/* Compact Rail: Text labels hidden by default */
+.hmi-sidebar .link-text {
+    display: none;
 }
-
-.hmi-sidebar-group {
-    margin-bottom: 12px;
+.hmi-sidebar .hmi-sidebar-group {
+    margin-bottom: 8px;
 }
-.hmi-sidebar-group:last-of-type {
-    margin-bottom: 6px;
-}
-.hmi-sidebar-title {
-    font-size: 9.5px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 1.1px;
-    color: var(--text-muted);
-    padding: 4px 8px 6px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+.hmi-sidebar .hmi-sidebar-group:last-of-type {
     margin-bottom: 4px;
 }
-.hmi-sidebar-link {
+.hmi-sidebar .hmi-sidebar-title {
+    font-size: 0;
+    height: 1px;
+    padding: 0;
+    margin: 6px 4px 5px;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+}
+.hmi-sidebar .hmi-sidebar-link {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
+    justify-content: center;
+    width: 44px;
+    height: 34px;
+    margin: 0 auto 3px auto;
     border-radius: var(--radius-sm);
     color: var(--text-secondary);
     text-decoration: none;
-    font-size: 11px;
-    font-weight: 600;
     transition: all 0.18s ease;
     border-left: 2px solid transparent;
-    margin-bottom: 2px;
-    white-space: nowrap;
+    position: relative;
 }
-.hmi-sidebar-link:hover {
-    background: rgba(56, 189, 248, 0.08);
+.hmi-sidebar .hmi-sidebar-link:hover {
+    background: rgba(56, 189, 248, 0.12);
     color: var(--cyan);
 }
-.hmi-sidebar-link.active {
-    background: rgba(56, 189, 248, 0.14);
+.hmi-sidebar .hmi-sidebar-link:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 1px;
+}
+.hmi-sidebar .hmi-sidebar-link.active {
+    background: rgba(56, 189, 248, 0.18);
     color: #fff;
     border-left-color: var(--cyan);
     box-shadow: inset 1px 0 0 var(--cyan);
-    font-weight: 700;
 }
-.hmi-sidebar-link .link-icon {
-    font-size: 12px;
-    width: 16px;
+.hmi-sidebar .hmi-sidebar-link .link-icon {
+    font-size: 15px;
+    line-height: 1;
     text-align: center;
-    opacity: 0.85;
-    flex-shrink: 0;
+    opacity: 0.9;
 }
-.hmi-sidebar-link.highlight {
+.hmi-sidebar .hmi-sidebar-link.highlight {
     color: var(--amber);
 }
-.hmi-sidebar-link.highlight:hover {
-    background: rgba(245, 158, 11, 0.12);
+.hmi-sidebar .hmi-sidebar-link.highlight:hover {
+    background: rgba(245, 158, 11, 0.14);
     color: #fbbf24;
 }
-.hmi-sidebar-link.highlight.active {
-    background: rgba(245, 158, 11, 0.16);
+.hmi-sidebar .hmi-sidebar-link.highlight.active {
+    background: rgba(245, 158, 11, 0.2);
     color: #fff;
     border-left-color: var(--amber);
 }
-.hmi-sidebar-footer {
-    padding-top: 10px;
-    margin-top: 10px;
+.hmi-sidebar .hmi-sidebar-footer {
+    padding-top: 8px;
+    margin-top: 8px;
     border-top: 1px solid var(--border-subtle);
-    text-align: center;
+    display: flex;
+    justify-content: center;
 }
-.sidebar-status-tag {
+.hmi-sidebar .sidebar-status-tag {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: 0.6px;
-    color: var(--text-muted);
     background: var(--bg-surface);
-    padding: 3px 8px;
-    border-radius: var(--radius-sm);
+    padding: 6px;
+    border-radius: 50%;
     border: 1px solid var(--border-subtle);
 }
+.hmi-sidebar .sidebar-status-tag .link-text {
+    display: none;
+}
 .dot-small {
-    width: 6px;
-    height: 6px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
 }
 .dot-small.green {
     background: var(--green);
     box-shadow: 0 0 6px var(--green);
+}
+
+/* Expanded Navigation Drawer (Desktop Flyout) */
+.hmi-sidebar.expanded {
+    position: fixed;
+    left: max(18px, calc((100vw - 1680px) / 2 + 18px));
+    top: calc(var(--hmi-header-height) + 12px);
+    width: 230px;
+    z-index: 95;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85), 0 0 0 1px var(--border-bright);
+    background: rgba(13, 22, 39, 0.98);
+    backdrop-filter: blur(16px);
+    padding: 12px 10px;
+}
+.hmi-sidebar.expanded .link-text {
+    display: inline;
+}
+.hmi-sidebar.expanded .hmi-sidebar-group {
+    margin-bottom: 12px;
+}
+.hmi-sidebar.expanded .hmi-sidebar-title {
+    font-size: 9.5px;
+    height: auto;
+    padding: 4px 8px 6px;
+    margin: 0 0 4px 0;
+    background: transparent;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.hmi-sidebar.expanded .hmi-sidebar-link {
+    justify-content: flex-start;
+    padding: 6px 10px;
+    width: 100%;
+    height: auto;
+    margin-bottom: 2px;
+}
+.hmi-sidebar.expanded .hmi-sidebar-link .link-icon {
+    font-size: 13px;
+    width: 18px;
+    margin-right: 6px;
+}
+.hmi-sidebar.expanded .hmi-sidebar-footer {
+    display: block;
+    text-align: center;
+}
+.hmi-sidebar.expanded .sidebar-status-tag {
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+}
+.hmi-sidebar.expanded .sidebar-status-tag .link-text {
+    display: inline;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
 }
 
 /* Main Workspace Area */
@@ -1985,16 +2055,52 @@ body {
         top: var(--hmi-header-height);
         height: calc(100vh - var(--hmi-header-height));
         max-height: 100vh;
-        z-index: 1000;
-        background: #0d1627;
+        z-index: 95;
+        background: rgba(13, 22, 39, 0.98);
+        backdrop-filter: blur(16px);
         box-shadow: 10px 0 30px rgba(0, 0, 0, 0.85);
         transform: translateX(-105%);
         width: 250px;
+        padding: 12px 10px;
         opacity: 1;
     }
     .hmi-sidebar.mobile-open {
         transform: translateX(0);
         pointer-events: auto;
+    }
+    .hmi-sidebar.mobile-open .link-text {
+        display: inline;
+    }
+    .hmi-sidebar.mobile-open .hmi-sidebar-title {
+        font-size: 9.5px;
+        height: auto;
+        padding: 4px 8px 6px;
+        margin: 0 0 4px 0;
+        background: transparent;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    .hmi-sidebar.mobile-open .hmi-sidebar-link {
+        justify-content: flex-start;
+        padding: 6px 10px;
+        width: 100%;
+        height: auto;
+        margin-bottom: 2px;
+    }
+    .hmi-sidebar.mobile-open .hmi-sidebar-link .link-icon {
+        font-size: 13px;
+        width: 18px;
+        margin-right: 6px;
+    }
+    .hmi-sidebar.mobile-open .sidebar-status-tag {
+        padding: 3px 8px;
+        border-radius: var(--radius-sm);
+    }
+    .hmi-sidebar.mobile-open .sidebar-status-tag .link-text {
+        display: inline;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.6px;
+        color: var(--text-muted);
     }
     .hmi-body-layout {
         display: block;

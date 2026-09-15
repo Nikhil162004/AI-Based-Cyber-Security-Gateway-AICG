@@ -1,5 +1,5 @@
 /* ==========================================================================
-   AEGIS-OT • INDUSTRIAL SOC & OT SECURITY OPERATIONS HMI
+   AICG • INDUSTRIAL SOC & OT SECURITY OPERATIONS HMI
    AI-Based Cyber Security Gateway for Industry 4.0
    Client Runtime, Zero-Dependency Canvas Visualizations, SSE Integration
    ========================================================================== */
@@ -1698,14 +1698,39 @@ function escapeHtml(str) {
    ========================================================================== */
 function toggleSidebar() {
     const sidebar = document.getElementById("hmiSidebar");
+    const backdrop = document.getElementById("sidebarBackdrop");
+    const toggleBtn = document.getElementById("sidebarToggle");
     if (!sidebar) return;
+
     if (window.innerWidth <= 1100) {
-        sidebar.classList.toggle("mobile-open");
+        const isOpen = sidebar.classList.toggle("mobile-open");
+        if (backdrop) backdrop.classList.toggle("active", isOpen);
+        if (toggleBtn) toggleBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
     } else {
-        sidebar.classList.toggle("collapsed");
+        const isExpanded = sidebar.classList.toggle("expanded");
+        if (backdrop) backdrop.classList.toggle("active", isExpanded);
+        if (toggleBtn) toggleBtn.setAttribute("aria-expanded", isExpanded ? "true" : "false");
     }
 }
+
+function collapseSidebar() {
+    const sidebar = document.getElementById("hmiSidebar");
+    const backdrop = document.getElementById("sidebarBackdrop");
+    const toggleBtn = document.getElementById("sidebarToggle");
+    if (sidebar) {
+        sidebar.classList.remove("expanded");
+        sidebar.classList.remove("mobile-open");
+    }
+    if (backdrop) {
+        backdrop.classList.remove("active");
+    }
+    if (toggleBtn) {
+        toggleBtn.setAttribute("aria-expanded", "false");
+    }
+}
+
 window.toggleSidebar = toggleSidebar;
+window.collapseSidebar = collapseSidebar;
 
 function initSidebarNavigation() {
     const sidebar = document.getElementById("hmiSidebar");
@@ -1719,11 +1744,19 @@ function initSidebarNavigation() {
             if (targetEl) {
                 e.preventDefault();
                 targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
-                sidebar.classList.remove("mobile-open");
+                // Collapse expanded navigation drawer on desktop or mobile upon link selection
+                collapseSidebar();
                 links.forEach(l => l.classList.remove("active"));
                 link.classList.add("active");
             }
         });
+    });
+
+    // Close expanded sidebar on Escape key
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            collapseSidebar();
+        }
     });
 
     // Scroll-Spy to highlight current section

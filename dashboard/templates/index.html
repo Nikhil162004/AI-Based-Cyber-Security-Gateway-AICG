@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI-Based Cyber Security Gateway • Industrial SOC &amp; OT Operations HMI</title>
+    <title>AI EDGE SECURITY GATEWAY • AICG Industrial SOC &amp; OT Operations HMI</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
 </head>
 <body>
@@ -82,120 +82,123 @@
     <!-- Main Body Layout: Left Sidebar + Main Content Area -->
     <div class="hmi-body-layout" id="hmiBodyLayout">
 
-        <!-- Left-Side Quick Navigation (Collapsible) -->
+        <!-- Left-Side Quick Navigation (Compact Rail by Default, Expandable Drawer) -->
         <aside class="hmi-sidebar" id="hmiSidebar" aria-label="Dashboard Navigation">
 
             <!-- OVERVIEW -->
             <div class="hmi-sidebar-group">
                 <div class="hmi-sidebar-title">OVERVIEW</div>
-                <a href="#sec-kpis" class="hmi-sidebar-link active" data-target="sec-kpis">
+                <a href="#sec-kpis" class="hmi-sidebar-link active" data-target="sec-kpis" title="Security Overview">
                     <span class="link-icon">📊</span>
-                    <span>Security Overview</span>
+                    <span class="link-text">Security Overview</span>
                 </a>
-                <a href="#sec-status-gauges" class="hmi-sidebar-link" data-target="sec-status-gauges">
+                <a href="#sec-status-gauges" class="hmi-sidebar-link" data-target="sec-status-gauges" title="Live KPIs">
                     <span class="link-icon">⚡</span>
-                    <span>Live KPIs</span>
+                    <span class="link-text">Live KPIs</span>
                 </a>
             </div>
 
             <!-- MONITORING -->
             <div class="hmi-sidebar-group">
                 <div class="hmi-sidebar-title">MONITORING</div>
-                <a href="#sec-telemetry" class="hmi-sidebar-link" data-target="sec-telemetry">
+                <a href="#sec-telemetry" class="hmi-sidebar-link" data-target="sec-telemetry" title="Live Network Traffic">
                     <span class="link-icon">📈</span>
-                    <span>Live Network Traffic</span>
+                    <span class="link-text">Live Network Traffic</span>
                 </a>
-                <a href="#sec-telemetry" class="hmi-sidebar-link" data-target="sec-telemetry">
+                <a href="#sec-telemetry" class="hmi-sidebar-link" data-target="sec-telemetry" title="Energy Monitoring">
                     <span class="link-icon">🔋</span>
-                    <span>Energy Monitoring</span>
+                    <span class="link-text">Energy Monitoring</span>
                 </a>
-                <a href="#sec-topology" class="hmi-sidebar-link" data-target="sec-topology">
+                <a href="#sec-topology" class="hmi-sidebar-link" data-target="sec-topology" title="Protocol Mix">
                     <span class="link-icon">🍩</span>
-                    <span>Protocol Mix</span>
+                    <span class="link-text">Protocol Mix</span>
                 </a>
-                <a href="#sec-flows" class="hmi-sidebar-link" data-target="sec-flows">
+                <a href="#sec-flows" class="hmi-sidebar-link" data-target="sec-flows" title="Raw Flows">
                     <span class="link-icon">🌊</span>
-                    <span>Raw Flows</span>
+                    <span class="link-text">Raw Flows</span>
                 </a>
             </div>
 
             <!-- SECURITY -->
             <div class="hmi-sidebar-group">
                 <div class="hmi-sidebar-title">SECURITY</div>
-                <a href="#sec-xai" class="hmi-sidebar-link" data-target="sec-xai">
+                <a href="#sec-xai" class="hmi-sidebar-link" data-target="sec-xai" title="AI Detection / XAI">
                     <span class="link-icon">🔍</span>
-                    <span>AI Detection / XAI</span>
+                    <span class="link-text">AI Detection / XAI</span>
                 </a>
-                <a href="#sec-lifecycle" class="hmi-sidebar-link" data-target="sec-lifecycle">
+                <a href="#sec-lifecycle" class="hmi-sidebar-link" data-target="sec-lifecycle" title="Incident Lifecycle">
                     <span class="link-icon">🔄</span>
-                    <span>Incident Lifecycle</span>
+                    <span class="link-text">Incident Lifecycle</span>
                 </a>
-                <a href="#sec-incidents" class="hmi-sidebar-link" data-target="sec-incidents">
+                <a href="#sec-incidents" class="hmi-sidebar-link" data-target="sec-incidents" title="Incident Journal">
                     <span class="link-icon">📋</span>
-                    <span>Incident Journal</span>
+                    <span class="link-text">Incident Journal</span>
                 </a>
-                <a href="#sec-lifecycle" class="hmi-sidebar-link" data-target="sec-lifecycle">
+                <a href="#sec-lifecycle" class="hmi-sidebar-link" data-target="sec-lifecycle" title="Autonomous Response">
                     <span class="link-icon">🤖</span>
-                    <span>Autonomous Response</span>
+                    <span class="link-text">Autonomous Response</span>
                 </a>
             </div>
 
             <!-- IDENTITY -->
             <div class="hmi-sidebar-group">
                 <div class="hmi-sidebar-title">IDENTITY</div>
-                <a href="#sec-iam" class="hmi-sidebar-link" data-target="sec-iam">
+                <a href="#sec-iam" class="hmi-sidebar-link" data-target="sec-iam" title="Identity &amp; Access (IAM)">
                     <span class="link-icon">🛡️</span>
-                    <span>Identity &amp; Access (IAM)</span>
+                    <span class="link-text">Identity &amp; Access (IAM)</span>
                 </a>
-                <a href="#sec-iam" class="hmi-sidebar-link" data-target="sec-iam">
+                <a href="#sec-iam" class="hmi-sidebar-link" data-target="sec-iam" title="Zero Trust">
                     <span class="link-icon">🔐</span>
-                    <span>Zero Trust</span>
+                    <span class="link-text">Zero Trust</span>
                 </a>
             </div>
 
             <!-- IIoT / OT -->
             <div class="hmi-sidebar-group">
                 <div class="hmi-sidebar-title">IIoT / OT</div>
-                <a href="#sec-topology" class="hmi-sidebar-link" data-target="sec-topology">
+                <a href="#sec-topology" class="hmi-sidebar-link" data-target="sec-topology" title="Plant Mimic">
                     <span class="link-icon">🏭</span>
-                    <span>Plant Mimic</span>
+                    <span class="link-text">Plant Mimic</span>
                 </a>
-                <a href="#sec-iam" class="hmi-sidebar-link" data-target="sec-iam">
+                <a href="#sec-iam" class="hmi-sidebar-link" data-target="sec-iam" title="IIoT Protocol Stack">
                     <span class="link-icon">📶</span>
-                    <span>IIoT Protocol Stack</span>
+                    <span class="link-text">IIoT Protocol Stack</span>
                 </a>
             </div>
 
             <!-- MODEL -->
             <div class="hmi-sidebar-group">
                 <div class="hmi-sidebar-title">MODEL</div>
-                <a href="#sec-assurance" class="hmi-sidebar-link" data-target="sec-assurance">
+                <a href="#sec-assurance" class="hmi-sidebar-link" data-target="sec-assurance" title="Model Assurance">
                     <span class="link-icon">🎯</span>
-                    <span>Model Assurance</span>
+                    <span class="link-text">Model Assurance</span>
                 </a>
-                <a href="#sec-assurance" class="hmi-sidebar-link" data-target="sec-assurance">
+                <a href="#sec-assurance" class="hmi-sidebar-link" data-target="sec-assurance" title="Confusion Matrix">
                     <span class="link-icon">🔲</span>
-                    <span>Confusion Matrix</span>
+                    <span class="link-text">Confusion Matrix</span>
                 </a>
             </div>
 
             <!-- SIMULATION -->
             <div class="hmi-sidebar-group">
                 <div class="hmi-sidebar-title">SIMULATION</div>
-                <a href="#sec-controls" class="hmi-sidebar-link highlight" data-target="sec-controls">
+                <a href="#sec-controls" class="hmi-sidebar-link highlight" data-target="sec-controls" title="AICG Attack Simulator">
                     <span class="link-icon">⚡</span>
-                    <span>AICG Attack Simulator</span>
+                    <span class="link-text">AICG Attack Simulator</span>
                 </a>
             </div>
 
             <!-- Sidebar Footer Status -->
             <div class="hmi-sidebar-footer">
-                <div class="sidebar-status-tag">
+                <div class="sidebar-status-tag" title="Gateway Status: Live in-process">
                     <span class="dot-small green"></span>
-                    <span>LIVE IN-PROCESS</span>
+                    <span class="link-text">LIVE IN-PROCESS</span>
                 </div>
             </div>
         </aside>
+
+        <!-- Backdrop for expanded drawer -->
+        <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="collapseSidebar()" aria-hidden="true"></div>
 
         <!-- Main Content Area -->
         <main class="hmi-main-area" id="hmiMainArea">
@@ -526,7 +529,7 @@
                             <circle r="26" fill="#131b38" stroke="#818cf8" stroke-width="2.5"/>
                             <text y="-34" text-anchor="middle" fill="#fff" font-size="11" font-weight="800">EDGE-GW-01</text>
                             <text y="4" text-anchor="middle" fill="#818cf8" font-size="10" font-family="monospace">10.42.0.1</text>
-                            <text y="40" text-anchor="middle" fill="#38bdf8" font-size="8.5" font-weight="700">AEGIS RUNTIME</text>
+                            <text y="40" text-anchor="middle" fill="#38bdf8" font-size="8.5" font-weight="700">AICG GATEWAY</text>
                         </g>
 
                         <!-- Node: PLC SINK / SCADA -->
