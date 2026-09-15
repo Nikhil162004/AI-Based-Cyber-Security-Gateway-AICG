@@ -234,7 +234,8 @@ function setupCanvas(canvas) {
 }
 
 /**
- * Primary Chart #1: Historian • Packets / Second
+ * Primary Chart #1: Historian • Live OT Network Traffic (Packets / Second)
+ * Displays continuous legitimate OT baseline (~18 pps) vs live traffic vs attack surge
  */
 function renderHistorianChart(canvas, rows) {
     const setup = setupCanvas(canvas);
@@ -245,7 +246,7 @@ function renderHistorianChart(canvas, rows) {
 
     const padLeft = 45;
     const padRight = 15;
-    const padTop = 15;
+    const padTop = 18;
     const padBottom = 25;
     const chartW = width - padLeft - padRight;
     const chartH = height - padTop - padBottom;
@@ -255,12 +256,13 @@ function renderHistorianChart(canvas, rows) {
         ctx.fillStyle = "#64748b";
         ctx.font = "11px Inter, sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText("Awaiting live telemetry windows...", width / 2, height / 2);
+        ctx.fillText("Awaiting live OT telemetry windows...", width / 2, height / 2);
         return;
     }
 
     const rates = dataPoints.map(r => Number(r.packets_per_second || r.packet_rate || 0));
     const maxVal = Math.max(60, ...rates) * 1.15;
+    const baselinePps = 18.0;
 
     // Draw Grid Lines & Y-Axis Labels
     ctx.strokeStyle = "rgba(70, 100, 140, 0.18)";
@@ -282,35 +284,32 @@ function renderHistorianChart(canvas, rows) {
 
     const xStep = chartW / Math.max(1, dataPoints.length - 1);
 
-    // Draw Series 1: Legitimate OT Baseline (~20 pps) Area
-    ctx.beginPath();
-    dataPoints.forEach((r, idx) => {
-        const val = Math.min(Number(r.packets_per_second || r.packet_rate || 0), 20.0);
-        const x = padLeft + idx * xStep;
-        const y = padTop + chartH - (val / maxVal) * chartH;
-        if (idx === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    });
-    ctx.lineTo(padLeft + (dataPoints.length - 1) * xStep, padTop + chartH);
-    ctx.lineTo(padLeft, padTop + chartH);
-    ctx.closePath();
-    ctx.fillStyle = "rgba(16, 185, 129, 0.15)";
-    ctx.fill();
+    // 1. Draw Legitimate OT Baseline Band (15-20 pps shaded zone)
+    const baseBandTopY = padTop + chartH - (20.0 / maxVal) * chartH;
+    const baseBandBottomY = padTop + chartH - (14.0 / maxVal) * chartH;
+    ctx.fillStyle = "rgba(16, 185, 129, 0.08)";
+    ctx.fillRect(padLeft, baseBandTopY, chartW, baseBandBottomY - baseBandTopY);
 
-    // Draw Legitimate Baseline Line
+    // 2. Draw Legitimate Baseline Line (~18 pps dashed green)
+    const baseYPos = padTop + chartH - (baselinePps / maxVal) * chartH;
+    ctx.save();
     ctx.beginPath();
-    dataPoints.forEach((r, idx) => {
-        const val = Math.min(Number(r.packets_per_second || r.packet_rate || 0), 20.0);
-        const x = padLeft + idx * xStep;
-        const y = padTop + chartH - (val / maxVal) * chartH;
-        if (idx === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    });
+    ctx.setLineDash([4, 4]);
     ctx.strokeStyle = "#10b981";
-    ctx.lineWidth = 1.8;
+    ctx.lineWidth = 1.4;
+    ctx.moveTo(padLeft, baseYPos);
+    ctx.lineTo(padLeft + chartW, baseYPos);
     ctx.stroke();
+    ctx.fillStyle = "#10b981";
+    ctx.font = "9px 'JetBrains Mono', monospace";
+    ctx.textAlign = "left";
+    ctx.fillText("Normal OT Baseline (~18 pps)", padLeft + 6, baseYPos - 4);
+    ctx.restore();
 
-    // Draw Series 2: Attack Surge (Values above 20 pps)
+    // 3. Check for Attack Surge condition
+    const hasAttackSurge = rates.some(r => r > 30.0);
+
+    // 4. Draw Area Fill Under Live Traffic
     ctx.beginPath();
     dataPoints.forEach((r, idx) => {
         const val = Number(r.packets_per_second || r.packet_rate || 0);
@@ -322,10 +321,20 @@ function renderHistorianChart(canvas, rows) {
     ctx.lineTo(padLeft + (dataPoints.length - 1) * xStep, padTop + chartH);
     ctx.lineTo(padLeft, padTop + chartH);
     ctx.closePath();
-    ctx.fillStyle = "rgba(244, 63, 94, 0.18)";
+
+    const areaGrad = ctx.createLinearGradient(0, padTop, 0, padTop + chartH);
+    if (hasAttackSurge) {
+        areaGrad.addColorStop(0, "rgba(244, 63, 94, 0.32)");
+        areaGrad.addColorStop(0.6, "rgba(56, 189, 248, 0.12)");
+        areaGrad.addColorStop(1, "rgba(16, 185, 129, 0.04)");
+    } else {
+        areaGrad.addColorStop(0, "rgba(56, 189, 248, 0.22)");
+        areaGrad.addColorStop(1, "rgba(56, 189, 248, 0.02)");
+    }
+    ctx.fillStyle = areaGrad;
     ctx.fill();
 
-    // Draw Attack Surge Line
+    // 5. Draw Live Traffic Curve
     ctx.beginPath();
     dataPoints.forEach((r, idx) => {
         const val = Number(r.packets_per_second || r.packet_rate || 0);
@@ -334,30 +343,205 @@ function renderHistorianChart(canvas, rows) {
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
-    ctx.strokeStyle = "#f43f5e";
+    ctx.strokeStyle = hasAttackSurge ? "#f43f5e" : "#38bdf8";
     ctx.lineWidth = 2.2;
     ctx.stroke();
 
-    // Draw Series 3: Simulated Throttle / Drop Line
-    ctx.beginPath();
-    ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = "#f59e0b";
-    ctx.lineWidth = 1.6;
+    // 6. Draw Data Points (color-coded by rate)
     dataPoints.forEach((r, idx) => {
-        const isMitigated = ["BLOCK", "RATE_LIMIT", "ISOLATE"].includes(r.security_action || r.mitigation_action || "");
-        const raw = Number(r.packets_per_second || r.packet_rate || 0);
-        const val = isMitigated ? Math.max(0, raw - 20.0) : 0;
+        const val = Number(r.packets_per_second || r.packet_rate || 0);
         const x = padLeft + idx * xStep;
         const y = padTop + chartH - (val / maxVal) * chartH;
+        const isSpike = val > 30.0;
+        ctx.beginPath();
+        ctx.arc(x, y, isSpike ? 3.5 : 2, 0, Math.PI * 2);
+        ctx.fillStyle = isSpike ? "#f43f5e" : "#38bdf8";
+        ctx.fill();
+    });
+
+    // 7. Draw Simulated Throttle Line if active (DRY_RUN)
+    const hasThrottle = dataPoints.some(r => ["BLOCK", "RATE_LIMIT", "ISOLATE"].includes(r.security_action || r.mitigation_action || ""));
+    if (hasThrottle) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = "#f59e0b";
+        ctx.lineWidth = 1.6;
+        dataPoints.forEach((r, idx) => {
+            const isMit = ["BLOCK", "RATE_LIMIT", "ISOLATE"].includes(r.security_action || r.mitigation_action || "");
+            const raw = Number(r.packets_per_second || r.packet_rate || 0);
+            const val = isMit ? Math.max(0, raw - baselinePps) : 0;
+            const x = padLeft + idx * xStep;
+            const y = padTop + chartH - (val / maxVal) * chartH;
+            if (idx === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // 8. Draw X-Axis Time Labels
+    ctx.fillStyle = "#64748b";
+    ctx.textAlign = "center";
+    ctx.font = "9.5px 'JetBrains Mono', monospace";
+    const labelStep = Math.max(1, Math.floor(dataPoints.length / 5));
+    for (let i = 0; i < dataPoints.length; i += labelStep) {
+        const ts = dataPoints[i].window_start || "";
+        const label = ts.includes("T") ? ts.split("T")[1].split(".")[0] : ts.slice(-8);
+        const x = padLeft + i * xStep;
+        ctx.fillText(label, x, padTop + chartH + 16);
+    }
+}
+
+/**
+ * Primary Chart #2: Resource Impact • Modelled Power Dissipation (mW)
+ * Derived software model: Nominal quiescent baseline (~55 mW) vs attack-induced resource dissipation
+ */
+function renderEnergyChart(canvas, rows) {
+    const setup = setupCanvas(canvas);
+    if (!setup) return;
+    const { ctx, width, height } = setup;
+
+    ctx.clearRect(0, 0, width, height);
+
+    const padLeft = 45;
+    const padRight = 15;
+    const padTop = 18;
+    const padBottom = 25;
+    const chartW = width - padLeft - padRight;
+    const chartH = height - padTop - padBottom;
+
+    const dataPoints = (rows && rows.length) ? rows.slice(-30) : [];
+    if (!dataPoints.length) {
+        ctx.fillStyle = "#64748b";
+        ctx.font = "11px Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("Awaiting modelled power dissipation data...", width / 2, height / 2);
+        return;
+    }
+
+    // Extract energy rate (mW), fallback to cause-based model formula if not present
+    const energyVals = dataPoints.map(r => {
+        if (r.energy_rate !== undefined && r.energy_rate !== null && Number(r.energy_rate) > 0) {
+            return Number(r.energy_rate);
+        }
+        const pps = Number(r.packets_per_second || r.packet_rate || 18.0);
+        return 50.0 + pps * 0.35 + 5.0;
+    });
+
+    const baselineVal = 55.0; // Quiescent baseline in mW
+    const maxVal = Math.max(100.0, ...energyVals) * 1.15;
+
+    // Draw Grid Lines & Y-Axis Labels (mW)
+    ctx.strokeStyle = "rgba(70, 100, 140, 0.18)";
+    ctx.lineWidth = 1;
+    ctx.fillStyle = "#7890a8";
+    ctx.font = "9.5px 'JetBrains Mono', monospace";
+    ctx.textAlign = "right";
+
+    const ySteps = 4;
+    for (let i = 0; i <= ySteps; i++) {
+        const yVal = (maxVal / ySteps) * i;
+        const yPos = padTop + chartH - (i / ySteps) * chartH;
+        ctx.beginPath();
+        ctx.moveTo(padLeft, yPos);
+        ctx.lineTo(padLeft + chartW, yPos);
+        ctx.stroke();
+        ctx.fillText(`${yVal.toFixed(0)} mW`, padLeft - 6, yPos + 3);
+    }
+
+    const xStep = chartW / Math.max(1, dataPoints.length - 1);
+
+    // Draw Baseline Reference Line (55 mW dashed green)
+    const baseNorm = Math.min(1, baselineVal / maxVal);
+    const baseYPos = padTop + chartH - baseNorm * chartH;
+    ctx.save();
+    ctx.beginPath();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = "#10b981";
+    ctx.lineWidth = 1.4;
+    ctx.moveTo(padLeft, baseYPos);
+    ctx.lineTo(padLeft + chartW, baseYPos);
+    ctx.stroke();
+    ctx.fillStyle = "#10b981";
+    ctx.font = "9px 'JetBrains Mono', monospace";
+    ctx.textAlign = "left";
+    ctx.fillText("Nominal Baseline (55 mW)", padLeft + 6, baseYPos - 4);
+    ctx.restore();
+
+    // Draw Critical Saturation Line (110 mW dashed red) if within maxVal
+    if (110.0 < maxVal) {
+        const critYPos = padTop + chartH - (110.0 / maxVal) * chartH;
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = "rgba(244, 63, 94, 0.7)";
+        ctx.lineWidth = 1;
+        ctx.moveTo(padLeft, critYPos);
+        ctx.lineTo(padLeft + chartW, critYPos);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(244, 63, 94, 0.85)";
+        ctx.font = "9px 'JetBrains Mono', monospace";
+        ctx.textAlign = "right";
+        ctx.fillText("Saturation Threshold (110 mW)", padLeft + chartW - 6, critYPos - 4);
+        ctx.restore();
+    }
+
+    // Draw Live Modelled Power Dissipation Area Fill
+    ctx.beginPath();
+    energyVals.forEach((val, idx) => {
+        const norm = Math.min(1, Math.max(0, val / maxVal));
+        const x = padLeft + idx * xStep;
+        const y = padTop + chartH - norm * chartH;
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
+    ctx.lineTo(padLeft + (dataPoints.length - 1) * xStep, padTop + chartH);
+    ctx.lineTo(padLeft, padTop + chartH);
+    ctx.closePath();
+
+    const isHighEnergy = energyVals.some(v => v > 80.0);
+    const grad = ctx.createLinearGradient(0, padTop, 0, padTop + chartH);
+    if (isHighEnergy) {
+        grad.addColorStop(0, "rgba(245, 158, 11, 0.35)");
+        grad.addColorStop(0.7, "rgba(245, 158, 11, 0.1)");
+        grad.addColorStop(1, "rgba(16, 185, 129, 0.03)");
+    } else {
+        grad.addColorStop(0, "rgba(16, 185, 129, 0.2)");
+        grad.addColorStop(1, "rgba(16, 185, 129, 0.02)");
+    }
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Draw Live Modelled Power Dissipation Curve Line
+    ctx.beginPath();
+    energyVals.forEach((val, idx) => {
+        const norm = Math.min(1, Math.max(0, val / maxVal));
+        const x = padLeft + idx * xStep;
+        const y = padTop + chartH - norm * chartH;
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = isHighEnergy ? "#f59e0b" : "#10b981";
+    ctx.lineWidth = 2.2;
     ctx.stroke();
-    ctx.setLineDash([]);
+
+    // Draw points for each reading
+    energyVals.forEach((val, idx) => {
+        const norm = Math.min(1, Math.max(0, val / maxVal));
+        const x = padLeft + idx * xStep;
+        const y = padTop + chartH - norm * chartH;
+        const isElevated = val > 75.0;
+        ctx.beginPath();
+        ctx.arc(x, y, isElevated ? 3.5 : 2, 0, Math.PI * 2);
+        ctx.fillStyle = isElevated ? "#f43f5e" : "#f59e0b";
+        ctx.fill();
+    });
 
     // Draw X-Axis Time Labels
     ctx.fillStyle = "#64748b";
     ctx.textAlign = "center";
+    ctx.font = "9.5px 'JetBrains Mono', monospace";
     const labelStep = Math.max(1, Math.floor(dataPoints.length / 5));
     for (let i = 0; i < dataPoints.length; i += labelStep) {
         const ts = dataPoints[i].window_start || "";
@@ -781,12 +965,15 @@ function updateIAM(iamData) {
         const isAuth = Boolean(dev.authenticated);
         const isAllow = isAuth && dev.role !== "untrusted" && dev.trust_score >= 40.0;
         const trustColor = dev.trust_score >= 70 ? "var(--green)" : (dev.trust_score >= 40 ? "var(--amber)" : "var(--red)");
+        const mfa = dev.mfa_status || (dev.role === "operator" ? "VERIFIED" : (dev.role === "untrusted" ? "FAILED" : "NOT_REQUIRED"));
+        const mfaBadgeClass = (mfa === "VERIFIED" || mfa === "NOT_REQUIRED") ? "iam-allow" : "iam-deny";
         
         return `
             <tr>
                 <td><strong>${escapeHtml(dev.identity)}</strong></td>
                 <td style="text-transform: capitalize;">${escapeHtml(dev.role)}</td>
                 <td><span class="iam-badge ${isAuth ? 'iam-allow' : 'iam-deny'}">${isAuth ? 'VERIFIED' : 'UNVERIFIED'}</span></td>
+                <td><span class="iam-badge ${mfaBadgeClass}">${escapeHtml(mfa.replace('_', ' '))}</span></td>
                 <td><span class="iam-badge ${isAllow ? 'iam-allow' : 'iam-deny'}">${isAllow ? 'ALLOW' : 'DENY'}</span></td>
                 <td><strong style="color: ${trustColor}; font-family: var(--font-mono);">${dev.trust_score.toFixed(1)}</strong></td>
             </tr>
@@ -926,6 +1113,48 @@ function updateLifecycle(targetIncident, summary, telemetryContext) {
             node.classList.add("resolved-active");
         }
     });
+
+    // Update Autonomous Mitigation Pipeline Flow Steps
+    const pipeCard = document.querySelector(".auto-pipeline-card");
+    if (pipeCard) {
+        const flowSteps = pipeCard.querySelectorAll(".flow-step");
+        if (flowSteps && flowSteps.length >= 7) {
+            const pipeIdx = {
+                "DETECTED": 1,
+                "ANALYZING": 2,
+                "TRIAGED": 2,
+                "RESPONDING": 3,
+                "CONTAINED": 4,
+                "RECOVERING": 5,
+                "RESOLVED": 6,
+                "CLOSED": 7
+            }[state] || (isNormal ? 0 : 1);
+
+            flowSteps.forEach((s, idx) => {
+                s.classList.remove("auto-done", "active", "manual-req", "pending");
+                if (idx === 6) { // Step 7: Operator Audit Closure
+                    if (pipeIdx >= 7) {
+                        s.classList.add("auto-done");
+                        s.textContent = "✓ Operator Audit Closed";
+                    } else if (pipeIdx === 6) {
+                        s.classList.add("manual-req", "active");
+                        s.textContent = "● Operator Closure Required";
+                    } else {
+                        s.classList.add("manual-req");
+                        s.textContent = "○ Operator Audit Closure";
+                    }
+                } else {
+                    if (pipeIdx > idx) {
+                        s.classList.add("auto-done");
+                    } else if (pipeIdx === idx + 1) {
+                        s.classList.add("active");
+                    } else {
+                        s.classList.add("pending");
+                    }
+                }
+            });
+        }
+    }
 }
 
 
@@ -937,8 +1166,15 @@ function updateIncidents(incidents) {
     const countEl = document.getElementById("incidentCount");
     const activeIdEl = document.getElementById("activeIncId");
     const actionControls = document.getElementById("incidentActionControls");
+    const activeCountEl = document.getElementById("activeIncidentCount");
+    const histCountEl = document.getElementById("historicalIncidentCount");
+
+    const activeIncs = (incidents || []).filter(i => !["RESOLVED", "CLOSED"].includes(i.lifecycle_state));
+    const histIncs = (incidents || []).filter(i => ["RESOLVED", "CLOSED"].includes(i.lifecycle_state));
 
     if (countEl) countEl.textContent = incidents ? incidents.length : 0;
+    if (activeCountEl) activeCountEl.textContent = activeIncs.length;
+    if (histCountEl) histCountEl.textContent = histIncs.length;
 
     if (!incidents || !incidents.length) {
         if (table) {
@@ -1365,7 +1601,9 @@ async function refreshDashboard() {
                 updateSampleFlows(liveRows);
             }
             renderHistorianChart(document.getElementById("trafficChart"), liveRows);
-            renderThreatChart(document.getElementById("threatChart"), liveRows);
+            renderEnergyChart(document.getElementById("energyChart"), liveRows);
+            const threatCanvas = document.getElementById("threatChart");
+            if (threatCanvas) renderThreatChart(threatCanvas, liveRows);
         }
 
         // 3. Protocols Doughnut
@@ -1455,6 +1693,89 @@ function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
+/* ==========================================================================
+   10. SIDEBAR NAVIGATION & COLLAPSIBLE CONTROLS
+   ========================================================================== */
+function toggleSidebar() {
+    const sidebar = document.getElementById("hmiSidebar");
+    if (!sidebar) return;
+    if (window.innerWidth <= 1100) {
+        sidebar.classList.toggle("mobile-open");
+    } else {
+        sidebar.classList.toggle("collapsed");
+    }
+}
+window.toggleSidebar = toggleSidebar;
+
+function initSidebarNavigation() {
+    const sidebar = document.getElementById("hmiSidebar");
+    if (!sidebar) return;
+
+    const links = sidebar.querySelectorAll(".hmi-sidebar-link");
+    links.forEach(link => {
+        link.addEventListener("click", (e) => {
+            const targetId = link.getAttribute("data-target") || (link.getAttribute("href") || "").replace("#", "");
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) {
+                e.preventDefault();
+                targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+                sidebar.classList.remove("mobile-open");
+                links.forEach(l => l.classList.remove("active"));
+                link.classList.add("active");
+            }
+        });
+    });
+
+    // Scroll-Spy to highlight current section
+    const sectionIds = [
+        "sec-kpis",
+        "sec-status-gauges",
+        "sec-telemetry",
+        "sec-topology",
+        "sec-energy",
+        "sec-iam",
+        "sec-protocol-stack",
+        "sec-lifecycle",
+        "sec-incidents",
+        "sec-comparison",
+        "sec-assurance",
+        "sec-controls"
+    ];
+
+    let ticking = false;
+    window.addEventListener("scroll", () => {
+        if (!ticking) {
+            window.requestAnimationFrame(() => {
+                const scrollPos = window.scrollY + 160;
+                let activeSecId = "";
+                for (const id of sectionIds) {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        const top = el.offsetTop;
+                        const height = el.offsetHeight;
+                        if (scrollPos >= top && scrollPos < top + height) {
+                            activeSecId = id;
+                            break;
+                        }
+                    }
+                }
+                if (activeSecId) {
+                    links.forEach(l => {
+                        const t = l.getAttribute("data-target") || (l.getAttribute("href") || "").replace("#", "");
+                        if (t === activeSecId) {
+                            l.classList.add("active");
+                        } else {
+                            l.classList.remove("active");
+                        }
+                    });
+                }
+                ticking = false;
+            });
+            ticking = true;
+        }
+    }, { passive: true });
+}
+
 /* Server-Sent Events (SSE) Stream */
 function initSSE() {
     if (typeof EventSource === "undefined") return;
@@ -1480,7 +1801,9 @@ window.addEventListener("resize", () => {
         .then(d => {
             if (d && d.rows) {
                 renderHistorianChart(document.getElementById("trafficChart"), d.rows);
-                renderThreatChart(document.getElementById("threatChart"), d.rows);
+                renderEnergyChart(document.getElementById("energyChart"), d.rows);
+                const threatCanvas = document.getElementById("threatChart");
+                if (threatCanvas) renderThreatChart(threatCanvas, d.rows);
             }
         }).catch(() => {});
 
@@ -1491,6 +1814,7 @@ window.addEventListener("resize", () => {
 });
 
 // Boot HMI
+initSidebarNavigation();
 refreshDashboard();
 setInterval(refreshDashboard, 3500);
 initSSE();

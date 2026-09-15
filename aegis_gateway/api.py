@@ -397,6 +397,8 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         return jsonify({
             "rows": formatted,
             "count": len(formatted),
+            "baseline": 55.0,
+            "unit": "mW",
             "measurement_status": "MODELLED",
             "environment": "CONTROLLED_SIMULATION",
             "hardware_measured": False,

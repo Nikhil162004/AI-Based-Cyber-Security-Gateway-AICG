@@ -568,3 +568,120 @@ def test_incident_lifecycle_stepper_contracts(runtime_app):
         # Remaining windows: normal recovery windows
         for row in all_rows[2:]:
             assert row["lifecycle_context"]["lifecycle_state"] == "OBSERVED"
+
+
+def test_master_contracts_a_through_m(runtime_app):
+    """Explicitly verify master requirements Contracts A through M."""
+    runtime, app = runtime_app
+    with app.test_client() as client:
+        # Contract A: Baseline OT rhythm continuously ingested (~14-18 pps)
+        w_norm = generate_window("normal", intensity=1, sequence=0)
+        runtime.ingest(w_norm)
+        res_tel = client.get("/api/telemetry")
+        assert res_tel.status_code == 200
+        rows = res_tel.get_json()["rows"]
+        assert len(rows) == 1
+        base_pps = float(rows[0]["packets_per_second"])
+        assert 10.0 <= base_pps <= 22.0
+
+        # Contract B: Attack surge injection increases packet rate significantly above baseline
+        w_atk = generate_window("udp_flood", intensity=4, sequence=0)
+        runtime.ingest(w_atk)
+        res_tel = client.get("/api/telemetry")
+        rows = res_tel.get_json()["rows"]
+        assert len(rows) == 2
+        atk_pps = float(rows[1]["packets_per_second"])
+        assert atk_pps >= 40.0
+        assert atk_pps > base_pps * 2
+
+        # Contract C: Autonomous containment in AUTO mode (no manual operator clicks)
+        res_status = client.get("/api/status")
+        st = res_status.get_json()
+        assert st["auto_response"] is True
+        assert st["response_mode"] == "DRY_RUN"
+        assert st["lifecycle_state"] == "CONTAINED"
+        active_inc = st["active_incident"]
+        assert active_inc is not None
+        inc_id = active_inc["incident_id"]
+        assert active_inc["lifecycle_state"] == "CONTAINED"
+
+        # Contract D: Autonomous recovery verification streak transitions CONTAINED -> RECOVERING -> RESOLVED
+        # without human clicks
+        for i in range(1, 4):
+            runtime.ingest(generate_window("normal", intensity=1, sequence=i))
+        st_rec = client.get("/api/status").get_json()
+        assert st_rec["lifecycle_state"] == "RECOVERING"
+        assert st_rec["active_incident"]["lifecycle_state"] == "RECOVERING"
+
+        for i in range(4, 6):
+            runtime.ingest(generate_window("normal", intensity=1, sequence=i))
+        st_res = client.get("/api/status").get_json()
+        assert st_res["lifecycle_state"] == "RESOLVED"
+        assert st_res["active_incident"]["lifecycle_state"] == "RESOLVED"
+        assert st_res["active_incident"]["recovery_state"] == "VERIFIED"
+
+        # Contract E: Manual operator transition exclusively reserved for audit closure (RESOLVED -> CLOSED)
+        res_close = client.post(f"/api/incidents/{inc_id}/transition", json={
+            "state": "CLOSED",
+            "actor": "operator",
+            "note": "Operator manual sign-off"
+        })
+        assert res_close.status_code == 200
+        assert res_close.get_json()["lifecycle_state"] == "CLOSED"
+        st_closed = client.get("/api/status").get_json()
+        assert st_closed["active_incident"] is None
+        assert st_closed["lifecycle_state"] in {"OBSERVED", "NORMAL"}
+
+        # Contract F: IAM endpoint returns mfa_status for all identities
+        res_iam = client.get("/api/iam")
+        assert res_iam.status_code == 200
+        iam_data = res_iam.get_json()
+        identities = {dev["identity"]: dev for dev in iam_data["identities"]}
+        assert "SENSOR-01" in identities
+        assert identities["SENSOR-01"]["mfa_status"] == "NOT_REQUIRED"
+        assert "operator" in identities
+        assert identities["operator"]["mfa_status"] == "VERIFIED"
+        assert "ATK-01" in identities
+        assert identities["ATK-01"]["mfa_status"] == "FAILED"
+
+        # Contract G: Protocol mix endpoint returns normalized percentages summing to ~100%
+        res_proto = client.get("/api/protocols")
+        assert res_proto.status_code == 200
+        proto_data = res_proto.get_json()
+        assert "percentages" in proto_data
+        total_pct = sum(proto_data["percentages"].values())
+        assert 99.0 <= total_pct <= 101.0
+
+        # Contract H: Immutable historical telemetry stamps never modified by later state changes
+        res_tel_all = client.get("/api/telemetry")
+        hist_rows = res_tel_all.get_json()["rows"]
+        # The attack window (index 1) MUST remain stamped DETECTED
+        assert hist_rows[1]["lifecycle_context"]["lifecycle_state"] == "DETECTED"
+
+        # Contract I: Attacker page preserves AEGIS-OT ATTACK SIMULATOR for backward compatibility
+        res_atk = client.get("/attacker")
+        assert res_atk.status_code == 200
+        assert b"AEGIS-OT ATTACK SIMULATOR" in res_atk.data
+        assert b"AICG ATTACK SIMULATOR" in res_atk.data
+
+        # Contract J: Energy endpoint returns modelled dissipation in mW with ~55 mW baseline
+        res_energy = client.get("/api/energy")
+        assert res_energy.status_code == 200
+        energy_data = res_energy.get_json()
+        assert energy_data["baseline"] == 55.0
+        assert energy_data["unit"] == "mW"
+
+        # Contract K: Two primary charts contract (telemetry supplies packets_per_second and energy_rate)
+        latest_tel = hist_rows[-1]
+        assert "packets_per_second" in latest_tel
+        assert "energy_rate" in latest_tel
+        assert float(latest_tel["energy_rate"]) > 0
+
+        # Contract L: Zero trust policy denies untrusted ATK-01 with trust score < 40
+        atk_dev = identities["ATK-01"]
+        assert atk_dev["trust_score"] < 40.0
+        assert atk_dev["authenticated"] is False
+
+        # Contract M: Non-enforcing dry-run mode preserves host route and iptables untouched
+        assert st["host_enforcement"] is False
+        assert st["response_mode"] == "DRY_RUN"

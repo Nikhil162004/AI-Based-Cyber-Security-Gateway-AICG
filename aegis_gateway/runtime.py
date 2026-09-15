@@ -212,6 +212,34 @@ class GatewayRuntime:
         self.publish("response", stored); self.publish("incident", incident)
         return {"action": stored, "incident": incident}
 
+    def start_baseline(self, tick_seconds: float | None = None) -> None:
+        """Continuously generate legitimate baseline OT traffic windows when no attack simulation is active."""
+        if hasattr(self, "_baseline_thread") and self._baseline_thread and self._baseline_thread.is_alive():
+            return
+        self._baseline_stop = threading.Event()
+        interval = tick_seconds or self.settings.demo_tick_seconds
+
+        def run() -> None:
+            sequence = 0
+            while not self._baseline_stop.is_set():
+                with self._lock:
+                    active_sims = bool(self._simulations)
+                if not active_sims:
+                    try:
+                        self.ingest(generate_window("normal", intensity=1, sequence=sequence))
+                        sequence += 1
+                    except Exception:
+                        pass
+                self._baseline_stop.wait(interval)
+
+        self._baseline_thread = threading.Thread(target=run, name="aegis-live-baseline", daemon=True)
+        self._baseline_thread.start()
+
+    def stop_baseline(self) -> None:
+        """Stop the background baseline telemetry generator."""
+        if hasattr(self, "_baseline_stop") and self._baseline_stop:
+            self._baseline_stop.set()
+
     def status(self) -> dict[str, Any]:
         latest = self.store.telemetry(limit=1)
         return {

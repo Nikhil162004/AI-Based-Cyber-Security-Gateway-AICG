@@ -16,6 +16,10 @@
     <header class="hmi-header">
         
         <div class="header-brand">
+            <button class="btn-sidebar-toggle" id="sidebarToggle" type="button" onclick="toggleSidebar()" title="Toggle Navigation Sidebar">
+                <span>☰</span>
+                <span class="btn-toggle-label">NAV</span>
+            </button>
             <div class="brand-shield">
                 <svg viewBox="0 0 24 24">
                     <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
@@ -24,11 +28,11 @@
             <div class="brand-info">
                 <h1>
                     AI EDGE SECURITY GATEWAY
+                    <span class="tag">AICG</span>
                     <span class="tag">INDUSTRY 4.0</span>
-                    <span class="tag">SOC HMI</span>
                 </h1>
                 <div class="brand-context">
-                    Plant • OT Cell (6LoWPAN / CoAP / MQTT) • Edge Gateway • Defense-in-Depth
+                    Plant • OT Cell (6LoWPAN / CoAP / MQTT) • Edge Gateway • Zero-Trust Defense
                 </div>
             </div>
         </div>
@@ -41,15 +45,15 @@
             </div>
             <div class="badge-item neutral">
                 <span>GATEWAY:</span>
-                <strong>EDGE-GW-01</strong>
+                <strong>AICG-GW-01</strong>
             </div>
             <div class="badge-item neutral">
                 <span>RUNTIME:</span>
                 <strong>CANONICAL HYBRID</strong>
             </div>
             <div class="badge-item" style="border-color: rgba(56, 189, 248, 0.35); color: var(--cyan);">
-                <span>ENVIRONMENT:</span>
-                <strong>CONTROLLED LAB</strong>
+                <span>MODE:</span>
+                <strong>DRY_RUN (SIMULATED)</strong>
             </div>
         </div>
 
@@ -68,27 +72,133 @@
                 📥 <span>Export CSV</span>
             </a>
 
-            <a href="/attacker" target="_blank" class="btn-header-tool btn-header-remote" title="Open Dedicated Attacker Console">
+            <a href="/attacker" target="_blank" class="btn-header-tool btn-header-remote" title="Open Dedicated AICG Attacker Console">
                 📱 <span>Attacker</span>
             </a>
         </div>
 
     </header>
 
-    <!-- Quick Navigation Jump Bar (Smooth Scroll, Zero Tabs) -->
-    <nav class="hmi-nav-bar">
-        <a href="#sec-kpis" class="nav-link">KPI Strip</a>
-        <a href="#sec-telemetry" class="nav-link">Primary Charts</a>
-        <a href="#sec-topology" class="nav-link">Plant Mimic &amp; Protocols</a>
-        <a href="#sec-energy" class="nav-link">Energy &amp; Explainability</a>
-        <a href="#sec-iam" class="nav-link">IAM &amp; Stack</a>
-        <a href="#sec-lifecycle" class="nav-link">Incident Lifecycle</a>
-        <a href="#sec-incidents" class="nav-link">Incident Journal</a>
-        <a href="#sec-analytics" class="nav-link">Normal vs Attack</a>
-        <a href="#sec-assurance" class="nav-link">Model Assurance</a>
-        <a href="#sec-flows" class="nav-link">Sample Flows</a>
-        <a href="#sec-controls" class="nav-link highlight">Attack Console</a>
-    </nav>
+    <!-- Main Body Layout: Left Sidebar + Main Content Area -->
+    <div class="hmi-body-layout" id="hmiBodyLayout">
+
+        <!-- Left-Side Quick Navigation (Collapsible) -->
+        <aside class="hmi-sidebar" id="hmiSidebar" aria-label="Dashboard Navigation">
+
+            <!-- OVERVIEW -->
+            <div class="hmi-sidebar-group">
+                <div class="hmi-sidebar-title">OVERVIEW</div>
+                <a href="#sec-kpis" class="hmi-sidebar-link active" data-target="sec-kpis">
+                    <span class="link-icon">📊</span>
+                    <span>Security Overview</span>
+                </a>
+                <a href="#sec-status-gauges" class="hmi-sidebar-link" data-target="sec-status-gauges">
+                    <span class="link-icon">⚡</span>
+                    <span>Live KPIs</span>
+                </a>
+            </div>
+
+            <!-- MONITORING -->
+            <div class="hmi-sidebar-group">
+                <div class="hmi-sidebar-title">MONITORING</div>
+                <a href="#sec-telemetry" class="hmi-sidebar-link" data-target="sec-telemetry">
+                    <span class="link-icon">📈</span>
+                    <span>Live Network Traffic</span>
+                </a>
+                <a href="#sec-telemetry" class="hmi-sidebar-link" data-target="sec-telemetry">
+                    <span class="link-icon">🔋</span>
+                    <span>Energy Monitoring</span>
+                </a>
+                <a href="#sec-topology" class="hmi-sidebar-link" data-target="sec-topology">
+                    <span class="link-icon">🍩</span>
+                    <span>Protocol Mix</span>
+                </a>
+                <a href="#sec-flows" class="hmi-sidebar-link" data-target="sec-flows">
+                    <span class="link-icon">🌊</span>
+                    <span>Raw Flows</span>
+                </a>
+            </div>
+
+            <!-- SECURITY -->
+            <div class="hmi-sidebar-group">
+                <div class="hmi-sidebar-title">SECURITY</div>
+                <a href="#sec-xai" class="hmi-sidebar-link" data-target="sec-xai">
+                    <span class="link-icon">🔍</span>
+                    <span>AI Detection / XAI</span>
+                </a>
+                <a href="#sec-lifecycle" class="hmi-sidebar-link" data-target="sec-lifecycle">
+                    <span class="link-icon">🔄</span>
+                    <span>Incident Lifecycle</span>
+                </a>
+                <a href="#sec-incidents" class="hmi-sidebar-link" data-target="sec-incidents">
+                    <span class="link-icon">📋</span>
+                    <span>Incident Journal</span>
+                </a>
+                <a href="#sec-lifecycle" class="hmi-sidebar-link" data-target="sec-lifecycle">
+                    <span class="link-icon">🤖</span>
+                    <span>Autonomous Response</span>
+                </a>
+            </div>
+
+            <!-- IDENTITY -->
+            <div class="hmi-sidebar-group">
+                <div class="hmi-sidebar-title">IDENTITY</div>
+                <a href="#sec-iam" class="hmi-sidebar-link" data-target="sec-iam">
+                    <span class="link-icon">🛡️</span>
+                    <span>Identity &amp; Access (IAM)</span>
+                </a>
+                <a href="#sec-iam" class="hmi-sidebar-link" data-target="sec-iam">
+                    <span class="link-icon">🔐</span>
+                    <span>Zero Trust</span>
+                </a>
+            </div>
+
+            <!-- IIoT / OT -->
+            <div class="hmi-sidebar-group">
+                <div class="hmi-sidebar-title">IIoT / OT</div>
+                <a href="#sec-topology" class="hmi-sidebar-link" data-target="sec-topology">
+                    <span class="link-icon">🏭</span>
+                    <span>Plant Mimic</span>
+                </a>
+                <a href="#sec-iam" class="hmi-sidebar-link" data-target="sec-iam">
+                    <span class="link-icon">📶</span>
+                    <span>IIoT Protocol Stack</span>
+                </a>
+            </div>
+
+            <!-- MODEL -->
+            <div class="hmi-sidebar-group">
+                <div class="hmi-sidebar-title">MODEL</div>
+                <a href="#sec-assurance" class="hmi-sidebar-link" data-target="sec-assurance">
+                    <span class="link-icon">🎯</span>
+                    <span>Model Assurance</span>
+                </a>
+                <a href="#sec-assurance" class="hmi-sidebar-link" data-target="sec-assurance">
+                    <span class="link-icon">🔲</span>
+                    <span>Confusion Matrix</span>
+                </a>
+            </div>
+
+            <!-- SIMULATION -->
+            <div class="hmi-sidebar-group">
+                <div class="hmi-sidebar-title">SIMULATION</div>
+                <a href="#sec-controls" class="hmi-sidebar-link highlight" data-target="sec-controls">
+                    <span class="link-icon">⚡</span>
+                    <span>AICG Attack Simulator</span>
+                </a>
+            </div>
+
+            <!-- Sidebar Footer Status -->
+            <div class="hmi-sidebar-footer">
+                <div class="sidebar-status-tag">
+                    <span class="dot-small green"></span>
+                    <span>LIVE IN-PROCESS</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="hmi-main-area" id="hmiMainArea">
 
 
     <!-- ===================================================== -->
@@ -263,14 +373,14 @@
             <div class="panel-header">
                 <div class="panel-title-group">
                     <div class="panel-title">
-                        <span>HISTORIAN • PACKETS / SECOND</span>
+                        <span>HISTORIAN • LIVE OT NETWORK TRAFFIC</span>
                     </div>
                     <div class="panel-subtitle">
-                        Live telemetry flow • Legitimate OT baseline vs Attack surge vs Throttled rate
+                        Continuous packet flow • Legitimate OT baseline (~18 pps) vs live traffic vs simulated surge
                     </div>
                 </div>
                 <div class="panel-actions">
-                    <span class="panel-badge">1.0s Window</span>
+                    <span class="panel-badge" style="color: var(--green); border-color: rgba(16,185,129,0.3);">● LIVE INGRESS</span>
                 </div>
             </div>
 
@@ -280,54 +390,61 @@
 
             <div class="chart-legend-custom">
                 <div class="legend-item">
-                    <span class="legend-color-box" style="background: #10b981;"></span>
-                    <span>Legitimate OT (~20 pps)</span>
+                    <span class="legend-color-box" style="background: #10b981; height: 2px; border-top: 2px dashed #10b981;"></span>
+                    <span>OT Baseline (~18 pps)</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color-box" style="background: #38bdf8;"></span>
+                    <span>Live Observed Traffic</span>
                 </div>
                 <div class="legend-item">
                     <span class="legend-color-box" style="background: #f43f5e;"></span>
-                    <span>Attack Surge</span>
+                    <span>Attack Surge Condition</span>
                 </div>
                 <div class="legend-item">
-                    <span class="legend-color-box" style="background: #f59e0b;"></span>
-                    <span>Simulated Drop / Limit</span>
+                    <span class="legend-color-box" style="background: #f59e0b; height: 2px; border-top: 2px dashed #f59e0b;"></span>
+                    <span>Simulated Throttle (DRY_RUN)</span>
                 </div>
             </div>
         </div>
 
-        <!-- Primary Chart #2: AI Threat / DDoS Detection -->
+        <!-- Primary Chart #2: Resource Impact / Modelled Energy Dissipation (mW) -->
         <div class="panel">
             <div class="panel-header">
                 <div class="panel-title-group">
                     <div class="panel-title">
-                        <span>AI THREAT • DDOS PROBABILITY</span>
+                        <span>RESOURCE IMPACT • MODELLED POWER DISSIPATION (mW)</span>
                     </div>
                     <div class="panel-subtitle">
-                        Hybrid AI Classifier (Random Forest + Isolation Forest + Platt Calibration)
+                        Continuous hardware power dissipation • Derived software model (~55 mW baseline vs attack saturation)
                     </div>
                 </div>
                 <div class="panel-actions">
-                    <span class="panel-badge" style="color: var(--amber); border-color: rgba(245,158,11,0.3);">Threshold: 62%</span>
+                    <span class="panel-badge" style="color: var(--cyan); border-color: rgba(56,189,248,0.3);">MODELLED mW</span>
                 </div>
             </div>
 
             <div class="chart-stage">
-                <canvas id="threatChart"></canvas>
+                <canvas id="energyChart"></canvas>
             </div>
 
             <div class="chart-legend-custom">
                 <div class="legend-item">
-                    <span class="legend-color-box" style="background: #38bdf8;"></span>
-                    <span>DDoS Probability (%)</span>
+                    <span class="legend-color-box" style="background: #10b981; height: 2px; border-top: 2px dashed #10b981;"></span>
+                    <span>Modelled Baseline (~55 mW)</span>
                 </div>
                 <div class="legend-item">
-                    <span class="legend-color-box" style="background: #f59e0b; height: 2px; border-top: 2px dashed #f59e0b;"></span>
-                    <span>Mitigation Threshold (62%)</span>
+                    <span class="legend-color-box" style="background: #f59e0b;"></span>
+                    <span>Live Modelled Power (mW)</span>
                 </div>
                 <div class="legend-item">
-                    <span class="legend-color-box" style="background: #10b981;"></span>
-                    <span>Normal Baseline (&lt; 10%)</span>
+                    <span class="legend-color-box" style="background: #f43f5e;"></span>
+                    <span>Attack Saturation Surge</span>
                 </div>
             </div>
+
+            <!-- Hidden compatibility canvas for threatChart if referenced -->
+            <canvas id="threatChart" style="display:none;"></canvas>
         </div>
 
     </section>
@@ -670,18 +787,41 @@
     <!-- ===================================================== -->
     <section class="two-col-grid" id="sec-iam">
 
-        <!-- Column 1: Identity & Access (IAM / Trust) -->
+        <!-- Column 1: Zero-Trust IAM & Simulated MFA -->
         <div class="panel" id="iam-context-section">
             <div class="panel-header">
                 <div class="panel-title-group">
                     <div class="panel-title">
-                        <span>IDENTITY &amp; ACCESS (IAM / TRUST)</span>
+                        <span>ZERO-TRUST IAM &amp; SIMULATED MFA</span>
                     </div>
                     <div class="panel-subtitle">
-                        Zero-Trust policy: authenticated role + trust score &gt;= 40.0
+                        Zero-Trust policy: Authenticate → Authorize → Evaluate Trust (Score &ge; 40.0) → Continuously Re-evaluate
                     </div>
                 </div>
                 <div class="panel-badge" id="iamIdentityState">GOVERNED</div>
+            </div>
+
+            <!-- Zero Trust Decision Flow Bar -->
+            <div class="zt-decision-flow-bar">
+                <span class="zt-step">IDENTITY</span>
+                <span class="zt-arrow">&rarr;</span>
+                <span class="zt-step">AUTHENTICATE</span>
+                <span class="zt-arrow">&rarr;</span>
+                <span class="zt-step">SIMULATED MFA</span>
+                <span class="zt-arrow">&rarr;</span>
+                <span class="zt-step">AUTHORIZE</span>
+                <span class="zt-arrow">&rarr;</span>
+                <span class="zt-step">EVALUATE TRUST</span>
+                <span class="zt-arrow">&rarr;</span>
+                <span class="zt-step zt-final">ENFORCE &amp; RE-EVALUATE</span>
+            </div>
+
+            <div class="zt-posture-chips">
+                <span class="zt-chip">Identity: <strong>VERIFIED</strong></span>
+                <span class="zt-chip">MFA: <strong>SIMULATED</strong></span>
+                <span class="zt-chip">Access: <strong>LEAST PRIVILEGE</strong></span>
+                <span class="zt-chip">Trust Policy: <strong>SCORE &ge; 40.0</strong></span>
+                <span class="zt-chip">Posture: <strong>CONTINUOUS</strong></span>
             </div>
 
             <div class="table-responsive" style="max-height: 220px; overflow-y: auto;">
@@ -691,6 +831,7 @@
                             <th>IDENTITY</th>
                             <th>ROLE</th>
                             <th>AUTH STATUS</th>
+                            <th>SIMULATED MFA</th>
                             <th>ACCESS DECISION</th>
                             <th>TRUST SCORE</th>
                         </tr>
@@ -700,6 +841,7 @@
                             <td><strong>SENSOR-01</strong></td>
                             <td>Sensor</td>
                             <td><span class="iam-badge iam-allow">VERIFIED</span></td>
+                            <td><span class="iam-badge iam-allow">NOT REQUIRED</span></td>
                             <td><span class="iam-badge iam-allow">ALLOW</span></td>
                             <td><strong style="color: var(--green);">100.0</strong></td>
                         </tr>
@@ -707,12 +849,14 @@
                             <td><strong>SENSOR-GROUP-A</strong></td>
                             <td>Cluster</td>
                             <td><span class="iam-badge iam-allow">VERIFIED</span></td>
+                            <td><span class="iam-badge iam-allow">NOT REQUIRED</span></td>
                             <td><span class="iam-badge iam-allow">ALLOW</span></td>
                             <td><strong style="color: var(--green);">100.0</strong></td>
                         </tr>
                         <tr>
                             <td><strong>operator</strong></td>
                             <td>Operator</td>
+                            <td><span class="iam-badge iam-allow">VERIFIED</span></td>
                             <td><span class="iam-badge iam-allow">VERIFIED</span></td>
                             <td><span class="iam-badge iam-allow">ALLOW</span></td>
                             <td><strong style="color: var(--green);">100.0</strong></td>
@@ -721,6 +865,7 @@
                             <td><strong>ATK-01</strong></td>
                             <td>Untrusted</td>
                             <td><span class="iam-badge iam-deny">UNVERIFIED</span></td>
+                            <td><span class="iam-badge iam-deny">FAILED</span></td>
                             <td><span class="iam-badge iam-deny">DENIED</span></td>
                             <td><strong id="atkTrustScoreVal" style="color: var(--red);">35.0</strong></td>
                         </tr>
@@ -729,7 +874,7 @@
             </div>
 
             <div style="margin-top: 8px; font-size: 9.5px; color: var(--text-muted); line-height: 1.4;">
-                <strong>Zero-Trust Distinction:</strong> AUTH indicates local registry identity resolution (not cryptographic device attestation). ACCESS reflects operational policy decision (ALLOW/DENY). Dynamic trust score reputation (-20 flood, -15 unverified auth, +3 recovery, bounded 0..100).
+                <strong>Zero-Trust Architecture:</strong> AUTH reflects local device registry lookup. MFA is simulated per identity role. ACCESS reflects policy grant/deny. Dynamic trust reputation is continuously re-evaluated (-20 on attack, -15 auth failure, +3 on verified normal recovery; 0..100).
             </div>
 
             <!-- Hidden compatibility tags -->
@@ -738,24 +883,24 @@
             <div style="display:none;" id="iamUnknownDevices"></div>
         </div>
 
-        <!-- Column 2: IIoT Protocol Stack -->
-        <div class="panel">
+        <!-- Column 2: IIoT Protocol Stack (Corrected 5-Layer Hierarchy) -->
+        <div class="panel" id="sec-protocol-stack">
             <div class="panel-header">
                 <div class="panel-title-group">
                     <div class="panel-title">
                         <span>IIoT PROTOCOL STACK</span>
                     </div>
                     <div class="panel-subtitle">
-                        Industry 4.0 / OT embedded communications context
+                        Industry 4.0 / OT embedded communications context (RPL routing within Network layer)
                     </div>
                 </div>
-                <div class="panel-badge">RFC COMPLIANT</div>
+                <div class="panel-badge">5-LAYER OT HIERARCHY</div>
             </div>
 
             <div class="stack-table">
                 <div class="stack-layer active-ot">
                     <span class="stack-name">APPLICATION</span>
-                    <span class="stack-proto">CoAP / MQTT-SN / Modbus</span>
+                    <span class="stack-proto">CoAP / MQTT-SN / Modbus TCP</span>
                     <span class="stack-rfc">RFC 7252 / 1883 / Modbus TCP</span>
                 </div>
                 <div class="stack-layer active-ot">
@@ -765,28 +910,23 @@
                 </div>
                 <div class="stack-layer active-ot">
                     <span class="stack-name">NETWORK</span>
-                    <span class="stack-proto">IPv6 / 6LoWPAN Header Compression</span>
-                    <span class="stack-rfc">RFC 6282</span>
-                </div>
-                <div class="stack-layer active-ot">
-                    <span class="stack-name">ROUTING</span>
-                    <span class="stack-proto">RPL (Distance Vector for LLNs)</span>
-                    <span class="stack-rfc">RFC 6550</span>
+                    <span class="stack-proto">IPv6 / 6LoWPAN &bull; Routing: RPL</span>
+                    <span class="stack-rfc">RFC 6282 / RFC 6550</span>
                 </div>
                 <div class="stack-layer">
                     <span class="stack-name">DATA LINK</span>
                     <span class="stack-proto">IEEE 802.15.4 MAC (CSMA/CA)</span>
-                    <span class="stack-rfc">802.15.4e</span>
+                    <span class="stack-rfc">802.15.4e TSCH</span>
                 </div>
                 <div class="stack-layer">
                     <span class="stack-name">PHYSICAL</span>
                     <span class="stack-proto">IEEE 802.15.4 2.4 GHz Modelled PHY</span>
-                    <span class="stack-rfc">250 kbps</span>
+                    <span class="stack-rfc">250 kbps DSSS</span>
                 </div>
             </div>
 
             <div style="margin-top: 8px; font-size: 9.5px; color: var(--text-muted);">
-                Profile and window-based recognition; does not assert unsupported packet payload deep-inspection.
+                RPL distance-vector routing is formally embedded in the network layer for Low-Power and Lossy Networks (LLNs).
             </div>
         </div>
 
@@ -861,6 +1001,39 @@
             </div>
         </div>
 
+        <!-- Autonomous Pipeline Flow & Boundary Display -->
+        <div class="auto-pipeline-card">
+            <div class="pipeline-header-row">
+                <span class="pipeline-title">AUTONOMOUS MITIGATION PIPELINE &amp; OPERATIONAL BOUNDARIES</span>
+                <span class="pipeline-badge-mode" id="pipelineModeBadge">MODE: AUTO (DRY_RUN)</span>
+            </div>
+
+            <div class="pipeline-flow-steps">
+                <span class="flow-step auto-done">✓ Detection</span>
+                <span class="flow-arrow">&rarr;</span>
+                <span class="flow-step auto-done">✓ Policy Eval</span>
+                <span class="flow-arrow">&rarr;</span>
+                <span class="flow-step auto-done">✓ Response Decision</span>
+                <span class="flow-arrow">&rarr;</span>
+                <span class="flow-step auto-done">✓ Simulated Containment</span>
+                <span class="flow-arrow">&rarr;</span>
+                <span class="flow-step auto-done">✓ Recovery Verification</span>
+                <span class="flow-arrow">&rarr;</span>
+                <span class="flow-step auto-done">✓ Resolution Verification</span>
+                <span class="flow-arrow">&rarr;</span>
+                <span class="flow-step manual-req">○ Operator Audit Closure</span>
+            </div>
+
+            <div class="pipeline-boundary-checklist">
+                <span class="chk-item">✓ <strong>Detection:</strong> Automated AI hybrid inference (&lt; 38ms)</span>
+                <span class="chk-item">✓ <strong>Policy:</strong> Automated hybrid rule + anomaly response</span>
+                <span class="chk-item">✓ <strong>Mitigation:</strong> Automated in-process containment (DRY_RUN)</span>
+                <span class="chk-item">✓ <strong>Recovery:</strong> Automated streak verification (Streak &ge; 3)</span>
+                <span class="chk-item">✓ <strong>Resolution:</strong> Automated sustained recovery (Streak &ge; 5)</span>
+                <span class="chk-item manual">○ <strong>Closure:</strong> Manual operator signoff required for audit durability</span>
+            </div>
+        </div>
+
         <!-- Response Status & Controls -->
         <div class="response-controls-row">
             <div class="response-status-card">
@@ -874,8 +1047,24 @@
                         <strong id="respActiveAction">NONE</strong>
                     </div>
                     <div class="status-pill-item">
+                        <span>ACTION REASON:</span>
+                        <strong id="respActionReason" style="color: var(--text-secondary); font-weight: 500;">Baseline normal traffic envelope</strong>
+                    </div>
+                    <div class="status-pill-item">
+                        <span>CONFIDENCE / RISK:</span>
+                        <strong id="respActionConfidence">0.0% (NORMAL)</strong>
+                    </div>
+                    <div class="status-pill-item">
+                        <span>EXECUTION MODE:</span>
+                        <strong>IN-PROCESS SIMULATION</strong>
+                    </div>
+                    <div class="status-pill-item">
+                        <span>ENFORCEMENT:</span>
+                        <strong style="color: var(--cyan);">DRY_RUN / HOST FIREWALL UNTOUCHED</strong>
+                    </div>
+                    <div class="status-pill-item">
                         <span>WHITELIST:</span>
-                        <strong>SENSOR-01, SENSOR-02</strong>
+                        <strong>SENSOR-01, SENSOR-GROUP-A</strong>
                     </div>
                     <div class="status-pill-item">
                         <span>QUARANTINE:</span>
@@ -883,7 +1072,7 @@
                     </div>
                 </div>
                 <div class="safety-lock-note">
-                    🔒 <strong>Safety Boundary:</strong> All mitigations are simulated in software. Host routing, iptables, and kernel tables remain untouched.
+                    🔒 <strong>Safety Guarantee:</strong> Zero host route changes, zero iptables/nftables modifications. All mitigation logic is executed entirely within Python runtime state.
                 </div>
             </div>
 
@@ -926,8 +1115,10 @@
                     Multi-window campaign correlation: Active Runtime vs Historical Audit Records • Simulated Provenance
                 </div>
             </div>
-            <div class="panel-badge">
-                TOTAL INCIDENTS: <span id="incidentCount">0</span>
+            <div class="panel-badge-group">
+                <span class="panel-badge threat-badge" id="badgeActiveIncidents">ACTIVE: <strong id="activeIncidentCount">0</strong></span>
+                <span class="panel-badge" id="badgeHistIncidents">HISTORICAL: <strong id="historicalIncidentCount">0</strong></span>
+                <span class="panel-badge">TOTAL: <strong id="incidentCount">0</strong></span>
             </div>
         </div>
 
@@ -1264,13 +1455,13 @@
 
 
     <!-- ===================================================== -->
-    <!-- 12. CONTROLLED ATTACK CONSOLE (IN-PROCESS) -->
+    <!-- 12. AICG ATTACK SIMULATOR (CONTROLLED IN-PROCESS) -->
     <!-- ===================================================== -->
     <section class="panel" id="sec-controls">
         <div class="panel-header">
             <div class="panel-title-group">
                 <div class="panel-title">
-                    <span>CONTROLLED ATTACK / SCENARIO CONSOLE</span>
+                    <span>AICG ATTACK SIMULATOR • CONTROLLED SCENARIO CONSOLE</span>
                 </div>
                 <div class="panel-subtitle">
                     Safe in-process traffic profiles • 10 Attack Profiles + Benign Operational Baseline = 11 Profiles
@@ -1321,6 +1512,8 @@
         </div>
     </section>
 
+    </main><!-- /#hmiMainArea -->
+    </div><!-- /#hmiBodyLayout -->
 
     <!-- ===================================================== -->
     <!-- FOOTER & SAFETY DISCLAIMER -->

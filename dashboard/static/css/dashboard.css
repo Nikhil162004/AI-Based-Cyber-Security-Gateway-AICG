@@ -317,43 +317,178 @@ body {
     border-color: var(--red);
     background: rgba(244, 63, 94, 0.2);
 }
-
-/* Quick Navigation Anchor Bar */
-.hmi-nav-bar {
-    display: flex;
+/* Quick Navigation Sidebar Toggle Button in Header */
+.btn-sidebar-toggle {
+    background: var(--bg-panel-elevated);
+    border: 1px solid var(--border-medium);
+    color: var(--cyan);
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    display: inline-flex;
     align-items: center;
     gap: 6px;
-    overflow-x: auto;
-    white-space: nowrap;
-    padding: 7px 12px;
-    background: var(--bg-surface);
+    transition: all 0.2s ease;
+    user-select: none;
+}
+.btn-sidebar-toggle:hover {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: var(--border-bright);
+    color: #fff;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+}
+.btn-sidebar-toggle .btn-toggle-label {
+    font-size: 10px;
+    letter-spacing: 0.8px;
+}
+
+/* ==========================================================================
+   HMI BODY LAYOUT: COLLAPSIBLE SIDEBAR + MAIN WORKSPACE AREA
+   ========================================================================== */
+.hmi-body-layout {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+    position: relative;
+    width: 100%;
+}
+
+/* Collapsible Left-Side Quick Navigation */
+.hmi-sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    position: sticky;
+    top: calc(var(--hmi-header-height) + 12px);
+    max-height: calc(100vh - var(--hmi-header-height) - 24px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: var(--bg-panel);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
-    margin-bottom: 14px;
-    box-shadow: var(--shadow-card);
+    padding: 12px 8px;
+    box-shadow: var(--shadow-panel);
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                padding 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.2s ease,
+                transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 90;
+    scrollbar-width: thin;
 }
-.hmi-nav-bar .nav-link {
+
+.hmi-sidebar.collapsed {
+    width: 0;
+    padding: 0;
+    margin: 0;
+    border: none;
+    opacity: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.hmi-sidebar-group {
+    margin-bottom: 12px;
+}
+.hmi-sidebar-group:last-of-type {
+    margin-bottom: 6px;
+}
+.hmi-sidebar-title {
+    font-size: 9.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1.1px;
+    color: var(--text-muted);
+    padding: 4px 8px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    margin-bottom: 4px;
+}
+.hmi-sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
     color: var(--text-secondary);
+    text-decoration: none;
     font-size: 11px;
     font-weight: 600;
-    text-decoration: none;
-    padding: 4px 9px;
-    border-radius: var(--radius-sm);
-    border: 1px solid transparent;
-    transition: all 0.15s ease;
+    transition: all 0.18s ease;
+    border-left: 2px solid transparent;
+    margin-bottom: 2px;
+    white-space: nowrap;
 }
-.hmi-nav-bar .nav-link:hover {
+.hmi-sidebar-link:hover {
+    background: rgba(56, 189, 248, 0.08);
     color: var(--cyan);
-    background: var(--cyan-dim);
-    border-color: rgba(56, 189, 248, 0.3);
 }
-.hmi-nav-bar .nav-link.highlight {
-    color: var(--red);
-    border-color: rgba(244, 63, 94, 0.35);
-    background: rgba(244, 63, 94, 0.08);
+.hmi-sidebar-link.active {
+    background: rgba(56, 189, 248, 0.14);
+    color: #fff;
+    border-left-color: var(--cyan);
+    box-shadow: inset 1px 0 0 var(--cyan);
+    font-weight: 700;
 }
-.hmi-nav-bar .nav-link.highlight:hover {
-    background: rgba(244, 63, 94, 0.18);
+.hmi-sidebar-link .link-icon {
+    font-size: 12px;
+    width: 16px;
+    text-align: center;
+    opacity: 0.85;
+    flex-shrink: 0;
+}
+.hmi-sidebar-link.highlight {
+    color: var(--amber);
+}
+.hmi-sidebar-link.highlight:hover {
+    background: rgba(245, 158, 11, 0.12);
+    color: #fbbf24;
+}
+.hmi-sidebar-link.highlight.active {
+    background: rgba(245, 158, 11, 0.16);
+    color: #fff;
+    border-left-color: var(--amber);
+}
+.hmi-sidebar-footer {
+    padding-top: 10px;
+    margin-top: 10px;
+    border-top: 1px solid var(--border-subtle);
+    text-align: center;
+}
+.sidebar-status-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
+    background: var(--bg-surface);
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+}
+.dot-small {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+.dot-small.green {
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+}
+
+/* Main Workspace Area */
+.hmi-main-area {
+    flex: 1 1 0%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+/* Legacy Quick Navigation Anchor Bar (Preserved for compatibility) */
+.hmi-nav-bar {
+    display: none;
 }
 
 /* ==========================================================================
@@ -1042,6 +1177,61 @@ body {
 /* ==========================================================================
    IAM & PROTOCOL STACK
    ========================================================================== */
+/* Zero Trust Decision Flow Bar & Posture Chips */
+.zt-decision-flow-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+.zt-step {
+    padding: 2px 7px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    color: var(--cyan);
+}
+.zt-step.zt-final {
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.4);
+    color: var(--green);
+    font-weight: 700;
+}
+.zt-arrow {
+    color: var(--amber);
+    font-weight: bold;
+    font-size: 11px;
+}
+.zt-posture-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+.zt-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+}
+.zt-chip strong {
+    color: var(--cyan);
+}
+
 .iam-table-compact {
     width: 100%;
     border-collapse: collapse;
@@ -1221,6 +1411,131 @@ body {
 }
 .lifecycle-normal-indicator.active {
     display: block;
+}
+
+/* Autonomous Mitigation Pipeline & Operational Boundaries */
+.auto-pipeline-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    margin-top: 12px;
+    margin-bottom: 12px;
+}
+.pipeline-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.pipeline-title {
+    font-size: 10.5px;
+    font-weight: 800;
+    color: var(--cyan);
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+}
+.pipeline-badge-mode {
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: var(--radius-sm);
+    background: var(--cyan-dim);
+    color: var(--cyan);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+}
+.pipeline-flow-steps {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 8px 0;
+}
+.flow-step {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    font-weight: 700;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+}
+.flow-step.auto-done {
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.35);
+    color: var(--green);
+}
+.flow-step.active {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: var(--cyan);
+    color: #fff;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.25);
+}
+.flow-step.pending {
+    opacity: 0.6;
+}
+.flow-step.manual-req {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.4);
+    color: var(--amber);
+}
+.flow-step.manual-req.active {
+    background: rgba(245, 158, 11, 0.25);
+    color: #fff;
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+    animation: pulseGlow 1.5s infinite;
+}
+.flow-arrow {
+    color: var(--text-muted);
+    font-size: 10px;
+}
+.pipeline-boundary-checklist {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+.chk-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Incident Active vs Historical Counter Badges */
+.incident-count-badges {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.inc-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    border-radius: var(--radius-sm);
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+}
+.inc-badge.active-inc {
+    background: rgba(244, 63, 94, 0.12);
+    border: 1px solid rgba(244, 63, 94, 0.35);
+    color: var(--red);
+}
+.inc-badge.historical-inc {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
 }
 
 .response-controls-row {
@@ -1663,9 +1978,29 @@ body {
     color: var(--text-secondary);
 }
 
-/* ==========================================================================
-   RESPONSIVE DESIGN BREAKPOINTS (PREVENT PREMATURE COLLAPSE AT 900-1440PX)
-   ========================================================================== */
+@media (max-width: 1100px) {
+    .hmi-sidebar {
+        position: fixed;
+        left: 0;
+        top: var(--hmi-header-height);
+        height: calc(100vh - var(--hmi-header-height));
+        max-height: 100vh;
+        z-index: 1000;
+        background: #0d1627;
+        box-shadow: 10px 0 30px rgba(0, 0, 0, 0.85);
+        transform: translateX(-105%);
+        width: 250px;
+        opacity: 1;
+    }
+    .hmi-sidebar.mobile-open {
+        transform: translateX(0);
+        pointer-events: auto;
+    }
+    .hmi-body-layout {
+        display: block;
+    }
+}
+
 @media (max-width: 900px) {
     :root {
         --hmi-header-height: 120px;

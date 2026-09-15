@@ -13,27 +13,29 @@ class Identity:
     authenticated: bool = True
     trust_score: float = 100.0
     failures: int = 0
+    mfa_status: str = "NOT_REQUIRED"  # Simulated MFA: NOT_REQUIRED, REQUIRED, VERIFIED, FAILED
 
 
 @dataclass
 class IAMService:
-    """Zero-trust IAM and dynamic reputation engine.
+    """Zero-trust IAM, simulated MFA, and dynamic reputation engine.
 
-    Enforces distinct authentication (who the entity is), authorization (access control),
-    and dynamic trust reputation (bounded 0..100).
+    Enforces distinct authentication (who the entity is), simulated MFA verification,
+    authorization (access control), and dynamic trust reputation (bounded 0..100).
     """
 
     identities: dict[str, Identity] = field(default_factory=lambda: {
-        "SENSOR-01": Identity("SENSOR-01", "sensor", authenticated=True, trust_score=100.0),
-        "SENSOR-GROUP-A": Identity("SENSOR-GROUP-A", "sensor", authenticated=True, trust_score=100.0),
-        "ATK-01": Identity("ATK-01", "untrusted", authenticated=False, trust_score=35.0),
-        "operator": Identity("operator", "operator", authenticated=True, trust_score=100.0),
+        "SENSOR-01": Identity("SENSOR-01", "sensor", authenticated=True, trust_score=100.0, mfa_status="NOT_REQUIRED"),
+        "SENSOR-GROUP-A": Identity("SENSOR-GROUP-A", "sensor", authenticated=True, trust_score=100.0, mfa_status="NOT_REQUIRED"),
+        "ATK-01": Identity("ATK-01", "untrusted", authenticated=False, trust_score=35.0, mfa_status="FAILED"),
+        "operator": Identity("operator", "operator", authenticated=True, trust_score=100.0, mfa_status="VERIFIED"),
     })
 
     def get(self, identity: str | None) -> Identity:
         name = identity or "UNKNOWN"
         if name not in self.identities:
-            self.identities[name] = Identity(name, "unknown", authenticated=False, trust_score=45.0)
+            mfa = "FAILED" if name.startswith("ATK") else ("REQUIRED" if "operator" in name.lower() else "NOT_REQUIRED")
+            self.identities[name] = Identity(name, "unknown", authenticated=False, trust_score=45.0, mfa_status=mfa)
         return self.identities[name]
 
     def access(self, identity: str | None, resource: str = "gateway:telemetry") -> dict[str, Any]:
@@ -55,6 +57,7 @@ class IAMService:
             "identity": item.identity,
             "role": item.role,
             "authentication_status": "AUTHENTICATED" if item.authenticated else "FAILED_OR_UNVERIFIED",
+            "mfa_status": item.mfa_status,
             "authorization_status": "AUTHORIZED" if allowed else "DENIED",
             "access_request": resource,
             "decision": "ALLOW" if allowed else "DENY",
