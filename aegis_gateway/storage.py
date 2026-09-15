@@ -263,7 +263,7 @@ class GatewayStore:
         query, params = "SELECT * FROM trust_history", []
         if identity:
             query += " WHERE identity=?"; params.append(identity)
-        query += " ORDER BY timestamp DESC LIMIT ?"; params.append(max(1, min(limit, 5000)))
+        query += " ORDER BY timestamp DESC, rowid DESC LIMIT ?"; params.append(max(1, min(limit, 5000)))
         with self.connection() as con:
             rows = con.execute(query, params).fetchall()
         return [dict(row) for row in reversed(rows)]

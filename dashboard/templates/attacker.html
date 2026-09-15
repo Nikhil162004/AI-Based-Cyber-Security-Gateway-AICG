@@ -3,209 +3,364 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AEGIS-OT • Controlled Attack Simulation Console</title>
+    <title>AEGIS-OT • Industrial Threat Injection Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/dashboard.css">
     <style>
-        :root {
-            --bg-primary: #0a0f18;
-            --bg-secondary: #111a2e;
-            --bg-card: #152238;
-            --border: #1e3557;
-            --accent-red: #ff3b5c;
-            --accent-green: #00e5a3;
-            --accent-blue: #35d4ff;
-            --accent-yellow: #ffb830;
-            --text-main: #e2ecf8;
-            --text-muted: #7b93b2;
-        }
         body {
-            background-color: var(--bg-primary);
-            color: var(--text-main);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-secondary);
+            font-family: var(--font-ui);
             margin: 0;
-            padding: 16px;
-            box-sizing: border-box;
+            padding: 24px 16px;
             display: flex;
             justify-content: center;
+            min-height: 100vh;
+            box-sizing: border-box;
         }
-        .container {
+        .console-container {
             width: 100%;
-            max-width: 680px;
+            max-width: 760px;
             display: flex;
             flex-direction: column;
             gap: 16px;
         }
-        .header {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 18px 20px;
-            text-align: center;
-        }
-        .header h1 {
-            font-size: 1.25rem;
-            margin: 0 0 6px 0;
-            letter-spacing: 1px;
-            color: var(--accent-blue);
-        }
-        .header .subtitle {
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .banner-safety {
-            background: rgba(255, 184, 48, 0.12);
-            border: 1px solid rgba(255, 184, 48, 0.4);
-            color: var(--accent-yellow);
-            padding: 10px 14px;
-            border-radius: 8px;
-            font-size: 0.75rem;
-            line-height: 1.4;
+        .console-header {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 20px 24px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: space-between;
+            position: relative;
         }
-        .card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 18px 20px;
+        .console-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--red), var(--amber), var(--cyan));
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
         }
-        .card-title {
-            font-size: 0.85rem;
-            text-transform: uppercase;
+        .console-title-group h1 {
+            font-size: 1.25rem;
+            margin: 0 0 4px 0;
             letter-spacing: 1px;
+            color: var(--text-primary);
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .console-title-group .subtitle {
+            font-size: 0.78rem;
             color: var(--text-muted);
-            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            font-family: var(--font-mono);
+        }
+        .threat-pill {
+            font-size: 0.72rem;
+            font-family: var(--font-mono);
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 999px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .threat-pill-normal {
+            background: var(--green-dim);
+            color: var(--green);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+        }
+        .threat-pill-critical {
+            background: var(--red-dim);
+            color: var(--red);
+            border: 1px solid rgba(244, 63, 94, 0.4);
+            box-shadow: var(--red-glow);
+        }
+        .back-nav a {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            color: var(--cyan);
+            text-decoration: none;
+            padding: 8px 14px;
+            border-radius: var(--radius-md);
+            font-size: 0.8rem;
+            font-family: var(--font-mono);
             font-weight: 600;
+            transition: all 0.2s;
+        }
+        .back-nav a:hover {
+            border-color: var(--cyan);
+            background: var(--bg-panel-elevated);
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+        }
+        .banner-safety-console {
+            background: var(--amber-dim);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            color: var(--amber);
+            padding: 12px 16px;
+            border-radius: var(--radius-md);
+            font-size: 0.78rem;
+            line-height: 1.5;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .banner-safety-console .warn-icon {
+            font-size: 1.1rem;
+            line-height: 1;
+        }
+        .console-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 20px 24px;
+        }
+        .console-card-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--cyan);
+            margin-bottom: 16px;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
         .form-group {
-            margin-bottom: 14px;
+            margin-bottom: 18px;
         }
         label {
-            display: block;
+            display: flex;
+            justify-content: space-between;
             font-size: 0.8rem;
             color: var(--text-muted);
-            margin-bottom: 6px;
+            margin-bottom: 8px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.6px;
+            font-family: var(--font-mono);
+        }
+        label span.val-highlight {
+            color: var(--cyan);
+            font-weight: bold;
         }
         select, input[type="range"] {
             width: 100%;
             box-sizing: border-box;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            color: var(--text-main);
-            padding: 10px 12px;
-            border-radius: 8px;
-            font-size: 0.9rem;
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            padding: 11px 14px;
+            border-radius: var(--radius-md);
+            font-size: 0.88rem;
+            font-family: var(--font-ui);
+            outline: none;
+            transition: border-color 0.2s;
         }
-        .slider-value {
+        select:focus {
+            border-color: var(--cyan);
+        }
+        .slider-scale-labels {
             display: flex;
             justify-content: space-between;
-            font-size: 0.8rem;
-            color: var(--accent-blue);
-            margin-top: 4px;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+            margin-top: 6px;
         }
-        .btn-grid {
+        .quick-presets {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .preset-chip {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            font-family: var(--font-mono);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .preset-chip:hover {
+            border-color: var(--cyan);
+            color: var(--text-primary);
+            background: var(--bg-panel-elevated);
+        }
+        .preset-chip.active {
+            border-color: var(--red);
+            color: var(--red);
+            background: var(--red-dim);
+        }
+        .btn-console-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 12px;
-            margin-top: 16px;
+            margin-top: 20px;
         }
-        button {
-            cursor: pointer;
-            padding: 14px;
-            border-radius: 8px;
+        .btn-console-grid button {
+            padding: 13px 18px;
+            border-radius: var(--radius-md);
             font-weight: 700;
-            font-size: 0.85rem;
-            letter-spacing: 0.5px;
-            border: none;
-            transition: all 0.2s ease;
+            font-size: 0.82rem;
+            letter-spacing: 0.8px;
+            cursor: pointer;
+            border: 1px solid transparent;
             text-transform: uppercase;
+            font-family: var(--font-mono);
+            transition: all 0.2s;
         }
-        .btn-launch {
-            background: linear-gradient(135deg, #ff3b5c, #d91c3d);
+        .btn-launch-attack {
+            background: linear-gradient(135deg, #dc2626, #b91c1c);
             color: #ffffff;
+            box-shadow: 0 2px 10px rgba(220, 38, 38, 0.25);
         }
-        .btn-launch:hover {
-            background: linear-gradient(135deg, #ff5471, #ff3b5c);
-            box-shadow: 0 0 16px rgba(255, 59, 92, 0.4);
+        .btn-launch-attack:hover {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            box-shadow: var(--red-glow);
         }
-        .btn-stop {
-            background: #253957;
-            color: #e2ecf8;
-            border: 1px solid var(--border);
-        }
-        .btn-stop:hover {
-            background: #2f486e;
-        }
-        .btn-normal {
-            grid-column: span 2;
-            background: rgba(0, 229, 163, 0.15);
-            color: var(--accent-green);
-            border: 1px solid var(--accent-green);
-        }
-        .btn-normal:hover {
-            background: rgba(0, 229, 163, 0.25);
-        }
-        .status-box {
+        .btn-stop-attack {
             background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 12px 14px;
+            color: var(--text-primary);
+            border-color: var(--border-medium);
+        }
+        .btn-stop-attack:hover {
+            background: var(--bg-panel-elevated);
+            border-color: var(--cyan);
+        }
+        .btn-reset-normal {
+            grid-column: span 2;
+            background: var(--green-dim);
+            color: var(--green);
+            border: 1px solid rgba(16, 185, 129, 0.35);
+        }
+        .btn-reset-normal:hover {
+            background: rgba(16, 185, 129, 0.22);
+            border-color: var(--green);
+            box-shadow: var(--green-glow);
+        }
+        .status-table {
+            width: 100%;
+            border-collapse: collapse;
             font-size: 0.8rem;
-            display: flex;
-            flex-direction: column;
+            font-family: var(--font-mono);
+        }
+        .status-table tr {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .status-table tr:last-child {
+            border-bottom: none;
+        }
+        .status-table td {
+            padding: 9px 4px;
+        }
+        .status-table td.label-col {
+            color: var(--text-muted);
+            width: 40%;
+        }
+        .status-table td.value-col {
+            color: var(--text-primary);
+            text-align: right;
+            font-weight: 600;
+        }
+        .val-badge-active {
+            color: var(--red);
+            display: inline-flex;
+            align-items: center;
             gap: 6px;
         }
-        .status-row {
-            display: flex;
-            justify-content: space-between;
+        .val-badge-active::before {
+            content: '';
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--red);
+            box-shadow: 0 0 8px var(--red);
+            animation: pulse-red 1.5s infinite;
         }
-        .status-val-active {
-            color: var(--accent-red);
-            font-weight: bold;
+        .val-badge-idle {
+            color: var(--green);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
-        .status-val-idle {
-            color: var(--accent-green);
-            font-weight: bold;
+        .val-badge-idle::before {
+            content: '';
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--green);
         }
-        .nav-link {
-            text-align: center;
-            margin-top: 8px;
-        }
-        .nav-link a {
-            color: var(--accent-blue);
-            text-decoration: none;
-            font-size: 0.85rem;
-        }
-        .nav-link a:hover {
-            text-decoration: underline;
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>AEGIS-OT ATTACK SIMULATOR</h1>
-            <div class="subtitle">Controlled IIoT Laboratory Demonstration Console</div>
+    <div class="console-container">
+        <!-- Header -->
+        <header class="console-header">
+            <div class="console-title-group">
+                <h1>
+                    <span>AEGIS-OT ATTACK SIMULATOR</span>
+                    <span class="threat-pill threat-pill-normal" id="headerSimBadge">LAB READY</span>
+                </h1>
+                <div class="subtitle">Industrial Testbed • 11 Scenario Threat Injection Suite</div>
+            </div>
+            <div class="back-nav">
+                <a href="/">← Return to Main HMI</a>
+            </div>
+        </header>
+
+        <!-- Safety Banner -->
+        <div class="banner-safety-console">
+            <span class="warn-icon">⚠</span>
+            <div>
+                <strong>STRICT LAB SAFETY BOUNDARY:</strong>
+                All 11 scenarios execute via in-process generator pipelines. Zero packets are emitted onto external networks, no production PLCs are disrupted, and operating system firewall / iptables rules remain untouched.
+            </div>
         </div>
 
-        <div class="banner-safety">
-            <strong>⚠ SAFETY BOUNDARY:</strong>
-            <span>All profiles are safe in-process models. No network packets are transmitted, external hosts are not targeted, and firewall rules are NOT modified.</span>
-        </div>
+        <!-- Simulation Configuration Card -->
+        <div class="console-card">
+            <div class="console-card-title">
+                <span>Threat Scenario Configuration</span>
+                <span style="color: var(--text-dim); font-size: 0.7rem;">ADAPTER: IN-PROCESS</span>
+            </div>
 
-        <div class="card">
-            <div class="card-title">Select Attack Scenario</div>
+            <!-- Quick Scenario Presets -->
+            <div class="quick-presets">
+                <div class="preset-chip active" onclick="selectPreset('udp_flood')">UDP Flood (CoAP)</div>
+                <div class="preset-chip" onclick="selectPreset('syn_flood')">TCP SYN Flood</div>
+                <div class="preset-chip" onclick="selectPreset('burst_exhaustion')">Burst Load</div>
+                <div class="preset-chip" onclick="selectPreset('slow_rate')">Slow-Rate Exhaustion</div>
+                <div class="preset-chip" onclick="selectPreset('modbus_anomaly')">Modbus Anomaly</div>
+                <div class="preset-chip" onclick="selectPreset('mixed_vector')">Mixed Multi-Vector</div>
+            </div>
+
             <div class="form-group">
-                <label for="scenarioSelect">Attack Profile</label>
-                <select id="scenarioSelect">
-                    <option value="udp_flood">UDP Flood — CoAP / High-Rate Ingestion</option>
-                    <option value="syn_flood">TCP SYN Flood — Connection Starvation</option>
-                    <option value="icmp_flood">ICMP Flood — Ping / RPL Storm</option>
+                <label for="scenarioSelect">
+                    <span>Attack Scenario Profile (11 Profiles)</span>
+                </label>
+                <select id="scenarioSelect" onchange="updatePresetChips()">
+                    <option value="udp_flood">UDP Flood — CoAP / High-Rate Ingestion Surge</option>
+                    <option value="syn_flood">TCP SYN Flood — Connection Starvation Vector</option>
+                    <option value="icmp_flood">ICMP Flood — Ping / RPL Storm Stress</option>
                     <option value="burst_exhaustion">Burst Traffic Exhaustion — Sharp Load Spikes</option>
                     <option value="slow_rate">Slow-Rate Exhaustion — Persistent Connections</option>
                     <option value="coap_anomaly">CoAP Anomaly — Port 5683 Resource Abuse</option>
@@ -213,13 +368,17 @@
                     <option value="rpl_anomaly">RPL / 6LoWPAN Anomaly — Control Plane Anomaly</option>
                     <option value="modbus_anomaly">Modbus-Style Anomaly — Port 502 Industrial Flow</option>
                     <option value="mixed_vector">Mixed Multi-Vector — UDP + TCP + ICMP Compound</option>
+                    <option value="normal">Normal IIoT Rhythm — Baseline Production Telemetry</option>
                 </select>
             </div>
 
             <div class="form-group">
-                <label for="intensityRange">Intensity Level: <span id="intensityVal">3</span> (x1-x6 Scale)</label>
-                <input type="range" id="intensityRange" min="1" max="6" value="3" oninput="document.getElementById('intensityVal').innerText=this.value">
-                <div class="slider-value">
+                <label for="intensityRange">
+                    <span>Intensity Level</span>
+                    <span class="val-highlight" id="intensityVal">3 (Standard Lab)</span>
+                </label>
+                <input type="range" id="intensityRange" min="1" max="6" value="3" oninput="onIntensityChange(this.value)">
+                <div class="slider-scale-labels">
                     <span>1: Subtle / Stealth</span>
                     <span>3: Standard Lab</span>
                     <span>6: Maximum Saturation</span>
@@ -227,62 +386,99 @@
             </div>
 
             <div class="form-group">
-                <label for="durationRange">Duration: <span id="durationVal">10</span> seconds</label>
-                <input type="range" id="durationRange" min="3" max="30" value="10" oninput="document.getElementById('durationVal').innerText=this.value">
-                <div class="slider-value">
-                    <span>3 sec</span>
-                    <span>15 sec</span>
-                    <span>30 sec</span>
+                <label for="durationRange">
+                    <span>Injection Duration</span>
+                    <span class="val-highlight" id="durationVal">10s</span>
+                </label>
+                <input type="range" id="durationRange" min="3" max="30" value="10" oninput="document.getElementById('durationVal').innerText=this.value + 's'">
+                <div class="slider-scale-labels">
+                    <span>3 sec (Rapid Test)</span>
+                    <span>10 sec (Recommended)</span>
+                    <span>30 sec (Extended Soak)</span>
                 </div>
             </div>
 
-            <div class="btn-grid">
-                <button class="btn-launch" id="btnLaunch" onclick="launchSimulation()">Launch Simulation</button>
-                <button class="btn-stop" id="btnStop" onclick="stopSimulation()">Stop Simulation</button>
-                <button class="btn-normal" onclick="setNormalBaseline()">Reset to Normal Rhythm</button>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-title">Live Simulator Status</div>
-            <div class="status-box">
-                <div class="status-row">
-                    <span>Simulator Engine:</span>
-                    <span id="simEngineStatus" class="status-val-idle">IDLE / NORMAL</span>
-                </div>
-                <div class="status-row">
-                    <span>Active Scenario:</span>
-                    <span id="simActiveScenario">None</span>
-                </div>
-                <div class="status-row">
-                    <span>Target Interface:</span>
-                    <span>GATEWAY-01 (In-Process Adapter)</span>
-                </div>
-                <div class="status-row">
-                    <span>Network Transmission:</span>
-                    <span style="color: var(--accent-green)">DISABLED (Safe Local Profile)</span>
-                </div>
-                <div class="status-row">
-                    <span>Host Enforcement:</span>
-                    <span style="color: var(--text-muted)">SIMULATED / DRY-RUN</span>
-                </div>
+            <div class="btn-console-grid">
+                <button class="btn-launch-attack" id="btnLaunch" onclick="launchSimulation()">⚡ Launch Threat Profile</button>
+                <button class="btn-stop-attack" id="btnStop" onclick="stopSimulation()">⏹ Terminate Simulation</button>
+                <button class="btn-reset-normal" onclick="setNormalBaseline()">↺ Restore Normal OT Baseline Rhythm</button>
             </div>
         </div>
 
-        <div class="nav-link">
-            <a href="/">← Return to Main Gateway Operator HMI</a>
+        <!-- Live Status Card -->
+        <div class="console-card">
+            <div class="console-card-title">
+                <span>Live Simulator Status & Boundary Checks</span>
+                <span id="liveStatusBadge" class="val-badge-idle">IDLE</span>
+            </div>
+            <table class="status-table">
+                <tr>
+                    <td class="label-col">Generator Engine</td>
+                    <td class="value-col" id="simEngineStatus">IDLE / NORMAL</td>
+                </tr>
+                <tr>
+                    <td class="label-col">Active Scenario Profile</td>
+                    <td class="value-col" id="simActiveScenario">None</td>
+                </tr>
+                <tr>
+                    <td class="label-col">Injection Interface</td>
+                    <td class="value-col" style="color: var(--cyan);">GATEWAY-01 (In-Process Adapter)</td>
+                </tr>
+                <tr>
+                    <td class="label-col">Physical Network Egress</td>
+                    <td class="value-col" style="color: var(--green);">DISABLED (Safe In-Process Model)</td>
+                </tr>
+                <tr>
+                    <td class="label-col">Host OS Firewall Mutability</td>
+                    <td class="value-col" style="color: var(--text-muted);">LOCKED / ZERO MODIFICATION</td>
+                </tr>
+                <tr>
+                    <td class="label-col">Endpoint Contract</td>
+                    <td class="value-col" style="color: var(--cyan); font-size: 0.75rem;">POST /api/simulations/start</td>
+                </tr>
+            </table>
         </div>
     </div>
 
     <script>
+        function onIntensityChange(val) {
+            const labels = {
+                "1": "1 (Subtle / Stealth)",
+                "2": "2 (Light Surge)",
+                "3": "3 (Standard Lab)",
+                "4": "4 (Aggressive Burst)",
+                "5": "5 (Severe Saturation)",
+                "6": "6 (Maximum Saturation)"
+            };
+            document.getElementById("intensityVal").innerText = labels[val] || val;
+        }
+
+        function selectPreset(scenarioId) {
+            document.getElementById("scenarioSelect").value = scenarioId;
+            updatePresetChips();
+        }
+
+        function updatePresetChips() {
+            const current = document.getElementById("scenarioSelect").value;
+            document.querySelectorAll(".preset-chip").forEach(chip => {
+                if (chip.textContent.toLowerCase().includes(current.replace("_", " "))) {
+                    chip.classList.add("active");
+                } else {
+                    chip.classList.remove("active");
+                }
+            });
+        }
+
         async function launchSimulation() {
             const scenario = document.getElementById("scenarioSelect").value;
             const intensity = parseInt(document.getElementById("intensityRange").value, 10);
             const duration = parseInt(document.getElementById("durationRange").value, 10);
             const statusEl = document.getElementById("simEngineStatus");
             const scenarioEl = document.getElementById("simActiveScenario");
+            const liveBadge = document.getElementById("liveStatusBadge");
+            const headerBadge = document.getElementById("headerSimBadge");
 
-            statusEl.textContent = "STARTING...";
+            statusEl.textContent = "INITIALIZING...";
             try {
                 const res = await fetch("/api/simulations/start", {
                     method: "POST",
@@ -291,22 +487,37 @@
                 });
                 const data = await res.json();
                 if (res.ok) {
-                    statusEl.textContent = "SIMULATING (ATTACK PROFILE)";
-                    statusEl.className = "status-val-active";
+                    if (scenario === "normal") {
+                        statusEl.textContent = "NORMAL RHYTHM INJECTED";
+                        statusEl.style.color = "var(--green)";
+                        liveBadge.className = "val-badge-idle";
+                        liveBadge.textContent = "NORMAL";
+                        headerBadge.className = "threat-pill threat-pill-normal";
+                        headerBadge.textContent = "NORMAL";
+                    } else {
+                        statusEl.textContent = "SIMULATING (" + scenario.toUpperCase() + ")";
+                        statusEl.style.color = "var(--red)";
+                        liveBadge.className = "val-badge-active";
+                        liveBadge.textContent = "ACTIVE ATTACK";
+                        headerBadge.className = "threat-pill threat-pill-critical";
+                        headerBadge.textContent = "ATTACK INJECTED";
+                    }
                     scenarioEl.textContent = `${scenario} (Intensity ${intensity}, ${duration}s)`;
                 } else {
-                    statusEl.textContent = "ERROR: " + (data.error || "Failed");
-                    statusEl.className = "status-val-active";
+                    statusEl.textContent = "ERROR: " + (data.error || "Simulation rejected");
+                    statusEl.style.color = "var(--red)";
                 }
             } catch (err) {
-                statusEl.textContent = "FETCH FAILED";
-                statusEl.className = "status-val-active";
+                statusEl.textContent = "NETWORK ERROR";
+                statusEl.style.color = "var(--red)";
             }
         }
 
         async function stopSimulation() {
             const statusEl = document.getElementById("simEngineStatus");
             const scenarioEl = document.getElementById("simActiveScenario");
+            const liveBadge = document.getElementById("liveStatusBadge");
+            const headerBadge = document.getElementById("headerSimBadge");
             try {
                 await fetch("/api/simulations/stop", {
                     method: "POST",
@@ -314,8 +525,12 @@
                     body: JSON.stringify({})
                 });
                 statusEl.textContent = "STOPPED / IDLE";
-                statusEl.className = "status-val-idle";
+                statusEl.style.color = "var(--green)";
+                liveBadge.className = "val-badge-idle";
+                liveBadge.textContent = "IDLE";
                 scenarioEl.textContent = "None";
+                headerBadge.className = "threat-pill threat-pill-normal";
+                headerBadge.textContent = "LAB READY";
             } catch (err) {
                 statusEl.textContent = "STOP FAILED";
             }
@@ -329,9 +544,11 @@
                     headers: {"Content-Type": "application/json"},
                     body: JSON.stringify({ scenario_id: "normal", intensity: 1, duration: 15 })
                 });
-                document.getElementById("simEngineStatus").textContent = "NORMAL RHYTHM";
-                document.getElementById("simEngineStatus").className = "status-val-idle";
-                document.getElementById("simActiveScenario").textContent = "Normal IIoT Rhythm";
+                document.getElementById("simEngineStatus").textContent = "NORMAL RHYTHM ACTIVE";
+                document.getElementById("simEngineStatus").style.color = "var(--green)";
+                document.getElementById("simActiveScenario").textContent = "normal (Intensity 1, 15s)";
+                document.getElementById("liveStatusBadge").className = "val-badge-idle";
+                document.getElementById("liveStatusBadge").textContent = "NORMAL";
             } catch (err) {
                 console.error(err);
             }
@@ -340,28 +557,45 @@
         async function pollStatus() {
             try {
                 const res = await fetch("/api/status");
+                if (!res.ok) return;
                 const data = await res.json();
                 const active = data.active_simulations || [];
                 const statusEl = document.getElementById("simEngineStatus");
                 const scenarioEl = document.getElementById("simActiveScenario");
+                const liveBadge = document.getElementById("liveStatusBadge");
+                const headerBadge = document.getElementById("headerSimBadge");
+
                 if (active.length > 0) {
                     const sim = active[0];
                     if (sim.scenario_id === "normal") {
                         statusEl.textContent = "NORMAL RHYTHM";
-                        statusEl.className = "status-val-idle";
+                        statusEl.style.color = "var(--green)";
+                        liveBadge.className = "val-badge-idle";
+                        liveBadge.textContent = "NORMAL";
+                        headerBadge.className = "threat-pill threat-pill-normal";
+                        headerBadge.textContent = "NORMAL";
                     } else {
-                        statusEl.textContent = "SIMULATING (ATTACK PROFILE)";
-                        statusEl.className = "status-val-active";
+                        statusEl.textContent = "SIMULATING (" + sim.scenario_id.toUpperCase() + ")";
+                        statusEl.style.color = "var(--red)";
+                        liveBadge.className = "val-badge-active";
+                        liveBadge.textContent = "ACTIVE ATTACK";
+                        headerBadge.className = "threat-pill threat-pill-critical";
+                        headerBadge.textContent = "ATTACK INJECTED";
                     }
                     scenarioEl.textContent = `${sim.scenario_id} (Intensity ${sim.intensity}, ${sim.windows} windows)`;
                 } else {
                     statusEl.textContent = "IDLE";
-                    statusEl.className = "status-val-idle";
+                    statusEl.style.color = "var(--green)";
+                    liveBadge.className = "val-badge-idle";
+                    liveBadge.textContent = "IDLE";
                     scenarioEl.textContent = "None";
+                    headerBadge.className = "threat-pill threat-pill-normal";
+                    headerBadge.textContent = "LAB READY";
                 }
             } catch (e) {}
         }
-        setInterval(pollStatus, 3000);
+
+        setInterval(pollStatus, 2500);
         pollStatus();
     </script>
 </body>

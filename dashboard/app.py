@@ -1,5 +1,11 @@
 """Compatibility launcher for the unified AEGIS-OT gateway API/HMI."""
 
+import sys
+from pathlib import Path
+
+# Ensure repository root is on sys.path for direct launcher execution
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from aegis_gateway.api import create_app
 from aegis_gateway.runtime import GatewayRuntime
 

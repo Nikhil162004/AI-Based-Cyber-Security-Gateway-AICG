@@ -147,6 +147,8 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         static_url_path="/static"
     )
     app.config["runtime"] = runtime
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
+    app.jinja_env.auto_reload = True
 
     @app.get("/")
     def dashboard():
@@ -172,13 +174,17 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         is_attack = pred == "ATTACK"
         ddos_p = float(latest.get("confidence") or (0.95 if is_attack else 0.05)) if is_attack else round(1.0 - float(latest.get("confidence") or 0.95), 3)
 
+        dev_id = latest.get("device_id") or "SENSOR-01"
+        trust_val = runtime.iam.get(dev_id).trust_score
+
         base_status["summary"] = {
             "latest_prediction": pred,
             "latest_packet_rate": float(latest.get("packet_rate") or 18.0),
             "latest_bytes_per_second": float(latest.get("byte_rate") or 4140.0),
             "latest_ddos_probability": ddos_p,
             "latest_security_action": latest.get("response_action") or "ALERT",
-            "latest_mitigation_action": latest.get("response_action") or "NONE"
+            "latest_mitigation_action": latest.get("response_action") or "NONE",
+            "trust_score": float(trust_val),
         }
         base_status["pipeline"] = {
             "traffic_features": True,
@@ -349,8 +355,10 @@ def create_app(runtime: GatewayRuntime) -> Flask:
 
     @app.get("/api/iam")
     def iam():
+        identity_list = [identity.__dict__ for identity in runtime.iam.identities.values()]
         return jsonify({
-            "identities": [identity.__dict__ for identity in runtime.iam.identities.values()],
+            "identities": identity_list,
+            "devices": identity_list,
             "policy": "authenticated role plus trust >= 40"
         })
 
@@ -426,6 +434,94 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             "status": "NOT_TRAINED",
             "instruction": "Run `python3 -m aegis_gateway.cli train` to generate evaluation evidence."
         })
+
+    @app.get("/api/model-assurance")
+    def model_assurance():
+        eval_path = runtime.settings.report_dir / "evaluation.json"
+        cm_path = runtime.settings.report_dir / "confusion_matrix.csv"
+
+        data: dict[str, Any] = {
+            "status": "READY" if eval_path.exists() else "NOT_TRAINED",
+            "model_architecture": "Random Forest (240 trees) + Isolation Forest (200 trees)",
+            "model_version": "hybrid-rf-if-v2",
+            "dataset_version": "synthetic-lab-v2",
+            "evaluation_protocol": "stratified campaign-grouped train/validation/test plus scenario-held-out evaluation",
+            "metrics": {
+                "precision": None,
+                "recall": None,
+                "f1": None,
+                "false_positive_rate": None,
+                "roc_auc": None,
+                "pr_auc": None,
+                "brier_score_calibrated": None,
+                "scenario_held_out_f1": None,
+            },
+            "confusion_matrix": {
+                "labels": ["NORMAL", "ATTACK"],
+                "true_negative": None,
+                "false_positive": None,
+                "false_negative": None,
+                "true_positive": None,
+                "matrix": None,
+            },
+            "splits": {},
+            "provenance": "SYNTHETIC",
+            "claim_boundary": "Evaluated on stratified campaign-grouped lab data without leakage. Platt calibration guarantees bounded decision probabilities."
+        }
+
+        if eval_path.exists():
+            try:
+                ev = json.loads(eval_path.read_text(encoding="utf-8"))
+                data["experiment_id"] = ev.get("experiment_id")
+                data["timestamp"] = ev.get("timestamp")
+                data["feature_version"] = ev.get("feature_version")
+                data["splits"] = ev.get("splits", {})
+                data["feature_importance"] = ev.get("feature_importance", {})
+
+                test_block = ev.get("test", {})
+                data["metrics"]["precision"] = test_block.get("precision", {}).get("ATTACK")
+                data["metrics"]["recall"] = test_block.get("recall", {}).get("ATTACK")
+                data["metrics"]["f1"] = test_block.get("f1", {}).get("ATTACK")
+                data["metrics"]["false_positive_rate"] = test_block.get("false_positive_rate")
+                data["metrics"]["roc_auc"] = test_block.get("roc_auc")
+                data["metrics"]["pr_auc"] = test_block.get("pr_auc")
+
+                calib = ev.get("calibration", {})
+                data["metrics"]["brier_score_calibrated"] = calib.get("brier_score_calibrated")
+
+                held = ev.get("scenario_held_out", {})
+                data["metrics"]["scenario_held_out_f1"] = held.get("f1", {}).get("ATTACK")
+
+                if "confusion_matrix" in test_block:
+                    cm = test_block["confusion_matrix"]
+                    data["confusion_matrix"]["matrix"] = cm
+                    if len(cm) == 2 and len(cm[0]) == 2 and len(cm[1]) == 2:
+                        data["confusion_matrix"]["true_negative"] = cm[0][0]
+                        data["confusion_matrix"]["false_positive"] = cm[0][1]
+                        data["confusion_matrix"]["false_negative"] = cm[1][0]
+                        data["confusion_matrix"]["true_positive"] = cm[1][1]
+            except Exception as err:
+                data["eval_parse_error"] = str(err)
+
+        if cm_path.exists():
+            try:
+                lines = cm_path.read_text(encoding="utf-8").strip().splitlines()
+                if len(lines) >= 3:
+                    row_norm = lines[1].split(",")
+                    row_atk = lines[2].split(",")
+                    tn = int(row_norm[1])
+                    fp = int(row_norm[2])
+                    fn = int(row_atk[1])
+                    tp = int(row_atk[2])
+                    data["confusion_matrix"]["true_negative"] = tn
+                    data["confusion_matrix"]["false_positive"] = fp
+                    data["confusion_matrix"]["false_negative"] = fn
+                    data["confusion_matrix"]["true_positive"] = tp
+                    data["confusion_matrix"]["matrix"] = [[tn, fp], [fn, tp]]
+            except Exception as err:
+                data["cm_parse_error"] = str(err)
+
+        return jsonify(data)
 
     @app.get("/api/ns3")
     def ns3_status():
@@ -515,6 +611,8 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         def stream():
             for message in runtime.subscribe():
                 yield f"event: {message['type']}\ndata: {json.dumps(message['data'], default=str)}\n\n"
+        return Response(stream(), mimetype="text/event-stream")
+
     return app
 
 

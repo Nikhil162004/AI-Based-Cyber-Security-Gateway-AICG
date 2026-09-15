@@ -20,7 +20,7 @@ class Settings:
     """Settings intentionally exclude host-enforcement configuration."""
 
     root: Path = ROOT
-    database_path: Path = ROOT / "data" / "aegis_gateway.sqlite3"
+    database_path: Path = Path(os.getenv("AEGIS_DATABASE_PATH", str(ROOT / "data" / "aegis_gateway.sqlite3")))
     model_path: Path = ROOT / "models" / "hybrid_detector.joblib"
     report_dir: Path = ROOT / "reports"
     dataset_dir: Path = ROOT / "data" / "datasets"
