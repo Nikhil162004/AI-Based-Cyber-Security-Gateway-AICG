@@ -31,7 +31,7 @@ updateClockAndUptime();
 /* ==========================================================================
    2. TOP KPI STRIP & STATUS SUMMARY
    ========================================================================== */
-function updateSummary(summary) {
+function updateSummary(summary, fullStatus) {
     if (!summary || typeof summary !== "object") return;
 
     const pred = summary.latest_prediction || "NORMAL";
@@ -85,10 +85,20 @@ function updateSummary(summary) {
     // Card 4: Mitigation State
     const securityActionEl = document.getElementById("securityAction");
     const mitigationActionEl = document.getElementById("mitigationAction");
+    const mitModeTag = document.getElementById("mitigationModeTag");
+    const respPolicyEl = document.getElementById("respPolicyMode");
+    const btnRespEl = document.getElementById("btnResponseModeText");
+
     if (securityActionEl) securityActionEl.textContent = secAction;
     if (mitigationActionEl) {
         mitigationActionEl.textContent = mitAction;
         mitigationActionEl.style.color = isAttack ? "var(--red)" : "var(--cyan)";
+    }
+    if (fullStatus) {
+        const mode = (fullStatus.response_mode || "DRY_RUN").replace(/_/g, "-");
+        if (mitModeTag) mitModeTag.textContent = mode;
+        if (respPolicyEl) respPolicyEl.textContent = `${fullStatus.auto_response ? "AUTO" : "MANUAL"} (${fullStatus.response_mode || "DRY_RUN"})`;
+        if (btnRespEl) btnRespEl.textContent = fullStatus.auto_response ? "AUTO: ON" : "MANUAL: ON";
     }
 
     // Security Status Banner
@@ -481,71 +491,108 @@ function renderProtocolDonut(canvas, protocolsData) {
 
     ctx.clearRect(0, 0, width, height);
 
-    let mix = (protocolsData && protocolsData.mix) ? protocolsData.mix : { "UDP": 212, "TCP": 20, "ICMPV6": 9, "MQTT": 8 };
-    const total = Object.values(mix).reduce((a, b) => a + Number(b), 0) || 1;
+    const mix = (protocolsData && protocolsData.mix) ? protocolsData.mix : { "UDP": 212, "TCP": 20, "ICMP": 9 };
 
-    // Update Pills
-    if (mix["UDP"] !== undefined) {
-        const el = document.getElementById("protoCountUDP");
-        if (el) el.textContent = `${((mix["UDP"] / total) * 100).toFixed(0)}% (${mix["UDP"]})`;
-    }
-    if (mix["TCP"] !== undefined) {
-        const el = document.getElementById("protoCountTCP");
-        if (el) el.textContent = `${((mix["TCP"] / total) * 100).toFixed(0)}% (${mix["TCP"]})`;
-    }
-    const icmpCount = (mix["ICMP"] || 0) + (mix["ICMPV6"] || 0);
-    const elIcmp = document.getElementById("protoCountICMP");
-    if (elIcmp) elIcmp.textContent = `${((icmpCount / total) * 100).toFixed(0)}% (${icmpCount})`;
+    // Canonical categories matching the UI legend
+    const udpCount = Number(mix["UDP"] || 0);
+    const tcpCount = Number(mix["TCP"] || 0);
+    const icmpCount = Number(mix["ICMP"] || 0) + Number(mix["ICMPV6"] || 0);
+    const mqttCount = Number(mix["MQTT"] || 0);
 
-    const mqttCount = mix["MQTT"] || 8;
-    const elMqtt = document.getElementById("protoCountMQTT");
-    if (elMqtt) elMqtt.textContent = `${((mqttCount / total) * 100).toFixed(0)}% (${mqttCount})`;
-
-    // Determine Primary Protocol
-    let maxK = "UDP";
-    let maxV = 0;
+    let otherCount = 0;
     for (const [k, v] of Object.entries(mix)) {
-        if (Number(v) > maxV) { maxV = Number(v); maxK = k; }
+        const uk = k.toUpperCase();
+        if (uk !== "UDP" && uk !== "TCP" && uk !== "ICMP" && uk !== "ICMPV6" && uk !== "MQTT") {
+            otherCount += Number(v || 0);
+        }
+    }
+
+    const categories = [
+        { key: "UDP", label: "UDP", count: udpCount, elId: "protoCountUDP", color: "#38bdf8" },
+        { key: "TCP", label: "TCP", count: tcpCount, elId: "protoCountTCP", color: "#818cf8" },
+        { key: "ICMP", label: "ICMP", count: icmpCount, elId: "protoCountICMP", color: "#f43f5e" },
+        { key: "MQTT", label: "MQTT", count: mqttCount, elId: "protoCountMQTT", color: "#10b981" }
+    ];
+    if (otherCount > 0) {
+        categories.push({ key: "OTHER", label: "OTHER", count: otherCount, elId: null, color: "#f59e0b" });
+    }
+
+    const totalCount = categories.reduce((sum, c) => sum + c.count, 0);
+
+    // Compute normalized integer percentages that sum to 100% using Largest Remainder Method (Hamilton-Hare)
+    let normPcts = categories.map(() => 0);
+    if (totalCount > 0) {
+        const rawPcts = categories.map(c => (c.count / totalCount) * 100);
+        const floorPcts = rawPcts.map(p => Math.floor(p));
+        let remainder = 100 - floorPcts.reduce((a, b) => a + b, 0);
+
+        const indexedRemainders = rawPcts.map((p, i) => ({ index: i, frac: p - floorPcts[i], count: categories[i].count }))
+            .filter(item => item.count > 0)
+            .sort((a, b) => b.frac - a.frac);
+
+        normPcts = [...floorPcts];
+        for (let i = 0; i < remainder && i < indexedRemainders.length; i++) {
+            normPcts[indexedRemainders[i].index]++;
+        }
+    }
+
+    // Update Pills and legend with identical normalized values
+    categories.forEach((cat, idx) => {
+        cat.pct = normPcts[idx];
+        if (cat.elId) {
+            const el = document.getElementById(cat.elId);
+            if (el) {
+                el.textContent = `${cat.pct}% (${cat.count})`;
+            }
+        }
+    });
+
+    // Determine actual dominant protocol
+    let dominant = categories[0];
+    for (const c of categories) {
+        if (c.count > dominant.count) {
+            dominant = c;
+        }
     }
     const centerVal = document.getElementById("donutPrimaryProto");
     const centerPct = document.getElementById("donutPrimaryPct");
-    if (centerVal) centerVal.textContent = maxK === "ICMPV6" ? "ICMP" : maxK;
-    if (centerPct) centerPct.textContent = `${((maxV / total) * 100).toFixed(0)}%`;
+    if (centerVal) centerVal.textContent = totalCount > 0 ? dominant.label : "IDLE";
+    if (centerPct) centerPct.textContent = totalCount > 0 ? `${dominant.pct}%` : "0%";
 
-    // Draw Crisp Doughnut Slices
+    // Draw Crisp Doughnut Slices using identical normalized slices
     const centerX = width / 2;
     const centerY = height / 2;
     const outerRadius = Math.min(centerX, centerY) - 8;
     const innerRadius = outerRadius * 0.72;
 
-    const palette = {
-        "UDP": "#38bdf8",
-        "TCP": "#818cf8",
-        "ICMP": "#f43f5e",
-        "ICMPV6": "#f43f5e",
-        "MQTT": "#10b981",
-        "OTHER": "#f59e0b"
-    };
+    if (totalCount > 0) {
+        let startAngle = -Math.PI / 2;
+        categories.forEach((cat) => {
+            if (cat.count <= 0) return;
+            const sliceAngle = (cat.count / totalCount) * (Math.PI * 2);
+            const endAngle = startAngle + sliceAngle;
 
-    let startAngle = -Math.PI / 2;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, outerRadius, startAngle, endAngle);
+            ctx.arc(centerX, centerY, innerRadius, endAngle, startAngle, true);
+            ctx.closePath();
+            ctx.fillStyle = cat.color;
+            ctx.fill();
 
-    Object.entries(mix).forEach(([proto, count]) => {
-        const sliceAngle = (Number(count) / total) * (Math.PI * 2);
-        const endAngle = startAngle + sliceAngle;
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "#0d1627";
+            ctx.stroke();
 
+            startAngle = endAngle;
+        });
+    } else {
         ctx.beginPath();
-        ctx.arc(centerX, centerY, outerRadius, startAngle, endAngle);
-        ctx.arc(centerX, centerY, innerRadius, endAngle, startAngle, true);
+        ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
+        ctx.arc(centerX, centerY, innerRadius, Math.PI * 2, 0, true);
         ctx.closePath();
-        ctx.fillStyle = palette[proto.toUpperCase()] || "#a855f7";
+        ctx.fillStyle = "rgba(70, 100, 140, 0.2)";
         ctx.fill();
-
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = "#0d1627";
-        ctx.stroke();
-
-        startAngle = endAngle;
-    });
+    }
 }
 
 
@@ -731,7 +778,7 @@ function updateIAM(iamData) {
 
     if (!listBody) return;
     listBody.innerHTML = identities.map(dev => {
-        const isAuth = dev.authenticated;
+        const isAuth = Boolean(dev.authenticated);
         const isAllow = isAuth && dev.role !== "untrusted" && dev.trust_score >= 40.0;
         const trustColor = dev.trust_score >= 70 ? "var(--green)" : (dev.trust_score >= 40 ? "var(--amber)" : "var(--red)");
         
@@ -739,7 +786,7 @@ function updateIAM(iamData) {
             <tr>
                 <td><strong>${escapeHtml(dev.identity)}</strong></td>
                 <td style="text-transform: capitalize;">${escapeHtml(dev.role)}</td>
-                <td><span class="iam-badge ${isAuth ? 'iam-allow' : 'iam-deny'}">${isAuth ? 'AUTH' : 'FAILED'}</span></td>
+                <td><span class="iam-badge ${isAuth ? 'iam-allow' : 'iam-deny'}">${isAuth ? 'VERIFIED' : 'UNVERIFIED'}</span></td>
                 <td><span class="iam-badge ${isAllow ? 'iam-allow' : 'iam-deny'}">${isAllow ? 'ALLOW' : 'DENY'}</span></td>
                 <td><strong style="color: ${trustColor}; font-family: var(--font-mono);">${dev.trust_score.toFixed(1)}</strong></td>
             </tr>
@@ -820,24 +867,31 @@ function updateIncidents(incidents) {
         if (table) {
             table.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 18px;">No active or historical incidents recorded in historian.</td></tr>`;
         }
-        if (activeIdEl) activeIdEl.textContent = "NONE (BASELINE)";
+        if (activeIdEl) activeIdEl.innerHTML = `<span style="color: var(--green);">NONE (BASELINE / OPERATIONAL)</span>`;
         if (actionControls) actionControls.innerHTML = "";
         return;
     }
 
+    // Explicitly distinguish current active incident from historical audit log
+    const activeInc = incidents.find(i => !["RESOLVED", "CLOSED"].includes(i.lifecycle_state));
     const latest = incidents[0];
-    const isLatestActive = !["RESOLVED", "CLOSED"].includes(latest.lifecycle_state);
+
     if (activeIdEl) {
-        activeIdEl.textContent = isLatestActive ? latest.incident_id : `${latest.incident_id} (${latest.lifecycle_state})`;
+        if (activeInc) {
+            activeIdEl.innerHTML = `<strong style="color: var(--red);">${escapeHtml(activeInc.incident_id)} (${escapeHtml(activeInc.lifecycle_state)})</strong>`;
+        } else {
+            activeIdEl.innerHTML = `<span style="color: var(--green);">NONE (BASELINE / SYSTEM CLEAR)</span>`;
+        }
     }
 
-    // Operator Action Quick Controls
+    // Operator Action Quick Controls for active incident or latest resolved
     if (actionControls) {
-        const st = latest.lifecycle_state;
+        const targetInc = activeInc || latest;
+        const st = targetInc ? targetInc.lifecycle_state : "";
         if (["CONTAINED", "RECOVERING", "RESPONDING", "DETECTED"].includes(st)) {
-            actionControls.innerHTML = `<button class="btn-sim-action btn-recover" type="button" onclick="transitionIncidentState('${latest.incident_id}', 'RESOLVED')">Resolve Incident</button>`;
+            actionControls.innerHTML = `<button class="btn-sim-action btn-recover" type="button" onclick="transitionIncidentState('${targetInc.incident_id}', 'RESOLVED')">Resolve ${targetInc.incident_id}</button>`;
         } else if (st === "RESOLVED") {
-            actionControls.innerHTML = `<button class="btn-sim-action" type="button" onclick="transitionIncidentState('${latest.incident_id}', 'CLOSED')">Close Incident</button>`;
+            actionControls.innerHTML = `<button class="btn-sim-action" type="button" onclick="transitionIncidentState('${targetInc.incident_id}', 'CLOSED')">Close ${targetInc.incident_id}</button>`;
         } else {
             actionControls.innerHTML = "";
         }
@@ -846,7 +900,7 @@ function updateIncidents(incidents) {
     if (!table) return;
     table.innerHTML = incidents.map(inc => {
         const state = inc.lifecycle_state || "UNKNOWN";
-        const isClosed = ["RESOLVED", "CLOSED"].includes(state);
+        const isActive = !["RESOLVED", "CLOSED"].includes(state);
         const sev = inc.severity || "MEDIUM";
         const sevClass = (sev === "CRITICAL" || sev === "HIGH") ? "color: var(--red);" : "color: var(--green);";
         const dt = (inc.updated_at || inc.created_at || "").replace("T", " ").split(".")[0];
@@ -858,15 +912,29 @@ function updateIncidents(incidents) {
             actionBtn = `<button class="btn-sim-action" type="button" onclick="transitionIncidentState('${inc.incident_id}', 'CLOSED')">Close</button>`;
         }
 
+        let stateBadge;
+        if (isActive) {
+            stateBadge = `<span class="iam-badge iam-deny">ACTIVE: ${escapeHtml(state)}</span>`;
+        } else if (state === "RESOLVED") {
+            stateBadge = `<span class="iam-badge iam-allow">RESOLVED</span>`;
+        } else {
+            stateBadge = `<span class="iam-badge" style="background: rgba(100, 116, 139, 0.2); color: var(--text-muted); border: 1px solid rgba(100, 116, 139, 0.3);">CLOSED</span>`;
+        }
+
         return `
-            <tr>
+            <tr class="${isActive ? 'active-incident-row' : ''}">
                 <td style="font-family: monospace; color: var(--cyan);">${escapeHtml(inc.incident_id)}</td>
                 <td style="font-size: 10px; color: var(--text-muted);">${dt}</td>
                 <td><strong>${escapeHtml(inc.device_id || "10.42.0.250")}</strong></td>
                 <td>${escapeHtml(inc.attack_type || "udp_flood")}</td>
                 <td><strong style="${sevClass}">${sev}</strong></td>
                 <td style="font-family: monospace;">${inc.confidence ? (inc.confidence * 100).toFixed(0) + "%" : "—"}</td>
-                <td><span class="iam-badge ${isClosed ? 'iam-allow' : 'iam-deny'}">${state}</span></td>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        ${stateBadge}
+                        <span class="safety-tag" style="font-size: 8px;">SIM</span>
+                    </div>
+                </td>
                 <td style="color: ${inc.recovery_state === 'VERIFIED' ? 'var(--green)' : 'var(--amber)'}; font-size: 10px;">${inc.recovery_state || "PENDING"}</td>
                 <td style="color: var(--cyan);">${escapeHtml(inc.response_action || "ISOLATE")}</td>
                 <td>${actionBtn}</td>
@@ -1191,7 +1259,7 @@ async function refreshDashboard() {
                 dot.classList.toggle("online", isOnline);
                 dot.classList.toggle("offline", !isOnline);
             }
-            updateSummary(status.summary || {});
+            updateSummary(status.summary || {}, status);
         }
 
         // 2. Telemetry & Time-Series Charts

@@ -388,9 +388,24 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         rows = runtime.store.telemetry(limit=1000)
         counts: dict[str, int] = {}
         for row in rows:
-            counts[str(row.get("protocol") or "UNKNOWN")] = counts.get(str(row.get("protocol") or "UNKNOWN"), 0) + 1
+            proto = str(row.get("protocol") or "UNKNOWN").upper()
+            if proto in ("ICMP", "ICMPV6"):
+                proto = "ICMP"
+            elif proto == "MQTT" or row.get("dst_port") == 1883 or row.get("scenario_id") == "mqtt_anomaly":
+                proto = "MQTT"
+            elif proto == "UDP":
+                proto = "UDP"
+            elif proto == "TCP":
+                proto = "TCP"
+            counts[proto] = counts.get(proto, 0) + 1
+
+        total = sum(counts.values()) or 1
+        percentages = {k: round((v / total) * 100, 1) for k, v in counts.items()}
         return jsonify({
             "mix": counts,
+            "total": sum(counts.values()),
+            "percentages": percentages,
+            "aggregation": "ICMP/ICMPv6 grouped under ICMP; port 1883 and mqtt_anomaly grouped under MQTT; port 5683/UDP under UDP.",
             "claim_boundary": "MQTT, CoAP, RPL, and Modbus scenario labels are simulated profiles unless a parsed source explicitly says otherwise."
         })
 
@@ -446,6 +461,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             "model_version": "hybrid-rf-if-v2",
             "dataset_version": "synthetic-lab-v2",
             "evaluation_protocol": "stratified campaign-grouped train/validation/test plus scenario-held-out evaluation",
+            "evaluation_context": "HELD-OUT SYNTHETIC LAB EVALUATION",
             "metrics": {
                 "precision": None,
                 "recall": None,
@@ -466,7 +482,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             },
             "splits": {},
             "provenance": "SYNTHETIC",
-            "claim_boundary": "Evaluated on stratified campaign-grouped lab data without leakage. Platt calibration guarantees bounded decision probabilities."
+            "claim_boundary": "Scenario-separated synthetic evaluation on stratified campaign-grouped lab data without leakage — not a production accuracy claim. Platt calibration guarantees bounded decision probabilities."
         }
 
         if eval_path.exists():

@@ -346,10 +346,10 @@
                         <span>PLANT MIMIC • OT NETWORK TOPOLOGY</span>
                     </div>
                     <div class="panel-subtitle">
-                        Modelled 6LoWPAN / 802.15.4 Cell • Nodes: <span id="topologyDeviceCount">5</span> • Links: <span id="topologyLinkCount">4</span> • Status: <span id="topologyStatus">ONLINE</span> (<span id="topologyEnvironment">CONTROLLED SIMULATION</span>)
+                        Declarative lab topology • In-process simulation • Nodes: <span id="topologyDeviceCount">5</span> • Links: <span id="topologyLinkCount">4</span> • Status: <span id="topologyStatus">ONLINE</span> (<span id="topologyEnvironment">CONTROLLED SIMULATION</span>)
                     </div>
                 </div>
-                <div class="panel-badge">LAB TOPOLOGY (IN-PROCESS)</div>
+                <div class="panel-badge">DECLARATIVE TOPOLOGY (IN-PROCESS)</div>
             </div>
 
             <!-- Plant Mimic SVG Visualizer -->
@@ -438,7 +438,7 @@
                     <span class="node-indicator"><span class="node-dot dot-plc"></span> OT PLC Sink</span>
                     <span class="node-indicator"><span class="node-dot dot-atk"></span> Lab Attacker</span>
                 </div>
-                <span id="topologyLinkSummary" style="font-size: 9px; color: var(--cyan);">Zero network packets transmitted • Modelled in-process graph</span>
+                <span id="topologyLinkSummary" style="font-size: 9px; color: var(--cyan);">Declarative lab graph • In-process simulation only • No external packets transmitted</span>
             </div>
 
             <!-- Hidden compatibility containers -->
@@ -517,13 +517,27 @@
             <div class="panel-header">
                 <div class="panel-title-group">
                     <div class="panel-title">
-                        <span>ENERGY VS BASELINE (CAUSE)</span>
+                        <span>ENERGY VS BASELINE (MODELLED TELEMETRY)</span>
                     </div>
                     <div class="panel-subtitle">
-                        Modelled hardware power dissipation &amp; concurrent RF activity
+                        Modelled hardware power dissipation &amp; concurrent RF activity (Derived software model)
                     </div>
                 </div>
-                <div class="panel-badge">MODELLED</div>
+                <div class="panel-badge">MODELLED TELEMETRY</div>
+            </div>
+
+            <div class="causal-chain-bar">
+                <span class="chain-node">Traffic Activity</span>
+                <span class="chain-arrow">→</span>
+                <span class="chain-node">Packet/Byte Rate</span>
+                <span class="chain-arrow">→</span>
+                <span class="chain-node">Radio TX/RX</span>
+                <span class="chain-arrow">→</span>
+                <span class="chain-node">CPU Activity</span>
+                <span class="chain-arrow">→</span>
+                <span class="chain-node">Modelled Power</span>
+                <span class="chain-arrow">→</span>
+                <span class="chain-node">Baseline Deviation</span>
             </div>
 
             <div class="energy-meters-stack">
@@ -676,37 +690,37 @@
                         <tr>
                             <th>IDENTITY</th>
                             <th>ROLE</th>
-                            <th>AUTH</th>
-                            <th>ACCESS</th>
-                            <th>TRUST</th>
+                            <th>AUTH STATUS</th>
+                            <th>ACCESS DECISION</th>
+                            <th>TRUST SCORE</th>
                         </tr>
                     </thead>
                     <tbody id="iamDeviceList">
                         <tr>
                             <td><strong>SENSOR-01</strong></td>
                             <td>Sensor</td>
-                            <td><span class="iam-badge iam-allow">AUTH</span></td>
+                            <td><span class="iam-badge iam-allow">VERIFIED</span></td>
                             <td><span class="iam-badge iam-allow">ALLOW</span></td>
                             <td><strong style="color: var(--green);">100.0</strong></td>
                         </tr>
                         <tr>
                             <td><strong>SENSOR-GROUP-A</strong></td>
                             <td>Cluster</td>
-                            <td><span class="iam-badge iam-allow">AUTH</span></td>
+                            <td><span class="iam-badge iam-allow">VERIFIED</span></td>
                             <td><span class="iam-badge iam-allow">ALLOW</span></td>
                             <td><strong style="color: var(--green);">100.0</strong></td>
                         </tr>
                         <tr>
                             <td><strong>operator</strong></td>
                             <td>Operator</td>
-                            <td><span class="iam-badge iam-allow">AUTH</span></td>
+                            <td><span class="iam-badge iam-allow">VERIFIED</span></td>
                             <td><span class="iam-badge iam-allow">ALLOW</span></td>
                             <td><strong style="color: var(--green);">100.0</strong></td>
                         </tr>
                         <tr>
                             <td><strong>ATK-01</strong></td>
                             <td>Untrusted</td>
-                            <td><span class="iam-badge iam-deny">FAILED</span></td>
+                            <td><span class="iam-badge iam-deny">UNVERIFIED</span></td>
                             <td><span class="iam-badge iam-deny">DENIED</span></td>
                             <td><strong id="atkTrustScoreVal" style="color: var(--red);">35.0</strong></td>
                         </tr>
@@ -714,8 +728,8 @@
                 </table>
             </div>
 
-            <div style="margin-top: 8px; font-size: 9.5px; color: var(--text-muted);">
-                Internal Reputation Engine: -20 flood detection; -15 unverified auth; +3 recovery window (bounded 0..100).
+            <div style="margin-top: 8px; font-size: 9.5px; color: var(--text-muted); line-height: 1.4;">
+                <strong>Zero-Trust Distinction:</strong> AUTH indicates local registry identity resolution (not cryptographic device attestation). ACCESS reflects operational policy decision (ALLOW/DENY). Dynamic trust score reputation (-20 flood, -15 unverified auth, +3 recovery, bounded 0..100).
             </div>
 
             <!-- Hidden compatibility tags -->
@@ -906,10 +920,10 @@
         <div class="panel-header">
             <div class="panel-title-group">
                 <div class="panel-title">
-                    <span>DURABLE INCIDENT JOURNAL &amp; CAMPAIGN CORRELATION</span>
+                    <span>DURABLE INCIDENT JOURNAL &amp; AUDIT LOG</span>
                 </div>
                 <div class="panel-subtitle">
-                    Multi-window correlation: DETECTED → ANALYZING → RESPONDING → CONTAINED → RECOVERING → RESOLVED
+                    Multi-window campaign correlation: Active Runtime vs Historical Audit Records • Simulated Provenance
                 </div>
             </div>
             <div class="panel-badge">
@@ -927,7 +941,7 @@
                         <th>ATTACK TYPE</th>
                         <th>SEVERITY</th>
                         <th>CONFIDENCE</th>
-                        <th>LIFECYCLE</th>
+                        <th>STATE / PROVENANCE</th>
                         <th>RECOVERY</th>
                         <th>ACTION</th>
                         <th>OPERATOR</th>
@@ -1080,9 +1094,15 @@
                     Stratified Campaign-Grouped Split (0% leakage) • Platt-Calibrated Probabilities • Scenario Held-Out Test
                 </div>
             </div>
-            <div class="panel-badge" style="color: var(--green); border-color: rgba(16, 185, 129, 0.4);">
-                VERIFIED EVIDENCE
+            <div class="panel-badge" style="color: var(--cyan); border-color: rgba(56, 189, 248, 0.4);">
+                HELD-OUT SYNTHETIC LAB EVALUATION
             </div>
+        </div>
+
+        <!-- Academically Defensible Evaluation Context Disclosure -->
+        <div class="eval-context-banner">
+            <span class="context-pill">HELD-OUT SYNTHETIC LAB EVALUATION</span>
+            <span>Scenario-separated synthetic evaluation dataset (<code>synthetic_lab_v2.csv</code>) — Not a real-world production accuracy claim. Demonstrates discrimination on controlled lab benchmarks only.</span>
         </div>
 
         <!-- 8 Metric Boxes -->
@@ -1183,7 +1203,7 @@
             </div>
 
             <div style="font-size: 9.5px; color: var(--text-muted); margin-top: 8px;">
-                Confusion Matrix Source: <code>reports/confusion_matrix.csv</code> via <code>GET /api/model-assurance</code>.
+                Confusion Matrix Source: <code>reports/confusion_matrix.csv</code> via <code>GET /api/model-assurance</code>. Context: Controlled synthetic held-out test split (320 windows, 0% campaign leakage).
             </div>
         </div>
 
