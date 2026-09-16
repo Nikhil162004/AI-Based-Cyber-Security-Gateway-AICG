@@ -334,6 +334,11 @@
             </div>
         </div>
 
+        <!-- Operator View-Only Mode Banner -->
+        <div id="operatorViewOnlyBanner" style="display: none; background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.4); border-radius: var(--radius-md); padding: 12px 16px; color: #fef3c7; font-size: 0.8rem; line-height: 1.5;">
+            <strong>OPERATOR VIEW-ONLY MODE:</strong> You are authenticated with role <strong>OPERATOR</strong>. Threat simulation injection and mutation controls are disabled under RBAC policy. Live telemetry and boundary monitoring remain active.
+        </div>
+
         <!-- Simulation Configuration Card -->
         <div class="console-card">
             <div class="console-card-title">
@@ -399,7 +404,7 @@
             <div class="btn-console-grid">
                 <button class="btn-launch-attack" id="btnLaunch" onclick="launchSimulation()">⚡ Launch Threat Profile</button>
                 <button class="btn-stop-attack" id="btnStop" onclick="stopSimulation()">⏹ Terminate Simulation</button>
-                <button class="btn-reset-normal" onclick="setNormalBaseline()">↺ Restore Normal OT Baseline Rhythm</button>
+                <button class="btn-reset-normal" id="btnResetNormal" onclick="setNormalBaseline()">↺ Restore Normal OT Baseline Rhythm</button>
             </div>
         </div>
 
@@ -467,7 +472,64 @@
             });
         }
 
+        let currentUserRole = null;
+
+        async function checkAuthAndRole() {
+            try {
+                const res = await fetch("/api/auth/status");
+                if (!res.ok) return;
+                const data = await res.json();
+                currentUserRole = ((data.user && data.user.role) || data.role || "").toUpperCase();
+
+                if (currentUserRole === "OPERATOR") {
+                    const banner = document.getElementById("operatorViewOnlyBanner");
+                    if (banner) banner.style.display = "block";
+
+                    const btnLaunch = document.getElementById("btnLaunch");
+                    if (btnLaunch) {
+                        btnLaunch.disabled = true;
+                        btnLaunch.style.opacity = "0.5";
+                        btnLaunch.style.cursor = "not-allowed";
+                        btnLaunch.title = "Simulation mutation restricted to ADMIN role";
+                    }
+
+                    const btnStop = document.getElementById("btnStop");
+                    if (btnStop) {
+                        btnStop.disabled = true;
+                        btnStop.style.opacity = "0.5";
+                        btnStop.style.cursor = "not-allowed";
+                        btnStop.title = "Simulation mutation restricted to ADMIN role";
+                    }
+
+                    const btnResetNormal = document.getElementById("btnResetNormal");
+                    if (btnResetNormal) {
+                        btnResetNormal.disabled = true;
+                        btnResetNormal.style.opacity = "0.5";
+                        btnResetNormal.style.cursor = "not-allowed";
+                        btnResetNormal.title = "Simulation mutation restricted to ADMIN role";
+                    }
+
+                    const scenarioSelect = document.getElementById("scenarioSelect");
+                    if (scenarioSelect) scenarioSelect.disabled = true;
+
+                    const intensityRange = document.getElementById("intensityRange");
+                    if (intensityRange) intensityRange.disabled = true;
+
+                    const durationRange = document.getElementById("durationRange");
+                    if (durationRange) durationRange.disabled = true;
+
+                    document.querySelectorAll(".preset-chip").forEach(chip => {
+                        chip.style.pointerEvents = "none";
+                        chip.style.opacity = "0.6";
+                    });
+                }
+            } catch (e) {
+                console.warn("Failed to retrieve auth status:", e);
+            }
+        }
+
         async function launchSimulation() {
+            if (currentUserRole === "OPERATOR") return;
             const scenario = document.getElementById("scenarioSelect").value;
             const intensity = parseInt(document.getElementById("intensityRange").value, 10);
             const duration = parseInt(document.getElementById("durationRange").value, 10);
@@ -512,6 +574,7 @@
         }
 
         async function stopSimulation() {
+            if (currentUserRole === "OPERATOR") return;
             const statusEl = document.getElementById("simEngineStatus");
             const scenarioEl = document.getElementById("simActiveScenario");
             const liveBadge = document.getElementById("liveStatusBadge");
@@ -535,6 +598,7 @@
         }
 
         async function setNormalBaseline() {
+            if (currentUserRole === "OPERATOR") return;
             await stopSimulation();
             try {
                 await fetch("/api/simulations/start", {
@@ -593,6 +657,8 @@
             } catch (e) {}
         }
 
+        window.checkAuthAndRole = checkAuthAndRole;
+        checkAuthAndRole();
         setInterval(pollStatus, 2500);
         pollStatus();
     </script>

@@ -1890,22 +1890,80 @@ function initSidebarNavigation() {
     }, { passive: true });
 }
 
+/* ==========================================================================
+   SERVER-SENT EVENTS (SSE) & REFRESH COALESCING
+   ========================================================================== */
+
+let refreshTimer = null;
+let isRefreshInFlight = false;
+let refreshPending = false;
+const REFRESH_DEBOUNCE_WINDOW_MS = 250;
+const REFRESH_MAX_DEBOUNCE_MS = 1000;
+let refreshWindowStartTime = null;
+
+function scheduleCoalescedRefresh() {
+    if (isRefreshInFlight) {
+        refreshPending = true;
+        return;
+    }
+
+    const now = Date.now();
+    if (!refreshWindowStartTime) {
+        refreshWindowStartTime = now;
+    }
+
+    // Trailing-edge debounce: reset timer on new event within the debounce window
+    if (refreshTimer) {
+        if (now - refreshWindowStartTime < REFRESH_MAX_DEBOUNCE_MS) {
+            clearTimeout(refreshTimer);
+        } else {
+            // Under sustained events, do not delay indefinitely to prevent UI starvation
+            return;
+        }
+    }
+
+    refreshTimer = setTimeout(async () => {
+        refreshTimer = null;
+        refreshWindowStartTime = null;
+        await executeCoalescedRefresh();
+    }, REFRESH_DEBOUNCE_WINDOW_MS);
+}
+
+async function executeCoalescedRefresh() {
+    if (isRefreshInFlight) {
+        refreshPending = true;
+        return;
+    }
+    isRefreshInFlight = true;
+    refreshPending = false;
+    try {
+        await refreshDashboard();
+    } finally {
+        isRefreshInFlight = false;
+        if (refreshPending) {
+            refreshPending = false;
+            scheduleCoalescedRefresh();
+        }
+    }
+}
+
 /* Server-Sent Events (SSE) Stream */
 function initSSE() {
     if (typeof EventSource === "undefined") return;
     try {
         const source = new EventSource("/events");
-        source.addEventListener("telemetry", () => refreshDashboard());
-        source.addEventListener("incident", () => refreshDashboard());
-        source.addEventListener("response", () => refreshDashboard());
-        source.addEventListener("trust", () => refreshDashboard());
-        source.addEventListener("simulation", () => refreshDashboard());
+        source.addEventListener("telemetry", () => scheduleCoalescedRefresh());
+        source.addEventListener("incident", () => scheduleCoalescedRefresh());
+        source.addEventListener("response", () => scheduleCoalescedRefresh());
+        source.addEventListener("trust", () => scheduleCoalescedRefresh());
+        source.addEventListener("simulation", () => scheduleCoalescedRefresh());
         source.addEventListener("alert", () => {
+            scheduleCoalescedRefresh();
             refreshAdminAlerts();
             refreshAdminOverview();
         });
         source.onerror = () => {
-            // Reconnect handled automatically by EventSource
+            // Safe generic SSE error/reconnect handling without assuming error.status exists
         };
     } catch (err) {
         console.warn("SSE stream unavailable; polling active", err);
@@ -1992,6 +2050,11 @@ function renderAuthBadge(authData) {
         if (opNotice) opNotice.style.display = isAdmin ? "none" : "block";
         if (opAuditNotice) opAuditNotice.style.display = isAdmin ? "none" : "block";
 
+        const btnAuditCsv = document.getElementById("btnExportAuditCsv");
+        const btnAuditJson = document.getElementById("btnExportAuditJson");
+        if (btnAuditCsv) btnAuditCsv.style.display = isAdmin ? "inline-flex" : "none";
+        if (btnAuditJson) btnAuditJson.style.display = isAdmin ? "inline-flex" : "none";
+
     } else {
         if (userLabel) userLabel.textContent = "ANONYMOUS";
         if (roleTag) {
@@ -2008,6 +2071,11 @@ function renderAuthBadge(authData) {
         if (addUserBtn) addUserBtn.style.display = "none";
         if (opNotice) opNotice.style.display = "block";
         if (opAuditNotice) opAuditNotice.style.display = "block";
+
+        const btnAuditCsv = document.getElementById("btnExportAuditCsv");
+        const btnAuditJson = document.getElementById("btnExportAuditJson");
+        if (btnAuditCsv) btnAuditCsv.style.display = "none";
+        if (btnAuditJson) btnAuditJson.style.display = "none";
     }
 }
 
@@ -2368,9 +2436,49 @@ async function toggleUserStatus(userId, newStatus) {
 
 let cachedAuditRecords = [];
 
+async function checkAuditIntegrity() {
+    const badge = document.getElementById("auditIntegrityBadge");
+    if (!badge) return;
+    try {
+        const res = await fetch("/api/admin/audit/integrity", { cache: "no-store" });
+        if (!res.ok) {
+            if (res.status === 403) {
+                badge.style.display = "none";
+            } else {
+                badge.textContent = "LEDGER INTEGRITY: ERROR";
+                badge.className = "tag tag-tamper";
+                badge.style.color = "var(--red)";
+                badge.style.borderColor = "rgba(239,68,68,0.5)";
+                badge.style.background = "rgba(239,68,68,0.15)";
+            }
+            return;
+        }
+        const data = await res.json();
+        badge.style.display = "inline-flex";
+        if (data.valid) {
+            const countStr = typeof data.count === "number" ? ` (${data.count} records)` : "";
+            badge.textContent = `LEDGER VERIFIED (SHA-256)${countStr}`;
+            badge.className = "tag tag-verified";
+            badge.style.color = "var(--green)";
+            badge.style.borderColor = "rgba(16,185,129,0.4)";
+            badge.style.background = "rgba(16,185,129,0.15)";
+        } else {
+            badge.textContent = "LEDGER TAMPER DETECTED (SHA-256)";
+            badge.className = "tag tag-tamper";
+            badge.style.color = "var(--red)";
+            badge.style.borderColor = "rgba(239,68,68,0.5)";
+            badge.style.background = "rgba(239,68,68,0.2)";
+        }
+    } catch (e) {
+        console.warn("Audit integrity error:", e);
+    }
+}
+
 async function refreshAdminAuditLogs() {
     const tbody = document.getElementById("adminAuditTableBody");
     if (!tbody) return;
+
+    checkAuditIntegrity();
 
     try {
         const res = await fetch("/api/admin/audit?limit=100", { cache: "no-store" });
@@ -2443,6 +2551,16 @@ window.submitCreateUser = submitCreateUser;
 window.toggleUserStatus = toggleUserStatus;
 window.filterAuditTable = filterAuditTable;
 window.refreshAuditLogs = refreshAdminAuditLogs;
+window.checkAuditIntegrity = checkAuditIntegrity;
+window.scheduleCoalescedRefresh = scheduleCoalescedRefresh;
+window.executeCoalescedRefresh = executeCoalescedRefresh;
+window.__refreshCoalesce = {
+    get timer() { return refreshTimer; },
+    get inFlight() { return isRefreshInFlight; },
+    get pending() { return refreshPending; },
+    schedule: scheduleCoalescedRefresh,
+    execute: executeCoalescedRefresh,
+};
 
 // Boot HMI
 initSidebarNavigation();

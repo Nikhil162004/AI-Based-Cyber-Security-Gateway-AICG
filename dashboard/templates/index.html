@@ -1621,6 +1621,8 @@
                 <button type="button" class="btn-filter" id="filterAlertsUnack" onclick="filterAdminAlerts('UNACK')">UNACK (<span id="countAlertsUnack">0</span>)</button>
                 <button type="button" class="btn-filter" id="filterAlertsActive" onclick="filterAdminAlerts('ACTIVE')">ACTIVE (<span id="countAlertsActive">0</span>)</button>
                 <button type="button" class="btn-filter" id="filterAlertsResolved" onclick="filterAdminAlerts('RESOLVED')">RESOLVED (<span id="countAlertsResolved">0</span>)</button>
+                <a href="/api/export/alerts.csv" download="aegis-alerts.csv" class="btn-header-tool" id="btnExportAlertsCsv" title="Export Alerts as CSV" style="text-decoration:none;">📥 Export Alerts CSV</a>
+                <a href="/api/export/alerts.json" download="aegis-alerts.json" class="btn-header-tool" id="btnExportAlertsJson" title="Export Alerts as JSON" style="text-decoration:none;">📥 Export Alerts JSON</a>
             </div>
         </div>
 
@@ -1737,8 +1739,11 @@
                 </div>
             </div>
             <div class="panel-badge-group">
+                <span id="auditIntegrityBadge" class="tag" style="background: rgba(16,185,129,0.15); color: var(--green); border-color: rgba(16,185,129,0.4); font-size: 10px; font-family: var(--font-mono); display: inline-flex; align-items: center; gap: 4px;">LEDGER STATUS: VERIFYING...</span>
                 <input type="text" id="auditSearchInput" placeholder="Filter by action or user..." onkeyup="filterAuditTable()" style="background: var(--bg-input); border: 1px solid var(--border-subtle); color: var(--text-primary); border-radius: var(--radius-sm); padding: 4px 8px; font-size: 11px; font-family: var(--font-mono); width: 180px;">
                 <button type="button" class="btn-header-tool" onclick="refreshAuditLogs()" title="Refresh Audit Log">🔄 Refresh</button>
+                <a href="/api/export/audit.csv" download="aegis-audit.csv" class="btn-header-tool" id="btnExportAuditCsv" title="Export Audit Log as CSV" style="text-decoration:none;">📥 Export Audit CSV</a>
+                <a href="/api/export/audit.json" download="aegis-audit.json" class="btn-header-tool" id="btnExportAuditJson" title="Export Audit Log as JSON" style="text-decoration:none;">📥 Export Audit JSON</a>
             </div>
         </div>
 
