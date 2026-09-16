@@ -7,3 +7,6 @@ data/*.sqlite3-journal
 .venv/
 .coverage
 htmlcov/
+
+# Ralph verification runtime logs
+.ralph/
