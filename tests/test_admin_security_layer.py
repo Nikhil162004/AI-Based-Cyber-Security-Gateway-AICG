@@ -435,3 +435,122 @@ def test_zero_trust_posture_endpoint(admin_app):
         assert posture["access_decision"]["mode"] == "DRY_RUN"
         assert posture["access_decision"]["host_enforcement"] is False
         assert posture["access_decision"]["network_transmission"] is False
+
+
+def test_events_endpoint_zero_trust_authentication(admin_app):
+    runtime, app = admin_app
+
+    # 1. Unauthenticated request to /events -> must fail closed with 401 AUTH_REQUIRED, no redirect
+    with app.test_client() as unauth_client:
+        res = unauth_client.get("/events")
+        assert res.status_code == 401
+        data = res.get_json()
+        assert data["code"] == "AUTH_REQUIRED"
+        assert data["authenticated"] is False
+        assert "Location" not in res.headers
+
+        # Verify ACCESS_DENIED logged in audit ledger
+        audits = runtime.store.list_audit_logs(limit=10)
+        denied_events = [a for a in audits if a["action"] == "ACCESS_DENIED" and "/events" in a["resource"]]
+        assert len(denied_events) >= 1
+        assert denied_events[0]["result"] == "DENIED"
+
+    # 2. Authenticated request to /events -> 200 text/event-stream and event delivery
+    with app.test_client() as auth_client:
+        auth_client.post("/api/auth/login", json={
+            "username": "operator",
+            "password": "Operator@AICG2026!",
+            "mfa_code": "123456",
+        })
+
+        res_stream = auth_client.get("/events")
+        assert res_stream.status_code == 200
+        assert "text/event-stream" in res_stream.content_type
+
+        # Verify immediate initial message delivery
+        first_chunk = next(res_stream.response)
+        decoded = first_chunk.decode("utf-8")
+        assert "event: status" in decoded
+
+
+def test_forensic_export_rbac(admin_app):
+    runtime, app = admin_app
+
+    # Pre-seed an alert and an audit record
+    runtime.store.record_audit(
+        username="system",
+        role="SYSTEM",
+        action="SEED_TEST",
+        resource="system",
+        resource_id="1",
+        result="SUCCESS",
+        details="Pre-seed audit log entry",
+    )
+    ev = generate_window("syn_flood", intensity=2, sequence=0)
+    runtime.store.append_telemetry(ev)
+    inc = runtime.store.create_incident(ev, ["SYN anomaly"], "SENSOR-01")
+    runtime.store.create_or_update_alert(inc, ev)
+
+    # 1. Operator attempts to export audit logs -> 403 FORBIDDEN_ROLE
+    with app.test_client() as op_client:
+        op_client.post("/api/auth/login", json={
+            "username": "operator",
+            "password": "Operator@AICG2026!",
+            "mfa_code": "123456",
+        })
+
+        # Operator audit CSV -> 403
+        res_csv = op_client.get("/api/export/audit.csv")
+        assert res_csv.status_code == 403
+        assert res_csv.get_json()["code"] == "FORBIDDEN_ROLE"
+
+        # Operator audit JSON -> 403
+        res_json = op_client.get("/api/export/audit.json")
+        assert res_json.status_code == 403
+        assert res_json.get_json()["code"] == "FORBIDDEN_ROLE"
+
+        # Verify ACCESS_DENIED audit entry for the denied export attempt
+        audit_records = runtime.store.list_audit_logs(limit=20)
+        denied = [a for a in audit_records if a["action"] == "ACCESS_DENIED" and "/api/export/audit" in a["resource"]]
+        assert len(denied) >= 1
+        assert denied[0]["role"] == "OPERATOR"
+        assert denied[0]["result"] == "DENIED"
+
+        # Operator alerts CSV and JSON export -> 200
+        op_alerts_csv = op_client.get("/api/export/alerts.csv")
+        assert op_alerts_csv.status_code == 200
+        assert "text/csv" in op_alerts_csv.content_type
+
+        op_alerts_json = op_client.get("/api/export/alerts.json")
+        assert op_alerts_json.status_code == 200
+        assert "application/json" in op_alerts_json.content_type
+
+    # 2. Admin export audit and alerts -> 200
+    with app.test_client() as admin_client:
+        admin_client.post("/api/auth/login", json={
+            "username": "admin",
+            "password": "Admin@AICG2026!",
+            "mfa_code": "123456",
+        })
+
+        # Admin audit CSV -> 200
+        adm_audit_csv = admin_client.get("/api/export/audit.csv")
+        assert adm_audit_csv.status_code == 200
+        assert "text/csv" in adm_audit_csv.content_type
+        assert "SEED_TEST" in adm_audit_csv.get_data(as_text=True)
+
+        # Admin audit JSON -> 200
+        adm_audit_json = admin_client.get("/api/export/audit.json")
+        assert adm_audit_json.status_code == 200
+        assert "application/json" in adm_audit_json.content_type
+        assert "SEED_TEST" in adm_audit_json.get_data(as_text=True)
+
+        # Admin alerts CSV -> 200
+        adm_alerts_csv = admin_client.get("/api/export/alerts.csv")
+        assert adm_alerts_csv.status_code == 200
+        assert "text/csv" in adm_alerts_csv.content_type
+
+        # Admin alerts JSON -> 200
+        adm_alerts_json = admin_client.get("/api/export/alerts.json")
+        assert adm_alerts_json.status_code == 200
+        assert "application/json" in adm_alerts_json.content_type

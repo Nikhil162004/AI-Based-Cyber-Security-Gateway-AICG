@@ -240,6 +240,13 @@ def test_controlled_demo_frontend_and_api_integration_regression(runtime_app):
 def test_api_events_sse_endpoint(runtime_app):
     runtime, app = runtime_app
     with app.test_client() as client:
+        # Phase 21 zero-trust requirement: unauthenticated request rejected with 401
+        res_unauth = client.get("/events")
+        assert res_unauth.status_code == 401
+        assert res_unauth.get_json()["code"] == "AUTH_REQUIRED"
+
+        # Authenticated session connects and streams SSE events
+        _login(client)
         res = client.get("/events")
         assert res.status_code == 200
         assert res.mimetype == "text/event-stream"
