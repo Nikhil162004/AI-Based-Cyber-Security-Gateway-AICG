@@ -41,6 +41,7 @@ from .security import (
     set_pre_mfa_user,
     verify_password,
     verify_simulated_mfa,
+    _log_security_audit,
 )
 
 
@@ -427,6 +428,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         return jsonify({
             "authenticated": True,
             "user": user,
+            "role": user.get("role", ""),
             "permissions": sorted(perms),
             "environment": "CONTROLLED_LAB",
             "scope": "LOCAL LAB IDENTITY / SIMULATED MFA / DRY_RUN"
@@ -904,6 +906,21 @@ def create_app(runtime: GatewayRuntime) -> Flask:
     @app.get("/api/export/<kind>.<fmt>")
     @login_required
     def export(kind: str, fmt: str):
+        if kind == "audit":
+            user = get_current_user()
+            user_role = str(user.get("role", "")).upper() if user else ""
+            if user_role != ROLE_ADMIN:
+                _log_security_audit(
+                    user.get("username", "unknown") if user else "anonymous",
+                    user_role or "ANONYMOUS",
+                    "ACCESS_DENIED",
+                    f"Denied role '{user_role}' for endpoint {request.method} {request.path}. Allowed: ['{ROLE_ADMIN}']",
+                )
+                return jsonify({
+                    "error": f"Forbidden: Role '{user_role}' lacks authorization. Required: ['{ROLE_ADMIN}']",
+                    "code": "FORBIDDEN_ROLE",
+                    "role": user_role,
+                }), 403
         try:
             content = runtime.store.export(kind, fmt)
             mimetype = "text/csv" if fmt == "csv" else "application/json"
@@ -1328,6 +1345,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             return jsonify({"error": str(error)}), 400
 
     @app.get("/events")
+    @login_required
     def sse():
         def stream():
             for message in runtime.subscribe():

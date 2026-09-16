@@ -203,14 +203,14 @@ def login_required(f: Callable[..., Any]) -> Callable[..., Any]:
     def decorated(*args: Any, **kwargs: Any) -> Any:
         user = get_current_user()
         if not user:
-            if request.method in ("POST", "PUT", "PATCH", "DELETE") or request.path.startswith("/api/"):
+            if request.method in ("POST", "PUT", "PATCH", "DELETE") or request.path.startswith("/api/") or request.path == "/events":
                 _log_security_audit(
                     "anonymous",
                     "ANONYMOUS",
                     "ACCESS_DENIED",
                     f"Unauthenticated attempt to access {request.method} {request.path}",
                 )
-            if request.path.startswith("/api/"):
+            if request.path.startswith("/api/") or request.path == "/events":
                 return jsonify({
                     "error": "Unauthorized: Authentication required",
                     "code": "AUTH_REQUIRED",
@@ -234,7 +234,7 @@ def roles_required(*roles: str) -> Callable[..., Any]:
                     "ACCESS_DENIED",
                     f"Unauthenticated attempt to access {request.method} {request.path}",
                 )
-                if request.path.startswith("/api/"):
+                if request.path.startswith("/api/") or request.path == "/events":
                     return jsonify({
                         "error": "Unauthorized: Authentication required",
                         "code": "AUTH_REQUIRED",
@@ -273,7 +273,7 @@ def permission_required(permission: str) -> Callable[..., Any]:
                     "ACCESS_DENIED",
                     f"Unauthenticated attempt to access {request.method} {request.path}",
                 )
-                if request.path.startswith("/api/"):
+                if request.path.startswith("/api/") or request.path == "/events":
                     return jsonify({
                         "error": "Unauthorized: Authentication required",
                         "code": "AUTH_REQUIRED",
