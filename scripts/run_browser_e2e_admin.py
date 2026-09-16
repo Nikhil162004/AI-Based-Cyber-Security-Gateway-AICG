@@ -126,6 +126,24 @@ def run_e2e():
             # STEP 1: LOGIN PAGE RENDERING & AUTHENTICATION REJECTION TESTS
             # -------------------------------------------------------------
             print("\n[Step 1] Verifying Login Page rendering, styling, and validation...")
+            # Verify unauthenticated redirection to /login
+            driver.get(f"{base_url}/")
+            time.sleep(1.0)
+            assert "/login" in driver.current_url, f"Expected redirect to /login, got {driver.current_url}"
+            print("  [+] Unauthenticated navigation to / correctly redirected to /login.")
+
+            # Verify direct MFA submission without primary authentication returns 401 PRE_AUTH_REQUIRED
+            status_mfa_direct = driver.execute_script("""
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/api/auth/mfa/verify', false);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.send(JSON.stringify({mfa_code: '123456'}));
+                return {status: xhr.status, body: JSON.parse(xhr.responseText || '{}')};
+            """)
+            assert status_mfa_direct['status'] == 401, f"Expected 401 for direct MFA, got {status_mfa_direct['status']}"
+            assert status_mfa_direct['body'].get('code') == 'PRE_AUTH_REQUIRED'
+            print("  [+] Direct MFA verification without primary auth rejected with 401 PRE_AUTH_REQUIRED.")
+
             driver.get(f"{base_url}/login")
             time.sleep(1.0)
             assert "/login" in driver.current_url, f"Expected /login, got {driver.current_url}"
@@ -308,8 +326,8 @@ def run_e2e():
             for s in range(3):
                 runtime.ingest(generate_window("normal", intensity=1, sequence=s))
 
-            # Ingest Attack Window 1 (UDP flood)
-            atk_window_1 = generate_window("udp_flood", intensity=4, sequence=10)
+            # Ingest Attack Window 1 (SYN flood - HIGH severity)
+            atk_window_1 = generate_window("syn_flood", intensity=1, sequence=10)
             res1 = runtime.ingest(atk_window_1)
             assert res1["decision"]["prediction"] == "ATTACK"
             incidents = [i for i in runtime.store.incidents() if i["lifecycle_state"] != "CLOSED"]
@@ -325,7 +343,7 @@ def run_e2e():
             print(f"  [+] Attack ingested: Incident {inc_id} generated -> Alert {alert_id} created ({alert_1['severity']}).")
 
             # Ingest Attack Window 2 (Campaign continues: Deduplication test)
-            atk_window_2 = generate_window("udp_flood", intensity=5, sequence=11)
+            atk_window_2 = generate_window("syn_flood", intensity=1, sequence=11)
             runtime.ingest(atk_window_2)
             alerts_after_2 = runtime.store.list_alerts()
             # Must remain 1 alert for this incident, NOT duplicated
@@ -357,6 +375,20 @@ def run_e2e():
             assert alert_record["acknowledgement_state"] == "ACKNOWLEDGED"
             assert alert_record["acknowledged_by"] == "admin"
             print(f"  [+] Alert {alert_id} acknowledged via UI by admin.")
+
+            # Test Alert Re-Escalation upon recurring severe attack
+            print("  [*] Testing Alert Re-Escalation upon recurring severe attack...")
+            atk_severe = generate_window("syn_flood", intensity=5, sequence=15)
+            runtime.ingest(atk_severe)
+            re_alert = runtime.store.get_alert(alert_id)
+            assert re_alert["acknowledgement_state"] == "RE_ESCALATED", f"Expected RE_ESCALATED, got {re_alert['acknowledgement_state']}"
+            assert re_alert["status"] == "ACTIVE"
+            print(f"  [+] Alert {alert_id} re-escalated to RE_ESCALATED upon recurring severe attack.")
+
+            # Re-acknowledge before recovery
+            runtime.store.acknowledge_alert(alert_id, "admin")
+            driver.execute_script("if (typeof refreshAdminAlerts === 'function') refreshAdminAlerts();")
+            time.sleep(0.5)
 
             # Simulate recovery (5 benign windows)
             print("  [*] Feeding consecutive benign windows to trigger autonomous recovery...")
@@ -467,7 +499,26 @@ def run_e2e():
             """)
             assert status_op_close == 403, f"Expected 403 for operator closing incident, got {status_op_close}"
 
-            print("  [+] RBAC strictly enforced: Operator blocked with HTTP 403 on User Management, Audit Logs, Mode Controls, and Incident Closure.")
+            # 5. Operator denied simulation launch
+            status_sim = driver.execute_script("""
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/api/simulations/start', false);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.send(JSON.stringify({scenario_id: 'udp_flood', intensity: 3}));
+                return xhr.status;
+            """)
+            assert status_sim == 403, f"Expected 403 for operator starting simulation, got {status_sim}"
+
+            # 6. Operator denied audit log integrity check
+            status_integ = driver.execute_script("""
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', '/api/admin/audit/integrity', false);
+                xhr.send();
+                return xhr.status;
+            """)
+            assert status_integ == 403, f"Expected 403 for operator verifying audit integrity, got {status_integ}"
+
+            print("  [+] RBAC strictly enforced: Operator blocked with HTTP 403 on User Management, Audit Logs, Integrity, Mode Controls, Simulations, and Incident Closure.")
             driver.save_screenshot(str(screenshots_dir / "05_operator_rbac.png"))
 
             # -------------------------------------------------------------

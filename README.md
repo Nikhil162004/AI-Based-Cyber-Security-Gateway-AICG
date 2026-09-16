@@ -3,7 +3,7 @@
 [![Python](https://img.shields.io/badge/Python-3.14-blue.svg)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Framework-Flask_3.1-green.svg)](https://flask.palletsprojects.com/)
 [![scikit-learn](https://img.shields.io/badge/ML-scikit--learn_1.9-orange.svg)](https://scikit-learn.org/)
-[![Test Suite](https://img.shields.io/badge/Tests-38_Passed_1_Skipped-brightgreen.svg)]()
+[![Test Suite](https://img.shields.io/badge/Tests-86_Passed-brightgreen.svg)]()
 [![Safety](https://img.shields.io/badge/Boundary-100%25_Dry--Run_/_Simulated-red.svg)]()
 
 A technically defensible, end-to-end edge cybersecurity gateway engineered for Industrial IoT (IIoT) and Industry 4.0 automation networks. The platform combines real-time multi-source telemetry ingestion, physics-informed cause-based energy correlation, Platt-calibrated hybrid AI/ML attack detection, dynamic Zero-Trust Identity and Access Management (IAM), multi-window campaign correlation, and closed-loop incident lifecycle state governance.
@@ -106,16 +106,16 @@ source .venv/bin/activate
 ```
 
 ### Running the Test Suite
-Run the 39-test automated verification suite:
+Run the 86-test automated verification suite:
 ```bash
 .venv/bin/pytest tests/
 ```
-*Expected Output: `38 passed, 1 skipped` (skips external Cooja path only if external directory is absent).*
+*Expected Output: `86 passed in ~20s`.*
 
-### End-to-End Acceptance Verification
-Run the end-to-end simulation acceptance script:
+### End-to-End Headless Browser Verification
+Run the comprehensive headless browser E2E suite (MFA, RBAC, alert lifecycle, and viewports):
 ```bash
-.venv/bin/python scripts/e2e_acceptance_verification.py
+.venv/bin/python scripts/run_browser_e2e_admin.py
 ```
 
 ### Starting the Gateway & HMI
@@ -134,7 +134,7 @@ Launch the gateway runtime and operator dashboard:
 AI-Edge-DDoS-Gateway/
 ├── aegis_gateway/               # Core Gateway Engine
 │   ├── adapters.py             # Multi-source adapters (NS-3, Cooja, PCAP)
-│   ├── api.py                  # Flask REST API, SSE streaming, route mounts
+│   ├── api.py                  # Flask REST API, SSE streaming, route mounts, security
 │   ├── config.py               # Repository configuration & environment flags
 │   ├── detection.py            # HybridDetector, feature extraction, rules
 │   ├── energy.py               # Cause-based edge energy model (MODELLED)
@@ -144,7 +144,8 @@ AI-Edge-DDoS-Gateway/
 │   ├── runtime.py              # Thread-safe GatewayRuntime & lifecycle state
 │   ├── scenarios.py            # 10-vector attack catalogue & generators
 │   ├── schema.py               # Canonical TelemetryEvent dataclass & bounds
-│   └── storage.py              # SQLite historian, incident correlation, audits
+│   ├── security.py             # Auth rate limiting, session rotation, RBAC decorators
+│   └── storage.py              # SQLite historian, FKs, WAL, SHA-256 audit hash chain
 ├── dashboard/                  # Web Interface & Visualizations
 │   ├── static/                 # CSS styling & vanilla JavaScript SSE client
 │   └── templates/
@@ -155,12 +156,16 @@ AI-Edge-DDoS-Gateway/
 │   └── hybrid_detector.joblib  # Trained, Platt-calibrated model bundle
 ├── reports/                    # Model validation metrics & confusion matrix
 │   ├── evaluation.json         # Stratified group-split evaluation metrics
-│   └── confusion_matrix.csv    # Test set confusion matrix
+│   ├── confusion_matrix.csv    # Test set confusion matrix
+│   └── evidence/screenshots/   # Browser E2E verification evidence
 ├── scripts/                    # Acceptance & utility scripts
-│   └── e2e_acceptance_verification.py
-├── tests/                      # Automated test suite (Pytest)
+│   ├── e2e_acceptance_verification.py
+│   └── run_browser_e2e_admin.py
+├── tests/                      # Automated test suite (Pytest - 86 tests)
 │   ├── test_adapters.py
+│   ├── test_admin_security_layer.py
 │   ├── test_api_and_runtime.py
+│   ├── test_api_security_and_hardening.py
 │   ├── test_detection_and_ml.py
 │   ├── test_energy_and_iam.py
 │   ├── test_policy_and_incidents.py
@@ -168,6 +173,7 @@ AI-Edge-DDoS-Gateway/
 │   ├── test_schema.py
 │   └── test_storage_and_export.py
 └── docs/                       # Architectural documentation & guides
+    ├── ADMINISTRATIVE_SECURITY_LAYER_V1.md  # Phase 20 Architecture & Integrity Spec
     └── DEMO_GUIDE.md           # Step-by-step evaluator demonstration guide
 ```
 

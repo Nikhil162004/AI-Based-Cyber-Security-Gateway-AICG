@@ -20,6 +20,17 @@ def runtime_app(tmp_path: Path):
     return runtime, app
 
 
+def _login(client, username="admin", password="Admin@AICG2026!", mfa="123456"):
+    """Authenticate test client as administrative user with simulated MFA."""
+    res = client.post("/api/auth/login", json={
+        "username": username,
+        "password": password,
+        "mfa_code": mfa,
+    })
+    assert res.status_code == 200
+    return res
+
+
 def test_api_health_and_status(runtime_app):
     runtime, app = runtime_app
     with app.test_client() as client:
@@ -40,6 +51,7 @@ def test_api_health_and_status(runtime_app):
 def test_api_static_assets_and_pages(runtime_app):
     runtime, app = runtime_app
     with app.test_client() as client:
+        _login(client)
         # Dashboard HTML
         res_root = client.get("/")
         assert res_root.status_code == 200
@@ -90,6 +102,7 @@ def test_api_incidents_lifecycle(runtime_app):
     runtime.ingest(generate_window("syn_flood", 3, 0))
 
     with app.test_client() as client:
+        _login(client)
         res = client.get("/api/incidents")
         assert res.status_code == 200
         data = res.get_json()
@@ -123,6 +136,7 @@ def test_api_incidents_lifecycle(runtime_app):
 def test_api_manual_action_and_mode(runtime_app):
     runtime, app = runtime_app
     with app.test_client() as client:
+        _login(client)
         # Toggle mode to MANUAL
         res_mode = client.post("/api/settings/mode", json={"mode": "MANUAL", "auto": False})
         assert res_mode.status_code == 200
@@ -137,6 +151,7 @@ def test_api_manual_action_and_mode(runtime_app):
 def test_api_demo_data_endpoint(runtime_app):
     runtime, app = runtime_app
     with app.test_client() as client:
+        _login(client)
         res = client.post("/api/demo-data")
         assert res.status_code == 200
         data = res.get_json()
@@ -149,6 +164,7 @@ def test_api_demo_data_endpoint(runtime_app):
 def test_api_scenarios_and_simulations(runtime_app):
     runtime, app = runtime_app
     with app.test_client() as client:
+        _login(client)
         res_sc = client.get("/api/scenarios")
         assert res_sc.status_code == 200
         assert len(res_sc.get_json()["scenarios"]) >= 10
@@ -173,6 +189,7 @@ def test_api_export_endpoints(runtime_app):
     runtime.ingest(generate_window("normal", 1, 0))
 
     with app.test_client() as client:
+        _login(client)
         res_csv = client.get("/api/export/telemetry.csv")
         assert res_csv.status_code == 200
         assert res_csv.mimetype == "text/csv"
@@ -200,6 +217,7 @@ def test_controlled_demo_frontend_and_api_integration_regression(runtime_app):
 
     # 3. Verify backend flow: GET /api/demo-data is not reintroduced (returns 405)
     with app.test_client() as client:
+        _login(client)
         res_legacy = client.get("/api/demo-data")
         assert res_legacy.status_code == 405
 
@@ -381,6 +399,7 @@ def test_incident_current_vs_history_semantics(runtime_app):
     """Verify that current runtime active incident is differentiated from resolved historical audit records."""
     runtime, app = runtime_app
     with app.test_client() as client:
+        _login(client)
         # Create/ingest an attack event that produces an incident
         from aegis_gateway.scenarios import generate_window
         event = generate_window("udp_flood", intensity=4, sequence=1)
@@ -483,6 +502,7 @@ def test_incident_lifecycle_stepper_contracts(runtime_app):
     """
     runtime, app = runtime_app
     with app.test_client() as client:
+        _login(client)
         # Contract 1: Initial baseline normal telemetry with lifecycle_state = "OBSERVED"
         runtime.ingest(generate_window("normal", 1, 0))
         res_status = client.get("/api/status")
@@ -574,6 +594,7 @@ def test_master_contracts_a_through_m(runtime_app):
     """Explicitly verify master requirements Contracts A through M."""
     runtime, app = runtime_app
     with app.test_client() as client:
+        _login(client)
         # Contract A: Baseline OT rhythm continuously ingested (~14-18 pps)
         w_norm = generate_window("normal", intensity=1, sequence=0)
         runtime.ingest(w_norm)

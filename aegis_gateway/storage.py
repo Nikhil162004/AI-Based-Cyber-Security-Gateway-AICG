@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import sqlite3
 from contextlib import contextmanager
@@ -13,6 +14,8 @@ from typing import Any, Iterator
 from uuid import uuid4
 
 from .schema import CANONICAL_FIELDS, TelemetryEvent, utc_now
+
+GENESIS_HASH = "0" * 64
 
 
 class GatewayStore:
@@ -25,6 +28,11 @@ class GatewayStore:
     def connection(self) -> Iterator[sqlite3.Connection]:
         con = sqlite3.connect(self.path, timeout=10)
         con.row_factory = sqlite3.Row
+        # Phase 20 Concurrency and Integrity Pragmas
+        con.execute("PRAGMA journal_mode = WAL;")
+        con.execute("PRAGMA foreign_keys = ON;")
+        con.execute("PRAGMA busy_timeout = 5000;")
+        con.execute("PRAGMA synchronous = NORMAL;")
         try:
             yield con
             con.commit()
@@ -53,13 +61,15 @@ class GatewayStore:
                 CREATE INDEX IF NOT EXISTS incidents_state_idx ON incidents(lifecycle_state, severity);
                 CREATE TABLE IF NOT EXISTS incident_history (
                     history_id TEXT PRIMARY KEY, incident_id TEXT NOT NULL, timestamp TEXT NOT NULL,
-                    previous_state TEXT, state TEXT NOT NULL, actor TEXT, note TEXT, evidence_json TEXT NOT NULL
+                    previous_state TEXT, state TEXT NOT NULL, actor TEXT, note TEXT, evidence_json TEXT NOT NULL,
+                    FOREIGN KEY (incident_id) REFERENCES incidents(incident_id) ON DELETE CASCADE
                 );
                 CREATE INDEX IF NOT EXISTS incident_history_incident_idx ON incident_history(incident_id, timestamp);
                 CREATE TABLE IF NOT EXISTS actions (
                     action_id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, event_id TEXT, incident_id TEXT,
                     action TEXT NOT NULL, reason TEXT NOT NULL, policy TEXT NOT NULL, mode TEXT NOT NULL,
-                    result TEXT NOT NULL, provenance TEXT NOT NULL
+                    result TEXT NOT NULL, provenance TEXT NOT NULL,
+                    FOREIGN KEY (incident_id) REFERENCES incidents(incident_id) ON DELETE SET NULL
                 );
                 CREATE TABLE IF NOT EXISTS iam_events (
                     iam_event_id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, identity TEXT, role TEXT,
@@ -88,20 +98,55 @@ class GatewayStore:
                     target TEXT NOT NULL, confidence REAL NOT NULL, detection_reason TEXT NOT NULL,
                     lifecycle_state TEXT NOT NULL, recommended_action TEXT NOT NULL, current_action TEXT NOT NULL,
                     acknowledgement_state TEXT NOT NULL DEFAULT 'UNACKNOWLEDGED', acknowledged_by TEXT,
-                    acknowledged_at TEXT, status TEXT NOT NULL DEFAULT 'ACTIVE', evidence_json TEXT NOT NULL DEFAULT '[]'
+                    acknowledged_at TEXT, status TEXT NOT NULL DEFAULT 'ACTIVE', evidence_json TEXT NOT NULL DEFAULT '[]',
+                    FOREIGN KEY (incident_id) REFERENCES incidents(incident_id) ON DELETE CASCADE
                 );
                 CREATE INDEX IF NOT EXISTS admin_alerts_incident_idx ON admin_alerts(incident_id);
                 CREATE INDEX IF NOT EXISTS admin_alerts_status_idx ON admin_alerts(status, acknowledgement_state);
                 CREATE TABLE IF NOT EXISTS admin_audit_log (
                     event_id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, username TEXT NOT NULL,
                     role TEXT NOT NULL, action TEXT NOT NULL, resource TEXT NOT NULL, resource_id TEXT,
-                    result TEXT NOT NULL, source_ip TEXT, details TEXT NOT NULL
+                    result TEXT NOT NULL, source_ip TEXT, details TEXT NOT NULL,
+                    prev_hash TEXT NOT NULL DEFAULT '0000000000000000000000000000000000000000000000000000000000000000',
+                    record_hash TEXT NOT NULL DEFAULT ''
                 );
                 CREATE INDEX IF NOT EXISTS admin_audit_timestamp_idx ON admin_audit_log(timestamp DESC);
                 CREATE INDEX IF NOT EXISTS admin_audit_action_idx ON admin_audit_log(action);
                 """
             )
+            self._migrate_schema(con)
             self._seed_default_users(con)
+
+    def _migrate_schema(self, con: sqlite3.Connection) -> None:
+        """Backward-compatible schema migration for existing databases."""
+        audit_cols = [r["name"] for r in con.execute("PRAGMA table_info(admin_audit_log)").fetchall()]
+        if "prev_hash" not in audit_cols:
+            con.execute(f"ALTER TABLE admin_audit_log ADD COLUMN prev_hash TEXT DEFAULT '{GENESIS_HASH}'")
+        if "record_hash" not in audit_cols:
+            con.execute("ALTER TABLE admin_audit_log ADD COLUMN record_hash TEXT DEFAULT ''")
+
+        # Migrate unhashed records if present
+        unhashed = con.execute("SELECT rowid, * FROM admin_audit_log WHERE record_hash IS NULL OR record_hash = '' ORDER BY rowid ASC").fetchall()
+        if unhashed:
+            first_rowid = unhashed[0]["rowid"]
+            prev_row = con.execute("SELECT record_hash FROM admin_audit_log WHERE rowid < ? AND record_hash != '' ORDER BY rowid DESC LIMIT 1", (first_rowid,)).fetchone()
+            curr_prev = str(prev_row["record_hash"]) if prev_row else GENESIS_HASH
+            for row in unhashed:
+                h = self._compute_audit_hash(
+                    prev_hash=curr_prev,
+                    event_id=row["event_id"],
+                    timestamp=row["timestamp"],
+                    username=row["username"],
+                    role=row["role"],
+                    action=row["action"],
+                    resource=row["resource"],
+                    resource_id=row["resource_id"],
+                    result=row["result"],
+                    source_ip=row["source_ip"],
+                    details=row["details"],
+                )
+                con.execute("UPDATE admin_audit_log SET prev_hash = ?, record_hash = ? WHERE rowid = ?", (curr_prev, h, row["rowid"]))
+                curr_prev = h
 
     def _seed_default_users(self, con: sqlite3.Connection) -> None:
         from .security import hash_password
@@ -218,21 +263,32 @@ class GatewayStore:
         new_sev = event.severity or "MEDIUM"
         effective_sev = new_sev if severity_rank.get(new_sev, 2) > severity_rank.get(curr_sev, 2) else curr_sev
         effective_conf = max(float(current.get("confidence") or 0.0), float(event.confidence or 0.0))
+
+        prev_state = current["lifecycle_state"]
+        if prev_state == "RECOVERING":
+            effective_state = "CONTAINED"
+            history_note = "Attack activity resumed during recovery verification; state regressed from RECOVERING to CONTAINED."
+        else:
+            effective_state = prev_state
+            history_note = note
+
         with self.connection() as con:
             con.execute(
                 "UPDATE incidents SET updated_at=?, event_id=?, severity=?, confidence=?, evidence_json=?, "
-                "energy_impact=?, iam_impact=?, trust_impact=?, response_action=? WHERE incident_id=?",
+                "energy_impact=?, iam_impact=?, trust_impact=?, response_action=?, lifecycle_state=? WHERE incident_id=?",
                 (now, event.event_id, effective_sev, round(effective_conf, 3), json.dumps(merged_evidence),
                  event.energy_cause or current.get("energy_impact"),
                  event.access_decision or current.get("iam_impact"),
                  str(event.trust_score) if event.trust_score is not None else current.get("trust_impact"),
                  event.response_action or current.get("response_action"),
+                 effective_state,
                  incident_id)
             )
             con.execute(
-                "INSERT INTO incident_history VALUES (?,?,?,?,?,?,?,?)",
-                (str(uuid4()), incident_id, now, current["lifecycle_state"], current["lifecycle_state"],
-                 "system", note, json.dumps(new_evidence))
+                "INSERT INTO incident_history (history_id, incident_id, timestamp, previous_state, state, actor, note, evidence_json) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (str(uuid4()), incident_id, now, prev_state, effective_state,
+                 "system", history_note, json.dumps(new_evidence))
             )
         return self.incident(incident_id)  # type: ignore[return-value]
 
@@ -457,6 +513,10 @@ class GatewayStore:
         if existing:
             # Update existing alert (NO duplicates!)
             prev_sev = existing.get("severity", "MEDIUM")
+            is_escalation = (
+                severity_rank.get(effective_sev, 2) > severity_rank.get(prev_sev, 2)
+                or (existing.get("lifecycle_state") == "RECOVERING" and severity_rank.get(effective_sev, 2) >= 2)
+            )
             if severity_rank.get(effective_sev, 2) < severity_rank.get(prev_sev, 2):
                 effective_sev = prev_sev
             effective_conf = max(float(existing.get("confidence") or 0.0), conf)
@@ -464,10 +524,25 @@ class GatewayStore:
             new_state = incident.get("lifecycle_state") or existing.get("lifecycle_state", "DETECTED")
             new_status = "RESOLVED" if new_state == "RESOLVED" else ("CLOSED" if new_state == "CLOSED" else existing.get("status", "ACTIVE"))
 
+            # Alert Re-escalation: If previously acknowledged and severity escalated, shift to RE_ESCALATED
+            ack_state = existing.get("acknowledgement_state", "UNACKNOWLEDGED")
+            if is_escalation and ack_state == "ACKNOWLEDGED":
+                ack_state = "RE_ESCALATED"
+                self.record_audit(
+                    username="system",
+                    role="SYSTEM",
+                    action="ALERT_RE_ESCALATED",
+                    resource="alert",
+                    resource_id=existing["alert_id"],
+                    result="SUCCESS",
+                    details=f"Alert {existing['alert_id']} re-escalated from {prev_sev} to {effective_sev} due to intensified attack activity",
+                    source_ip="127.0.0.1",
+                )
+
             with self.connection() as con:
                 con.execute(
                     "UPDATE admin_alerts SET timestamp = ?, severity = ?, confidence = ?, lifecycle_state = ?, "
-                    "current_action = ?, status = ?, evidence_json = ? WHERE alert_id = ?",
+                    "current_action = ?, status = ?, acknowledgement_state = ?, evidence_json = ? WHERE alert_id = ?",
                     (
                         now,
                         effective_sev,
@@ -475,6 +550,7 @@ class GatewayStore:
                         new_state,
                         f"{act} (DRY_RUN)",
                         new_status,
+                        ack_state,
                         json.dumps(merged_evidence),
                         existing["alert_id"],
                     )
@@ -605,12 +681,98 @@ class GatewayStore:
             "details": safe_details,
         }
         with self.connection() as con:
+            last_row = con.execute("SELECT record_hash FROM admin_audit_log ORDER BY rowid DESC LIMIT 1").fetchone()
+            prev_hash = str(last_row["record_hash"]) if (last_row and last_row["record_hash"]) else GENESIS_HASH
+            record_hash = self._compute_audit_hash(
+                prev_hash=prev_hash,
+                event_id=event_id,
+                timestamp=now,
+                username=username or "system",
+                role=(role or "UNKNOWN").upper(),
+                action=action.upper(),
+                resource=resource,
+                resource_id=resource_id,
+                result=result.upper(),
+                source_ip=source_ip or "127.0.0.1",
+                details=safe_details,
+            )
+            item["prev_hash"] = prev_hash
+            item["record_hash"] = record_hash
             con.execute(
-                "INSERT INTO admin_audit_log (event_id, timestamp, username, role, action, resource, resource_id, result, source_ip, details) "
-                "VALUES (:event_id, :timestamp, :username, :role, :action, :resource, :resource_id, :result, :source_ip, :details)",
+                "INSERT INTO admin_audit_log (event_id, timestamp, username, role, action, resource, resource_id, result, source_ip, details, prev_hash, record_hash) "
+                "VALUES (:event_id, :timestamp, :username, :role, :action, :resource, :resource_id, :result, :source_ip, :details, :prev_hash, :record_hash)",
                 item
             )
         return item
+
+    def _compute_audit_hash(
+        self,
+        prev_hash: str,
+        event_id: str,
+        timestamp: str,
+        username: str,
+        role: str,
+        action: str,
+        resource: str,
+        resource_id: str | None,
+        result: str,
+        source_ip: str | None,
+        details: str,
+    ) -> str:
+        """Deterministic canonical string serialization for cryptographic hash chaining."""
+        canonical_repr = (
+            f"{prev_hash}|{event_id}|{timestamp}|{username}|{role}|{action}|"
+            f"{resource}|{resource_id or ''}|{result}|{source_ip or ''}|{details}"
+        )
+        return hashlib.sha256(canonical_repr.encode("utf-8")).hexdigest()
+
+    def verify_audit_log_integrity(self) -> dict[str, Any]:
+        """Verify the cryptographic forward integrity of the audit log hash chain."""
+        with self.connection() as con:
+            rows = con.execute("SELECT rowid, * FROM admin_audit_log ORDER BY rowid ASC").fetchall()
+
+        if not rows:
+            return {"valid": True, "count": 0, "first_corrupted_id": None, "reason": None}
+
+        expected_prev = GENESIS_HASH
+        for idx, row in enumerate(rows):
+            event_id = row["event_id"]
+            prev_hash = row["prev_hash"]
+            record_hash = row["record_hash"]
+
+            if prev_hash != expected_prev:
+                return {
+                    "valid": False,
+                    "count": len(rows),
+                    "corrupted_index": idx,
+                    "first_corrupted_id": event_id,
+                    "reason": f"Broken chain at record {event_id}: expected prev_hash {expected_prev}, got {prev_hash}",
+                }
+
+            computed = self._compute_audit_hash(
+                prev_hash=prev_hash,
+                event_id=event_id,
+                timestamp=row["timestamp"],
+                username=row["username"],
+                role=row["role"],
+                action=row["action"],
+                resource=row["resource"],
+                resource_id=row["resource_id"],
+                result=row["result"],
+                source_ip=row["source_ip"],
+                details=row["details"],
+            )
+            if computed != record_hash:
+                return {
+                    "valid": False,
+                    "count": len(rows),
+                    "corrupted_index": idx,
+                    "first_corrupted_id": event_id,
+                    "reason": f"Hash mismatch at record {event_id}: expected {computed}, got {record_hash}",
+                }
+            expected_prev = record_hash
+
+        return {"valid": True, "count": len(rows), "first_corrupted_id": None, "reason": None}
 
     def list_audit_logs(
         self,

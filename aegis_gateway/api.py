@@ -28,11 +28,17 @@ from .security import (
     ROLE_ADMIN,
     ROLE_OPERATOR,
     ROLE_PERMISSIONS,
+    auth_limiter,
+    clear_pre_mfa,
     get_current_user,
+    get_pre_mfa_user,
+    has_permission,
     hash_password,
     login_required,
     permission_required,
     roles_required,
+    rotate_session,
+    set_pre_mfa_user,
     verify_password,
     verify_simulated_mfa,
 )
@@ -175,10 +181,13 @@ def create_app(runtime: GatewayRuntime) -> Flask:
     app.config["runtime"] = runtime
     app.config["TEMPLATES_AUTO_RELOAD"] = True
     app.jinja_env.auto_reload = True
-    app.secret_key = "aicg-edge-gateway-lab-secret-key-2026"
+    app.secret_key = runtime.settings.secret_key
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["SESSION_COOKIE_SECURE"] = runtime.settings.session_cookie_secure
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=4)
+    auth_limiter.max_attempts = runtime.settings.auth_rate_limit_max
+    auth_limiter.window_seconds = runtime.settings.auth_rate_limit_window_seconds
 
     @app.get("/login")
     def login_page():
@@ -197,13 +206,21 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         password = str(data.get("password", ""))
         mfa_code = data.get("mfa_code")
 
+        if auth_limiter.is_rate_limited(request.remote_addr, username):
+            return jsonify({
+                "error": "Too many failed authentication attempts. Please wait before retrying.",
+                "code": "RATE_LIMITED",
+            }), 429
+
         if not username or not password:
+            auth_limiter.record_failure(request.remote_addr, username)
             return jsonify({"error": "Invalid administrative credentials", "code": "AUTH_FAILED"}), 401
 
         user = runtime.store.get_admin_user(username)
         if not user:
             # Constant-time dummy verification
             verify_password("dummy_password", "scrypt:32768:8:1$dummy$dummypasswordhashforconstanttimecheck123456")
+            auth_limiter.record_failure(request.remote_addr, username)
             runtime.store.record_audit(
                 username=username,
                 role="UNKNOWN",
@@ -217,6 +234,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             return jsonify({"error": "Invalid administrative credentials", "code": "AUTH_FAILED"}), 401
 
         if not verify_password(password, user["password_hash"]):
+            auth_limiter.record_failure(request.remote_addr, username)
             runtime.store.record_audit(
                 username=user["username"],
                 role=user["role"],
@@ -230,6 +248,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             return jsonify({"error": "Invalid administrative credentials", "code": "AUTH_FAILED"}), 401
 
         if user.get("status") == "DISABLED":
+            auth_limiter.record_failure(request.remote_addr, username)
             runtime.store.record_audit(
                 username=user["username"],
                 role=user["role"],
@@ -245,6 +264,8 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         # Simulated MFA verification step
         if user.get("mfa_enabled", 1):
             if not mfa_code:
+                # Stage 1: Store pre-MFA state, do NOT authenticate yet
+                set_pre_mfa_user(user)
                 return jsonify({
                     "mfa_required": True,
                     "username": user["username"],
@@ -253,7 +274,10 @@ def create_app(runtime: GatewayRuntime) -> Flask:
                     "message": "Primary credentials verified. Enter simulated MFA verification code (123456)."
                 }), 200
 
+            set_pre_mfa_user(user)
             if not verify_simulated_mfa(str(mfa_code)):
+                auth_limiter.record_failure(request.remote_addr, username)
+                clear_pre_mfa()
                 runtime.store.record_audit(
                     username=user["username"],
                     role=user["role"],
@@ -266,7 +290,10 @@ def create_app(runtime: GatewayRuntime) -> Flask:
                 )
                 return jsonify({"error": "Invalid simulated MFA verification token", "code": "MFA_INVALID"}), 401
 
-        # Successful login
+        # Stage 2: Successful primary & MFA authentication -> rotate session
+        auth_limiter.reset(request.remote_addr, username)
+        clear_pre_mfa()
+        rotate_session()
         session.permanent = True
         user_session = {
             "user_id": user["user_id"],
@@ -302,18 +329,43 @@ def create_app(runtime: GatewayRuntime) -> Flask:
 
     @app.post("/api/auth/mfa/verify")
     def verify_mfa_endpoint():
-        data = request.get_json(silent=True) or request.form.to_dict()
+        data = request.get_json(silent=True) or request.form.to_dict() or {}
         username = str(data.get("username", "")).strip()
         mfa_code = str(data.get("mfa_code", ""))
 
-        if not username or not mfa_code:
-            return jsonify({"error": "Username and mfa_code are required"}), 400
+        # Enforce Stage 1 pre-MFA requirement: must have passed primary password verification
+        pre_user = get_pre_mfa_user()
+        if not pre_user:
+            auth_limiter.record_failure(request.remote_addr, username or "unknown")
+            return jsonify({
+                "error": "MFA verification requires prior primary authentication",
+                "code": "PRE_AUTH_REQUIRED",
+            }), 401
+
+        username = username or pre_user.get("username", "")
+        if not mfa_code:
+            return jsonify({"error": "mfa_code is required", "code": "MFA_REQUIRED"}), 400
+
+        if auth_limiter.is_rate_limited(request.remote_addr, username):
+            return jsonify({
+                "error": "Too many failed authentication attempts. Please wait before retrying.",
+                "code": "RATE_LIMITED",
+            }), 429
+
+        if pre_user.get("username") != username:
+            auth_limiter.record_failure(request.remote_addr, username)
+            return jsonify({
+                "error": "MFA verification requires prior primary authentication",
+                "code": "PRE_AUTH_REQUIRED",
+            }), 401
 
         user = runtime.store.get_admin_user(username)
         if not user:
+            auth_limiter.record_failure(request.remote_addr, username)
             return jsonify({"error": "Invalid user", "code": "USER_NOT_FOUND"}), 404
 
         if not verify_simulated_mfa(mfa_code):
+            auth_limiter.record_failure(request.remote_addr, username)
             runtime.store.record_audit(
                 username=user["username"],
                 role=user["role"],
@@ -326,6 +378,10 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             )
             return jsonify({"error": "Invalid simulated MFA verification token", "code": "MFA_INVALID"}), 401
 
+        # Clear pre-MFA and rotate session
+        auth_limiter.reset(request.remote_addr, username)
+        clear_pre_mfa()
+        rotate_session()
         session.permanent = True
         user_session = {
             "user_id": user["user_id"],
@@ -380,6 +436,8 @@ def create_app(runtime: GatewayRuntime) -> Flask:
     @app.route("/api/auth/logout", methods=["POST"])
     def logout():
         user = session.pop("user", None)
+        clear_pre_mfa()
+        rotate_session()
         if user:
             runtime.store.record_audit(
                 username=user.get("username", "unknown"),
@@ -394,6 +452,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         if request.is_json or request.path.startswith("/api/"):
             return jsonify({"ok": True, "message": "Session terminated", "authenticated": False})
         return redirect("/login")
+
 
     # =========================================================================
     # ADMINISTRATIVE CONSOLE & ALERT CENTER ENDPOINTS
@@ -570,6 +629,13 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         items = runtime.store.list_audit_logs(limit=limit, action=action, username=username)
         return jsonify({"audit_events": items, "count": len(items)})
 
+    @app.get("/api/admin/audit/integrity")
+    @login_required
+    @roles_required(ROLE_ADMIN)
+    def get_admin_audit_integrity():
+        integrity = runtime.store.verify_audit_log_integrity()
+        return jsonify(integrity)
+
     @app.get("/api/admin/security/posture")
     @login_required
     def get_security_posture():
@@ -611,10 +677,12 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         })
 
     @app.get("/")
+    @login_required
     def dashboard():
         return render_template("index.html")
 
     @app.get("/attacker")
+    @login_required
     def attacker():
         return render_template("attacker.html")
 
@@ -692,24 +760,28 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         return jsonify({"events": formatted, "count": len(formatted)})
 
     @app.get("/api/incidents")
+    @login_required
     def incidents():
         limit = _number(request.args.get("limit"), 100)
         items = runtime.store.incidents(limit=limit, severity=request.args.get("severity"), state=request.args.get("state"))
         return jsonify({"incidents": items, "count": len(items)})
 
     @app.get("/api/incidents/<incident_id>")
+    @login_required
     def incident(incident_id: str):
         item = runtime.store.incident(incident_id)
         return (jsonify(item), 200) if item else (jsonify({"error": "not found"}), 404)
 
     @app.post("/api/incidents/<incident_id>/transition")
+    @login_required
+    @permission_required(PERM_MANAGE_INCIDENT)
     def transition_incident(incident_id: str):
         body = request.get_json(silent=True) or {}
         state = str(body.get("state", "")).upper()
-        curr_user = get_current_user()
+        curr_user = get_current_user() or {"username": "operator", "role": "OPERATOR"}
 
         # Enforce RBAC: Only ADMIN can close incidents
-        if state == "CLOSED" and curr_user and curr_user.get("role") != ROLE_ADMIN:
+        if state == "CLOSED" and not has_permission(curr_user.get("role"), PERM_CLOSE_INCIDENT):
             runtime.store.record_audit(
                 username=curr_user.get("username", "operator"),
                 role=curr_user.get("role", "OPERATOR"),
@@ -727,7 +799,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
                 "required_permission": PERM_CLOSE_INCIDENT,
             }), 403
 
-        actor = str(body.get("actor") or (curr_user["username"] if curr_user else "operator"))
+        actor = str(body.get("actor") or curr_user["username"])
         note = str(body.get("note", "operator transition"))
         try:
             item = runtime.store.transition_incident(incident_id, state, actor, note)
@@ -739,7 +811,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             action_name = "INCIDENT_CLOSED" if state == "CLOSED" else "INCIDENT_TRANSITIONED"
             runtime.store.record_audit(
                 username=actor,
-                role=curr_user["role"] if curr_user else "OPERATOR",
+                role=curr_user["role"],
                 action=action_name,
                 resource="incident",
                 resource_id=incident_id,
@@ -752,16 +824,18 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             return jsonify({"error": str(error)}), 400
 
     @app.post("/api/incidents/<incident_id>/action")
+    @login_required
+    @permission_required(PERM_MANAGE_INCIDENT)
     def incident_action(incident_id: str):
-        curr_user = get_current_user()
+        curr_user = get_current_user() or {"username": "operator", "role": "OPERATOR"}
         body = request.get_json(silent=True) or {}
-        actor = str(body.get("actor") or (curr_user["username"] if curr_user else "operator"))
+        actor = str(body.get("actor") or curr_user["username"])
         action_name = str(body.get("action", ""))
         try:
             res = runtime.manual_action(incident_id, action_name, actor)
             runtime.store.record_audit(
                 username=actor,
-                role=curr_user["role"] if curr_user else "OPERATOR",
+                role=curr_user["role"],
                 action="MANUAL_ACTION_EXECUTED",
                 resource="incident",
                 resource_id=incident_id,
@@ -774,12 +848,14 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             return jsonify({"error": str(error)}), 400
 
     @app.post("/api/manual/action")
+    @login_required
+    @permission_required(PERM_MANAGE_INCIDENT)
     def manual_action():
-        curr_user = get_current_user()
+        curr_user = get_current_user() or {"username": "operator", "role": "OPERATOR"}
         body = request.get_json(silent=True) or {}
         action = str(body.get("action", "")).upper()
         incident_id = body.get("incident_id")
-        actor = str(body.get("actor") or (curr_user["username"] if curr_user else "operator"))
+        actor = str(body.get("actor") or curr_user["username"])
         if not incident_id:
             active = runtime.store.find_active_incident()
             if active:
@@ -793,7 +869,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
                 res = runtime.manual_action(incident_id, action, actor)
                 runtime.store.record_audit(
                     username=actor,
-                    role=curr_user["role"] if curr_user else "OPERATOR",
+                    role=curr_user["role"],
                     action="MANUAL_ACTION_EXECUTED",
                     resource="incident",
                     resource_id=incident_id,
@@ -818,6 +894,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         return jsonify({"action": stored, "incident": None})
 
     @app.get("/api/actions")
+    @login_required
     def actions():
         return jsonify({
             "actions": runtime.store.actions(limit=_number(request.args.get("limit"), 100)),
@@ -825,6 +902,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         })
 
     @app.get("/api/export/<kind>.<fmt>")
+    @login_required
     def export(kind: str, fmt: str):
         try:
             content = runtime.store.export(kind, fmt)
@@ -841,18 +919,20 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         })
 
     @app.post("/api/simulations/start")
+    @login_required
+    @permission_required(PERM_ADMIN_CONTROLS)
     def start_simulation():
-        curr_user = get_current_user()
+        curr_user = get_current_user() or {"username": "admin", "role": "ADMIN"}
         body = request.get_json(silent=True) or {}
         scenario_id = str(body.get("scenario_id", ""))
         intensity = _number(body.get("intensity"), 3)
         duration = body.get("duration")
-        actor = curr_user["username"] if curr_user else "system"
+        actor = curr_user["username"]
         try:
             payload = runtime.start_simulation(scenario_id, intensity, duration)
             runtime.store.record_audit(
                 username=actor,
-                role=curr_user["role"] if curr_user else "OPERATOR",
+                role=curr_user["role"],
                 action="SIMULATION_STARTED",
                 resource="simulation",
                 resource_id=scenario_id,
@@ -865,15 +945,17 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             return jsonify({"error": str(error)}), 400
 
     @app.post("/api/simulations/stop")
+    @login_required
+    @permission_required(PERM_ADMIN_CONTROLS)
     def stop_simulation():
-        curr_user = get_current_user()
+        curr_user = get_current_user() or {"username": "admin", "role": "ADMIN"}
         body = request.get_json(silent=True) or {}
         scenario_id = body.get("scenario_id")
         stopped = runtime.stop_simulation(scenario_id)
-        actor = curr_user["username"] if curr_user else "system"
+        actor = curr_user["username"]
         runtime.store.record_audit(
             username=actor,
-            role=curr_user["role"] if curr_user else "OPERATOR",
+            role=curr_user["role"],
             action="SIMULATION_STOPPED",
             resource="simulation",
             resource_id=str(scenario_id),
@@ -884,6 +966,8 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         return jsonify({"stopped": stopped, "network_transmission": False})
 
     @app.post("/api/demo-data")
+    @login_required
+    @permission_required(PERM_ADMIN_CONTROLS)
     def demo_data():
         """Single-step validated controlled attack execution for the dashboard button."""
         event = generate_window("udp_flood", intensity=3, sequence=0)
@@ -903,35 +987,19 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         })
 
     @app.post("/api/settings/mode")
+    @login_required
+    @roles_required(ROLE_ADMIN)
+    @permission_required(PERM_ADMIN_CONTROLS)
     def set_mode():
-        curr_user = get_current_user()
-        # Enforce RBAC: Only ADMIN can configure operating mode
-        if curr_user and curr_user.get("role") != ROLE_ADMIN:
-            runtime.store.record_audit(
-                username=curr_user.get("username", "operator"),
-                role=curr_user.get("role", "OPERATOR"),
-                action="ACCESS_DENIED",
-                resource="response_policy",
-                resource_id=None,
-                result="DENIED",
-                details="Denied permission to modify gateway mode: ADMIN role required",
-                source_ip=request.remote_addr,
-            )
-            return jsonify({
-                "error": "Forbidden: ADMIN role required for ADMIN_CONTROLS",
-                "code": "FORBIDDEN_ROLE",
-                "role": curr_user.get("role"),
-                "required_permission": PERM_ADMIN_CONTROLS,
-            }), 403
-
+        curr_user = get_current_user() or {"username": "admin", "role": "ADMIN"}
         body = request.get_json(silent=True) or {}
         mode = body.get("mode")
         auto = body.get("auto")
         cfg = runtime.configure_response(mode=mode, auto=auto)
-        actor = curr_user["username"] if curr_user else "system"
+        actor = curr_user["username"]
         runtime.store.record_audit(
             username=actor,
-            role=curr_user["role"] if curr_user else "ADMIN",
+            role=curr_user["role"],
             action="SECURITY_SETTING_CHANGED",
             resource="response_policy",
             resource_id=str(mode or ("AUTO" if auto else "MANUAL")),
@@ -1151,13 +1219,26 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         })
 
     @app.post("/api/ns3/import")
+    @login_required
+    @roles_required(ROLE_ADMIN)
     def import_ns3():
+        curr_user = get_current_user() or {"username": "admin", "role": "ADMIN"}
         body = request.get_json(silent=True) or {}
         candidate = (runtime.settings.root / str(body.get("path", ""))).resolve()
         if runtime.settings.root not in candidate.parents or not candidate.is_file():
             return jsonify({"error": "path must name a repository-local CSV"}), 400
         try:
             count = sum(1 for event in ns3_csv_events(candidate, body.get("scenario_id")) for _ in [runtime.ingest(event)])
+            runtime.store.record_audit(
+                username=curr_user["username"],
+                role=curr_user["role"],
+                action="DATA_IMPORTED",
+                resource="ns3_trace",
+                resource_id=str(candidate.relative_to(runtime.settings.root)),
+                result="SUCCESS",
+                details=f"Imported {count} events from NS3 CSV {candidate.name}",
+                source_ip=request.remote_addr,
+            )
             return jsonify({
                 "imported": count,
                 "source": str(candidate.relative_to(runtime.settings.root)),
@@ -1184,7 +1265,10 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         })
 
     @app.post("/api/cooja/import")
+    @login_required
+    @roles_required(ROLE_ADMIN)
     def import_cooja():
+        curr_user = get_current_user() or {"username": "admin", "role": "ADMIN"}
         body = request.get_json(silent=True) or {}
         raw_path = body.get("path") or "/home/kali/contiki-ng/examples/ai_edge_iiot/data/cooja_ml_ready_v1.csv"
         candidate = Path(raw_path).resolve()
@@ -1192,6 +1276,16 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             return jsonify({"error": f"File not found: {raw_path}"}), 400
         try:
             count = sum(1 for event in cooja_csv_events(candidate, body.get("scenario_id")) for _ in [runtime.ingest(event)])
+            runtime.store.record_audit(
+                username=curr_user["username"],
+                role=curr_user["role"],
+                action="DATA_IMPORTED",
+                resource="cooja_trace",
+                resource_id=str(candidate),
+                result="SUCCESS",
+                details=f"Imported {count} events from Cooja CSV {candidate.name}",
+                source_ip=request.remote_addr,
+            )
             return jsonify({
                 "imported": count,
                 "source": str(candidate),
@@ -1202,7 +1296,10 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             return jsonify({"error": str(error)}), 400
 
     @app.post("/api/pcap/replay")
+    @login_required
+    @roles_required(ROLE_ADMIN)
     def replay_pcap():
+        curr_user = get_current_user() or {"username": "admin", "role": "ADMIN"}
         body = request.get_json(silent=True) or {}
         candidate = (runtime.settings.root / str(body.get("path", ""))).resolve()
         if runtime.settings.root not in candidate.parents or not candidate.is_file():
@@ -1211,6 +1308,16 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             windowed = body.get("windowed", True)
             stream = pcap_window_events(candidate) if windowed else pcap_events(candidate)
             count = sum(1 for event in stream for _ in [runtime.ingest(event)])
+            runtime.store.record_audit(
+                username=curr_user["username"],
+                role=curr_user["role"],
+                action="PCAP_REPLAYED",
+                resource="pcap_trace",
+                resource_id=str(candidate.relative_to(runtime.settings.root)),
+                result="SUCCESS",
+                details=f"Replayed {count} events from PCAP {candidate.name}",
+                source_ip=request.remote_addr,
+            )
             return jsonify({
                 "replayed": count,
                 "source": str(candidate.relative_to(runtime.settings.root)),

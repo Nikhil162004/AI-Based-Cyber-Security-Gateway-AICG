@@ -1416,6 +1416,20 @@ async function runControlledDemo() {
             })
         });
 
+        if (response.status === 401) {
+            window.location.href = "/login?expired=1";
+            return;
+        }
+        if (response.status === 403) {
+            const errData = await response.json().catch(() => ({}));
+            if (banner) {
+                banner.textContent = "DEMO FORBIDDEN";
+                banner.style.color = "var(--red)";
+            }
+            if (detail) detail.textContent = errData.error || "Forbidden: Insufficient privileges";
+            alert(errData.error || "Forbidden: ADMIN role required to run simulations");
+            return;
+        }
         if (!response.ok) {
             const errData = await response.json().catch(() => ({}));
             throw new Error(errData.error || `HTTP ${response.status}`);
@@ -1463,6 +1477,20 @@ window.triggerScenario = async function(scenarioId, intensity = 3, duration = 10
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ scenario_id: scenarioId, intensity, duration })
         });
+        if (res.status === 401) {
+            window.location.href = "/login?expired=1";
+            return;
+        }
+        if (res.status === 403) {
+            const data = await res.json().catch(() => ({}));
+            if (banner) {
+                banner.textContent = "SIMULATION FORBIDDEN";
+                banner.style.color = "var(--red)";
+            }
+            if (detail) detail.textContent = data.error || "Forbidden: Insufficient privileges";
+            alert(data.error || "Forbidden: ADMIN role required to trigger simulations");
+            return;
+        }
         const data = await res.json();
         if (res.ok) {
             if (banner) {
@@ -1483,15 +1511,26 @@ window.triggerScenario = async function(scenarioId, intensity = 3, duration = 10
     }
 };
 
+window.startSimulation = window.triggerScenario;
+
 window.stopCurrentSimulation = async function() {
     const banner = document.getElementById("simStatusBanner");
     const detail = document.getElementById("simStatusDetail");
     try {
-        await fetch("/api/simulations/stop", {
+        const res = await fetch("/api/simulations/stop", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({})
         });
+        if (res.status === 401) {
+            window.location.href = "/login?expired=1";
+            return;
+        }
+        if (res.status === 403) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || "Forbidden: ADMIN role required to stop simulations");
+            return;
+        }
         if (banner) {
             banner.textContent = "SIMULATION STOPPED";
             banner.style.color = "var(--text-secondary)";
@@ -1504,8 +1543,8 @@ window.stopCurrentSimulation = async function() {
 };
 
 window.toggleResponseMode = async function() {
-    window.currentAutoResponse = !window.currentAutoResponse;
-    const mode = window.currentAutoResponse ? "DRY_RUN" : "MANUAL";
+    const nextAuto = !window.currentAutoResponse;
+    const mode = nextAuto ? "DRY_RUN" : "MANUAL";
     const textEl = document.getElementById("btnResponseModeText");
     const btnEl = document.getElementById("btnResponseMode");
 
@@ -1513,9 +1552,19 @@ window.toggleResponseMode = async function() {
         const res = await fetch("/api/settings/mode", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mode: mode, auto: window.currentAutoResponse })
+            body: JSON.stringify({ mode: mode, auto: nextAuto })
         });
+        if (res.status === 401) {
+            window.location.href = "/login?expired=1";
+            return;
+        }
+        if (res.status === 403) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || "Forbidden: ADMIN role required to toggle response mode");
+            return;
+        }
         if (res.ok) {
+            window.currentAutoResponse = nextAuto;
             if (textEl) textEl.textContent = window.currentAutoResponse ? "AUTO: ON" : "MANUAL: ACTIVE";
             if (btnEl) btnEl.className = `btn-mode-toggle ${window.currentAutoResponse ? 'active' : ''}`;
             const modeTag = document.getElementById("mitigationModeTag");
@@ -1535,8 +1584,20 @@ window.executeManualAction = async function(actionName) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action: actionName, actor: "operator" })
         });
+        if (res.status === 401) {
+            window.location.href = "/login?expired=1";
+            return;
+        }
+        if (res.status === 403) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || "Forbidden: Insufficient permissions for manual action");
+            return;
+        }
         if (res.ok) {
             refreshDashboard();
+        } else {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || `Action failed with status ${res.status}`);
         }
     } catch (e) {
         console.error("Manual action failed:", e);
@@ -1555,11 +1616,23 @@ window.transitionIncidentState = async function(incidentId, targetState) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ state: targetState, actor: "operator", note: "Operator transitioned state via HMI" })
         });
+        if (res.status === 401) {
+            window.location.href = "/login?expired=1";
+            return;
+        }
+        if (res.status === 403) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || `Forbidden: Cannot transition incident to ${targetState}`);
+            return;
+        }
         if (res.ok) {
             const updated = await res.json();
             hmiTargetIncident = updated;
+            refreshDashboard();
+        } else {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || `Transition failed with status ${res.status}`);
         }
-        refreshDashboard();
     } catch (e) {
         console.error("Transition failed:", e);
     }
