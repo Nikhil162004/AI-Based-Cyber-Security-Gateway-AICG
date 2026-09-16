@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from .runtime import GatewayRuntime
 
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="aegis-gateway", description="AEGIS-OT safe laboratory gateway")
+    root.add_argument("--database", type=Path, default=None, help="override database path")
     sub = root.add_subparsers(dest="command", required=True)
     run = sub.add_parser("run", help="run Flask HMI/API with SSE")
     run.add_argument("--host", default=None); run.add_argument("--port", type=int, default=None)
@@ -30,12 +32,14 @@ def parser() -> argparse.ArgumentParser:
     pcap = sub.add_parser("replay-pcap", help="replay a local PCAP as REPLAYED telemetry; no transmission")
     pcap.add_argument("pcap", type=Path)
     export = sub.add_parser("export", help="export durable evidence")
-    export.add_argument("kind", choices=["telemetry", "incidents", "actions"]); export.add_argument("--format", choices=["json", "csv"], default="json"); export.add_argument("--output", type=Path, required=True)
+    export.add_argument("kind", choices=["telemetry", "incidents", "events", "actions", "audit", "alerts"]); export.add_argument("--format", choices=["json", "csv"], default="json"); export.add_argument("--output", type=Path, required=True)
     return root
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = parser().parse_args(argv); settings = Settings()
+    args = parser().parse_args(argv)
+    db_path = args.database or (Path(os.getenv("AEGIS_DATABASE_PATH")) if os.getenv("AEGIS_DATABASE_PATH") else None)
+    settings = Settings(database_path=db_path) if db_path else Settings()
     if args.command == "generate-dataset": print(json.dumps(generate_dataset(args.output, samples_per_campaign=args.samples, seed=args.seed), indent=2)); return 0
     if args.command == "train":
         if not args.dataset.exists(): generate_dataset(args.dataset, seed=args.seed)

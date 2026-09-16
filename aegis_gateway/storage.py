@@ -379,19 +379,39 @@ class GatewayStore:
         return result.rowcount
 
     def export(self, kind: str, fmt: str) -> str:
-        if kind == "incidents": rows = self.incidents(limit=1000)
+        if kind == "incidents":
+            rows = self.incidents(limit=1000)
         elif kind in ("telemetry", "events"):
             rows = self.telemetry(limit=5000)
             if kind == "events":
                 rows = [r for r in rows if r.get("label") == "ATTACK"]
-        elif kind == "actions": rows = self.actions(limit=1000)
-        else: raise ValueError("Export kind must be incidents, telemetry, events, or actions")
-        if fmt == "json": return json.dumps(rows, indent=2, sort_keys=True)
-        if fmt != "csv": raise ValueError("Export format must be csv or json")
+        elif kind == "actions":
+            rows = self.actions(limit=1000)
+        elif kind == "audit":
+            rows = self.list_audit_logs(limit=1000)
+        elif kind == "alerts":
+            raw_alerts = self.list_alerts(limit=1000)
+            rows = []
+            for alert in raw_alerts:
+                item = dict(alert)
+                if "evidence" in item and "evidence_json" not in item:
+                    item["evidence_json"] = json.dumps(item["evidence"]) if isinstance(item["evidence"], (list, dict)) else str(item["evidence"])
+                rows.append(item)
+        else:
+            raise ValueError("Export kind must be incidents, telemetry, events, actions, audit, or alerts")
+
+        if fmt == "json":
+            return json.dumps(rows, indent=2, sort_keys=True)
+        if fmt != "csv":
+            raise ValueError("Export format must be csv or json")
         flattened = [{key: json.dumps(value) if isinstance(value, (list, dict)) else value for key, value in row.items()} for row in rows]
-        if not flattened: return ""
-        result = StringIO(); writer = csv.DictWriter(result, fieldnames=sorted({key for row in flattened for key in row}), extrasaction="ignore")
-        writer.writeheader(); writer.writerows(flattened); return result.getvalue()
+        if not flattened:
+            return ""
+        result = StringIO()
+        writer = csv.DictWriter(result, fieldnames=sorted({key for row in flattened for key in row}), extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(flattened)
+        return result.getvalue()
 
     # =========================================================================
     # ADMINISTRATIVE USER IDENTITY REGISTRY (LOCAL LAB)
