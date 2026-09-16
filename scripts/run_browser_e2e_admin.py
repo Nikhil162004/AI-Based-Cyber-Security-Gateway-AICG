@@ -304,6 +304,30 @@ def run_e2e():
             assert "Admin@AICG2026!" not in audit_text
             print("  [+] Audit Log verified: events recorded properly with zero password leakage.")
 
+            # Verify Audit Integrity Badge
+            WebDriverWait(driver, 10).until(
+                lambda d: "LEDGER VERIFIED" in d.find_element(By.ID, "auditIntegrityBadge").text
+            )
+            badge_text = driver.find_element(By.ID, "auditIntegrityBadge").text
+            assert "LEDGER VERIFIED (SHA-256)" in badge_text
+            print(f"  [+] Audit Integrity Badge verified: {badge_text}")
+
+            # Verify Audit and Alert Export Controls for Admin
+            btn_audit_csv = driver.find_element(By.ID, "btnExportAuditCsv")
+            btn_audit_json = driver.find_element(By.ID, "btnExportAuditJson")
+            assert btn_audit_csv.is_displayed()
+            assert btn_audit_json.is_displayed()
+            assert btn_audit_csv.get_attribute("href").endswith("/api/export/audit.csv")
+            assert btn_audit_json.get_attribute("href").endswith("/api/export/audit.json")
+
+            btn_alerts_csv = driver.find_element(By.ID, "btnExportAlertsCsv")
+            btn_alerts_json = driver.find_element(By.ID, "btnExportAlertsJson")
+            assert btn_alerts_csv.is_displayed()
+            assert btn_alerts_json.is_displayed()
+            assert btn_alerts_csv.get_attribute("href").endswith("/api/export/alerts.csv")
+            assert btn_alerts_json.get_attribute("href").endswith("/api/export/alerts.json")
+            print("  [+] Forensic export controls (Audit CSV/JSON, Alerts CSV/JSON) verified visible for Admin.")
+
             # 5. Security Posture panel
             nav_posture = driver.find_element(By.ID, "nav-admin-posture")
             nav_posture.click()
@@ -518,13 +542,131 @@ def run_e2e():
             """)
             assert status_integ == 403, f"Expected 403 for operator verifying audit integrity, got {status_integ}"
 
+            # 7. Operator denied audit export via HTTP 403
+            status_audit_export = driver.execute_script("""
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', '/api/export/audit.csv', false);
+                xhr.send();
+                return xhr.status;
+            """)
+            assert status_audit_export == 403, f"Expected 403 for operator audit export, got {status_audit_export}"
+
+            # 8. Operator allowed alerts export via HTTP 200
+            status_alerts_export = driver.execute_script("""
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', '/api/export/alerts.csv', false);
+                xhr.send();
+                return xhr.status;
+            """)
+            assert status_alerts_export == 200, f"Expected 200 for operator alerts export, got {status_alerts_export}"
+
+            # Verify audit export buttons are hidden for operator in UI
+            btn_audit_csv_op = driver.find_element(By.ID, "btnExportAuditCsv")
+            assert not btn_audit_csv_op.is_displayed(), "Audit export CSV button must be hidden for operator"
+            btn_audit_json_op = driver.find_element(By.ID, "btnExportAuditJson")
+            assert not btn_audit_json_op.is_displayed(), "Audit export JSON button must be hidden for operator"
+
+            # Alert export buttons remain visible for operator
+            assert driver.find_element(By.ID, "btnExportAlertsCsv").is_displayed()
+            assert driver.find_element(By.ID, "btnExportAlertsJson").is_displayed()
+            print("  [+] Operator forensic export RBAC verified: Audit export blocked (403, UI hidden), Alerts export permitted (200, UI visible).")
+
             print("  [+] RBAC strictly enforced: Operator blocked with HTTP 403 on User Management, Audit Logs, Integrity, Mode Controls, Simulations, and Incident Closure.")
             driver.save_screenshot(str(screenshots_dir / "05_operator_rbac.png"))
 
             # -------------------------------------------------------------
-            # STEP 6: RESPONSIVE VIEWPORT TESTING
+            # STEP 6: ATTACKER COCKPIT OPERATOR VIEW-ONLY & ADMIN CONTROLS
             # -------------------------------------------------------------
-            print("\n[Step 6] Testing responsive layouts across 5 industrial viewports...")
+            print("\n[Step 6] Verifying Attacker Cockpit Operator View-Only Mode & Admin Controls...")
+            driver.get(f"{base_url}/attacker")
+            time.sleep(1.0)
+            assert "/attacker" in driver.current_url
+
+            # Operator banner must be visible
+            op_banner = WebDriverWait(driver, 10).until(
+                EC.visibility_of_element_located((By.ID, "operatorViewOnlyBanner"))
+            )
+            assert op_banner.is_displayed()
+            assert "OPERATOR VIEW-ONLY MODE" in op_banner.text
+
+            # Operator mutation controls must be disabled
+            btn_launch = driver.find_element(By.ID, "btnLaunch")
+            btn_stop = driver.find_element(By.ID, "btnStop")
+            btn_reset = driver.find_element(By.ID, "btnResetNormal")
+            select_scen = driver.find_element(By.ID, "scenarioSelect")
+
+            assert btn_launch.get_attribute("disabled") is not None or not btn_launch.is_enabled()
+            assert btn_stop.get_attribute("disabled") is not None or not btn_stop.is_enabled()
+            assert btn_reset.get_attribute("disabled") is not None or not btn_reset.is_enabled()
+            assert select_scen.get_attribute("disabled") is not None or not select_scen.is_enabled()
+
+            # Status table / polling remains active
+            status_table = driver.find_element(By.CLASS_NAME, "status-table")
+            assert status_table.is_displayed()
+            driver.save_screenshot(str(screenshots_dir / "11_operator_attacker_view_only.png"))
+            print("  [+] Operator View-Only Mode verified on /attacker: banner displayed, mutation controls disabled, status polling active.")
+
+            # Now logout operator and login as admin
+            driver.execute_script("""
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/api/auth/logout', false);
+                xhr.send();
+            """)
+            driver.get(f"{base_url}/login")
+            time.sleep(0.5)
+            driver.find_element(By.ID, "btnQuickAdmin").click()
+            time.sleep(0.3)
+            driver.find_element(By.ID, "loginSubmitBtn").click()
+            time.sleep(1.5)
+
+            driver.get(f"{base_url}/attacker")
+            time.sleep(1.0)
+            admin_op_banner = driver.find_element(By.ID, "operatorViewOnlyBanner")
+            assert not admin_op_banner.is_displayed(), "Operator banner must be hidden for admin"
+            adm_launch = driver.find_element(By.ID, "btnLaunch")
+            assert adm_launch.is_enabled(), "Admin must have launch button enabled"
+            print("  [+] Admin Attacker Cockpit controls verified enabled and functional.")
+
+            # -------------------------------------------------------------
+            # STEP 7: SSE REFRESH COALESCING BEHAVIOR MEASUREMENT
+            # -------------------------------------------------------------
+            print("\n[Step 7] Measuring live client-side SSE refresh coalescing in browser...")
+            driver.get(f"{base_url}/")
+            time.sleep(1.0)
+
+            burst_results = driver.execute_async_script("""
+                const callback = arguments[arguments.length - 1];
+                let refreshCallCount = 0;
+                const originalRefresh = window.refreshDashboard;
+
+                window.refreshDashboard = async function() {
+                    refreshCallCount++;
+                    return await originalRefresh.apply(this, arguments);
+                };
+
+                // Trigger a burst of 5 rapid coalesced refresh calls inside the debounce window (within 20ms)
+                for (let i = 0; i < 5; i++) {
+                    setTimeout(() => {
+                        window.scheduleCoalescedRefresh();
+                    }, i * 4);
+                }
+
+                // Wait 400ms (> 250ms debounce window) and return observed call count
+                setTimeout(() => {
+                    const finalCount = refreshCallCount;
+                    window.refreshDashboard = originalRefresh;
+                    callback({ calls: finalCount });
+                }, 400);
+            """)
+
+            measured_calls = burst_results.get("calls", 0)
+            print(f"  [+] Coalescing measurement: 5 rapid events produced {measured_calls} refresh execution(s).")
+            assert measured_calls == 1, f"Expected 5 rapid events to coalesce into exactly 1 refresh, got {measured_calls}"
+
+            # -------------------------------------------------------------
+            # STEP 8: RESPONSIVE VIEWPORT TESTING
+            # -------------------------------------------------------------
+            print("\n[Step 8] Testing responsive layouts across 5 industrial viewports...")
             viewports = [
                 (1600, 1000, "06_viewport_1600x1000.png", "Standard SOC Workstation"),
                 (1280, 900, "07_viewport_1280x900.png", "Compact Console"),

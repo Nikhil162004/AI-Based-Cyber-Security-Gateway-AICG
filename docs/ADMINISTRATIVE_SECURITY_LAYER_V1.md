@@ -75,30 +75,54 @@ sequenceDiagram
 
 ## 3. Zero-Trust Role-Based Access Control (RBAC) Matrix
 
-Every gateway mutating endpoint is guarded by `@login_required`, `@roles_required(...)`, or `@permission_required(...)`. Access rejections immediately produce `HTTP 401 Unauthorized` or `HTTP 403 Forbidden` and commit an `ACCESS_DENIED` entry to the tamper-evident audit log.
+Every gateway mutating and protected endpoint is guarded by `@login_required`, `@roles_required(...)`, or `@permission_required(...)`. Access rejections immediately produce `HTTP 401 Unauthorized` or `HTTP 403 Forbidden` and commit an `ACCESS_DENIED` entry to the tamper-evident audit log.
+
+### Canonical Roles
+The administrative layer defines strictly two canonical roles:
+- **`ADMIN`**: Full administrative governance, configuration, user management, audit inspection, forensic audit exports, and simulation execution.
+- **`OPERATOR`**: Operational monitoring, alert acknowledgment, incident containment/recovery participation, and forensic alerts export. Simulation controls and audit log access are strictly restricted.
+
+### Canonical Permission Constants (`security.py`)
+- `PERM_VIEW_DASHBOARD`: Access primary HMI dashboard views.
+- `PERM_VIEW_INCIDENTS`: Inspect incident journal and attack details.
+- `PERM_ACK_ALERT`: Acknowledge active or re-escalated administrative alerts.
+- `PERM_MANAGE_INCIDENT`: Trigger manual mitigation actions and non-closure lifecycle transitions (`RECOVERING`, `RESOLVED`).
+- `PERM_CLOSE_INCIDENT`: Final administrative incident closure (`CLOSED`). Restricted to `ADMIN`.
+- `PERM_VIEW_AUDIT`: View historical administrative audit ledger and verify cryptographic integrity. Restricted to `ADMIN`.
+- `PERM_MANAGE_USERS`: Create users and update user status or roles. Restricted to `ADMIN`.
+- `PERM_VIEW_SECURITY_POSTURE`: Inspect zero-trust compliance checks and reputation scores.
+- `PERM_VIEW_SYSTEM_STATUS`: Access gateway status and telemetry health.
+- `PERM_ADMIN_CONTROLS`: Start/stop in-process simulations, trigger demo data, and alter gateway mitigation operating mode (`settings:mode`). Restricted to `ADMIN`.
 
 ### Access Control Matrix
 
-| Endpoint | Method | Permitted Roles | Required Permission | Description |
+| Endpoint | Method | Permitted Roles | Required Decorator / Permission | Description |
 |---|---|---|---|---|
-| `/api/auth/login` | POST | Public | - | Primary password authentication |
-| `/api/auth/mfa/verify` | POST | Pre-MFA Session | - | Second factor token verification |
-| `/api/auth/logout` | POST | Authenticated | - | Session termination & invalidation |
-| `/api/auth/status` | GET | Public | - | Current session role inspection |
-| `/api/status`, `/api/telemetry`, `/api/energy`, `/api/topology`, `/api/iam`, `/api/incidents` | GET | Public / All | - | Read-only industrial monitoring |
-| `/api/admin/overview` | GET | `ADMIN`, `OPERATOR`, `ANALYST`, `AUDITOR` | `alerts:read` | Overview telemetry & active alert counts |
-| `/api/admin/alerts` | GET | `ADMIN`, `OPERATOR`, `ANALYST`, `AUDITOR` | `alerts:read` | Administrative alert listing |
-| `/api/admin/alerts/<id>/acknowledge` | POST | `ADMIN`, `OPERATOR` | `alerts:acknowledge` | Acknowledge active or re-escalated alert |
-| `/api/incidents/<id>/action` | POST | `ADMIN`, `OPERATOR` | `incident:action` | Apply manual mitigation action (`ISOLATE`, `RATE_LIMIT`) |
-| `/api/manual/action` | POST | `ADMIN`, `OPERATOR` | `incident:action` | Trigger dry-run manual response action |
-| `/api/incidents/<id>/transition` | POST | `ADMIN` (all), `OPERATOR` (`RECOVERING`/`RESOLVED` only) | `incident:transition` | Transition incident lifecycle states |
-| `/api/admin/users` | GET, POST, PATCH | `ADMIN` | `users:manage` | Administrative user lifecycle management |
-| `/api/admin/audit` | GET | `ADMIN`, `AUDITOR` | `audit:read` | Query historical audit trail |
-| `/api/admin/audit/integrity` | GET | `ADMIN`, `AUDITOR` | `audit:read` | Verify audit log cryptographic hash chain |
-| `/api/simulations/start`, `/api/simulations/stop` | POST | `ADMIN` | `simulations:manage` | Controlled in-process attack simulation |
-| `/api/settings/mode` | POST | `ADMIN` | `settings:mode` | Switch mitigation mode (`AUTONOMOUS` vs `HYBRID`) |
-| `/api/demo-data` | POST | `ADMIN` | `demo:data` | Populate synthetic laboratory demonstration events |
-| `/api/ns3/import`, `/api/cooja/import`, `/api/pcap/replay` | POST | `ADMIN` | `data:import` | External trace file replay |
+| `/login`, `/logout` | GET, POST | Public / Authenticated | Session state | Primary session management |
+| `/api/auth/login` | POST | Public | Rate limited | Primary credentials authentication |
+| `/api/auth/mfa/verify` | POST | Pre-MFA Session | Simulated token | Second-factor simulated MFA verification |
+| `/api/auth/logout` | POST | Authenticated | `@login_required` | Session termination & invalidation |
+| `/api/auth/status` | GET | Public | - | Inspect current authentication session & role |
+| `/events` | GET | `ADMIN`, `OPERATOR` | `@login_required` | Server-Sent Events (SSE) stream; unauthenticated requests fail closed with 401 `AUTH_REQUIRED` (no 302 redirect) |
+| `/api/status`, `/api/telemetry`, `/api/energy`, `/api/topology`, `/api/iam` | GET | Public / All | - | Read-only industrial monitoring & telemetry |
+| `/api/admin/overview` | GET | `ADMIN`, `OPERATOR` | `@login_required`, `PERM_VIEW_DASHBOARD` | Overview telemetry & active alert counts |
+| `/api/admin/alerts` | GET | `ADMIN`, `OPERATOR` | `@login_required` | Administrative alert listing |
+| `/api/admin/alerts/<id>` | GET | `ADMIN`, `OPERATOR` | `@login_required` | Detailed alert inspection |
+| `/api/admin/alerts/<id>/acknowledge` | POST | `ADMIN`, `OPERATOR` | `@permission_required(PERM_ACK_ALERT)` | Acknowledge active or re-escalated alert |
+| `/api/export/audit.csv`, `/api/export/audit.json` | GET | `ADMIN` | `@login_required`, `ROLE_ADMIN` check | Forensic audit ledger export; `OPERATOR` receives 403 `FORBIDDEN_ROLE` with `ACCESS_DENIED` audit log |
+| `/api/export/alerts.csv`, `/api/export/alerts.json` | GET | `ADMIN`, `OPERATOR` | `@login_required` | Forensic alerts export (CSV/JSON) |
+| `/api/export/{telemetry,incidents,events,actions}.*` | GET | `ADMIN`, `OPERATOR` | `@login_required` | Forensic dataset and incident exports |
+| `/api/incidents/<id>/action` | POST | `ADMIN`, `OPERATOR` | `@permission_required(PERM_MANAGE_INCIDENT)` | Apply manual mitigation action (`ISOLATE`, `RATE_LIMIT`) |
+| `/api/manual/action` | POST | `ADMIN`, `OPERATOR` | `@permission_required(PERM_MANAGE_INCIDENT)` | Trigger dry-run manual response action |
+| `/api/incidents/<id>/transition` | POST | `ADMIN` (all states), `OPERATOR` (`RECOVERING`/`RESOLVED` only) | `@permission_required(PERM_MANAGE_INCIDENT)` / `PERM_CLOSE_INCIDENT` | Transition incident lifecycle states |
+| `/api/admin/users` | GET, POST, PATCH | `ADMIN` | `@roles_required(ROLE_ADMIN)` | Administrative user lifecycle management |
+| `/api/admin/audit` | GET | `ADMIN` | `@roles_required(ROLE_ADMIN)` | Query historical audit trail |
+| `/api/admin/audit/integrity` | GET | `ADMIN` | `@roles_required(ROLE_ADMIN)` | Verify cryptographic hash-chain integrity of audit ledger |
+| `/attacker` | GET | `ADMIN`, `OPERATOR` | `@login_required` | Attacker Cockpit; `OPERATOR` receives view-only mode with disabled mutation controls while retaining live status polling |
+| `/api/simulations/start`, `/api/simulations/stop` | POST | `ADMIN` | `@permission_required(PERM_ADMIN_CONTROLS)` | Controlled in-process attack simulation mutation |
+| `/api/demo-data` | POST | `ADMIN` | `@permission_required(PERM_ADMIN_CONTROLS)` | Populate synthetic laboratory demonstration events |
+| `/api/settings/mode` | POST | `ADMIN` | `@roles_required(ROLE_ADMIN)` | Switch mitigation mode (`AUTONOMOUS` vs `HYBRID`) |
+| `/api/ns3/import`, `/api/cooja/import`, `/api/pcap/replay` | POST | `ADMIN` | `@roles_required(ROLE_ADMIN)` | External trace file replay |
 
 ---
 
