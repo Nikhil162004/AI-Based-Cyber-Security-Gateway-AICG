@@ -10,7 +10,7 @@ import time
 from typing import Any, Iterator
 
 from .config import Settings
-from .detection import HybridDetector
+from .detection import Decision, HybridDetector
 from .energy import EnergyModel
 from .iam import IAMService
 from .policy import ResponseEngine
@@ -39,12 +39,39 @@ class GatewayRuntime:
         self.detector = HybridDetector(self.settings.model_path)
         self.energy = EnergyModel()
         self.iam = IAMService(storage=self.store)
-        self.response = ResponseEngine(self.settings.response_mode, self.settings.auto_response)
+        self.response = ResponseEngine(
+            self.settings.response_mode,
+            self.settings.auto_response,
+            in_process_enforcement=self.settings.in_process_enforcement,
+        )
         self._subscribers: set[queue.Queue[dict[str, Any]]] = set()
         self._lock = threading.RLock()
         self._simulations: dict[str, SimulationState] = {}
         self._recent: deque[dict[str, Any]] = deque(maxlen=120)
         self._normal_streak = 0
+        self._reconstruct_enforcement_state()
+
+    def _reconstruct_enforcement_state(self) -> None:
+        """Reconstruct in-process policy enforcement state from persistent SQLite incidents upon startup."""
+        try:
+            active_incidents = self.store.incidents(limit=100)
+            for inc in active_incidents:
+                state = inc.get("lifecycle_state")
+                dev_id = inc.get("device_id")
+                if not dev_id:
+                    continue
+                if state in {"RESPONDING", "CONTAINED"}:
+                    act = inc.get("response_action") or "ISOLATE"
+                    if act in {"ISOLATE", "BLOCK"}:
+                        self.response.isolate(dev_id, act, "Reconstructed from persistent active incident", state=state, severity=inc.get("severity", "HIGH"))
+                    elif act == "RATE_LIMIT":
+                        self.response.set_rate_limit(dev_id)
+                elif state == "RECOVERING":
+                    act = inc.get("response_action") or "ISOLATE"
+                    if act in {"ISOLATE", "BLOCK"}:
+                        self.response.isolate(dev_id, act, "Reconstructed in recovering state", state="RECOVERING", severity=inc.get("severity", "HIGH"))
+        except Exception:
+            pass
 
     def publish(self, kind: str, data: dict[str, Any]) -> None:
         message = {"type": kind, "data": data}
@@ -79,7 +106,7 @@ class GatewayRuntime:
         item = event if isinstance(event, TelemetryEvent) else TelemetryEvent.from_mapping(event)
         item.normalize()
         self.energy.correlate(item)
-        decision = self.detector.analyze(item)
+
         dev_id = item.device_id or item.source_id
         is_enrolled = self.iam.is_enrolled_sensor(dev_id)
         auth_ok, auth_reason = self.iam.authenticate_device(
@@ -89,7 +116,10 @@ class GatewayRuntime:
             item.flow_id,
         )
 
-        if is_enrolled and not auth_ok:
+        is_impersonation = is_enrolled and not auth_ok
+
+        # 1. IAM Authentication & Authorization resolution
+        if is_impersonation:
             # Impersonation attempt against an enrolled sensor:
             # Deny access immediately without decaying the legitimate sensor's trust score.
             identity = self.iam.get(dev_id)
@@ -105,8 +135,113 @@ class GatewayRuntime:
                 "decision": "DENY",
                 "reason": f"Impersonation rejected: {auth_reason}",
             }
+            # Impersonators must NOT activate or manipulate the legitimate sensor's mitigation state
+            policy_decision = None
         elif not auth_ok and not is_enrolled:
             # Untrusted or unregistered source (e.g. ATK-01 or rogue device)
+            identity = self.iam.get(dev_id)
+            access = self.iam.access(identity.identity)
+            access["authentication_status"] = "FAILED_OR_UNVERIFIED"
+            access["authorization_status"] = "DENIED"
+            access["decision"] = "DENY"
+            access["reason"] = f"Unenrolled/unverified device access denied: {auth_reason}"
+            policy_decision = self.response.evaluate(dev_id, item) if self.settings.in_process_enforcement else None
+        else:
+            # Authenticated device
+            identity = self.iam.get(dev_id)
+            access = self.iam.access(identity.identity)
+            policy_decision = self.response.evaluate(dev_id, item) if self.settings.in_process_enforcement else None
+
+        # 2. In-Process Policy Enforcement Boundary
+        if self.settings.in_process_enforcement and policy_decision and policy_decision.drop:
+            # Drop intercepted event at software boundary before detection ML inference
+            # Preserves credential sanitization and audits drop in telemetry
+            item.label = "ATTACK"
+            item.confidence = 1.0
+            item.model_version = self.detector.model_version
+            item.feature_version = "window-features-v2"
+            item.severity = policy_decision.metadata.get("severity", "HIGH")
+            item.iam_identity, item.role = identity.identity, identity.role
+            item.authentication_status = access["authentication_status"]
+            item.authorization_status = access["authorization_status"]
+            item.access_request = access["access_request"]
+            item.access_decision = access["decision"]
+            item.trust_score = identity.trust_score
+
+            item.response_action = "DROP"
+            item.response_mode = "SOFTWARE_INTERCEPT"
+            item.lifecycle_state = "FILTERED"
+
+            self.store.append_telemetry(item)
+            self.store.record_iam(access)
+
+            active = self.store.find_active_incident(device_id=dev_id)
+            linked_alert = None
+            inc_id = active["incident_id"] if active else None
+
+            if active:
+                alerts = self.store.list_alerts()
+                linked_alerts = [a for a in alerts if a["incident_id"] == inc_id]
+                if linked_alerts:
+                    linked_alert = linked_alerts[0]
+
+            self.store.record_action(
+                event_id=item.event_id,
+                incident_id=inc_id,
+                action="DROP",
+                reason=policy_decision.reason,
+                policy="in-process-enforcement-v1",
+                mode=self.response.mode,
+                result="SOFTWARE_INTERCEPT",
+            )
+
+            filt_decision = Decision(
+                prediction="ATTACK",
+                confidence=1.0,
+                severity=item.severity,
+                evidence=[policy_decision.reason],
+                score=1.0,
+                supervised_prediction="ATTACK",
+                anomaly_score=1.0,
+                model_version=self.detector.model_version,
+            )
+
+            resp_dict = {
+                "action": "DROP",
+                "reason": policy_decision.reason,
+                "mode": self.response.mode,
+                "result": "SOFTWARE_INTERCEPT",
+                "requires_incident": False,
+                "enforced": True,
+            }
+
+            result = {
+                "event": item.to_dict(),
+                "decision": filt_decision.as_dict(),
+                "response": resp_dict,
+                "incident": active,
+                "alert": linked_alert,
+                "mitigation_enforced": True,
+            }
+            self.publish("telemetry", result)
+            self.publish("response", {
+                "incident_id": inc_id,
+                "action": "DROP",
+                "reason": policy_decision.reason,
+                "mode": self.response.mode,
+                "result": "SOFTWARE_INTERCEPT",
+                "provenance": "SOFTWARE_INTERCEPT",
+            })
+            # IMPORTANT: Filtered events do NOT increment _normal_streak!
+            return result
+
+        # 3. Detection & ML Inference (Only executed when event is allowed)
+        decision = self.detector.analyze(item)
+
+        if is_impersonation:
+            delta = 0.0
+            trust_reason = "unauthenticated impersonation attempt rejected; legitimate sensor trust preserved"
+        elif not auth_ok and not is_enrolled:
             identity, delta, trust_reason = self.iam.adjust_trust(
                 dev_id,
                 attack=decision.prediction == "ATTACK",
@@ -118,13 +253,13 @@ class GatewayRuntime:
             access["decision"] = "DENY"
             access["reason"] = f"Unenrolled/unverified device access denied: {auth_reason}"
         else:
-            # Authenticated device
             identity, delta, trust_reason = self.iam.adjust_trust(
                 dev_id,
                 attack=decision.prediction == "ATTACK",
                 recovered=decision.prediction == "NORMAL",
             )
             access = self.iam.access(identity.identity)
+
         item.label = decision.prediction
         item.confidence = decision.confidence
         item.model_version = decision.model_version
@@ -153,10 +288,13 @@ class GatewayRuntime:
                     decision.evidence,
                     "Ongoing campaign correlated across observation windows"
                 )
+                if plan.mode != "MANUAL" and not is_impersonation:
+                    self.response.apply_simulation(plan, item.device_id)
             else:
                 incident = self.store.create_incident(item, decision.evidence, "CPU/RAM/radio/energy are model-correlated")
                 if plan.mode != "MANUAL":
-                    self.response.apply_simulation(plan, item.device_id)
+                    if not is_impersonation:
+                        self.response.apply_simulation(plan, item.device_id)
                     incident = self.store.transition_incident(incident["incident_id"], "RESPONDING", "system", "Simulated response planned; no host enforcement.", decision.evidence)
                     incident = self.store.transition_incident(incident["incident_id"], "CONTAINED", "system", "Containment state is simulated within the laboratory runtime.", decision.evidence)
             alert = self.store.create_or_update_alert(incident, item, decision, plan)
@@ -179,6 +317,7 @@ class GatewayRuntime:
             return
         for incident in self.store.incidents(limit=100):
             state = incident["lifecycle_state"]
+            dev_id = incident.get("device_id")
             try:
                 if state in {"CONTAINED", "RESPONDING", "DETECTED"}:
                     updated = self.store.transition_incident(
@@ -188,6 +327,7 @@ class GatewayRuntime:
                         f"Consecutive normal observations (streak={self._normal_streak}) verified traffic/resource recovery.",
                         ["traffic returned toward modeled baseline"]
                     )
+                    self.response.mark_recovering(dev_id)
                     self.publish("incident", updated)
                     alert = self.store.sync_alert_with_incident(updated)
                     if alert:
@@ -200,6 +340,7 @@ class GatewayRuntime:
                         f"Recovery verified from sustained normal baseline ({self._normal_streak} normal windows).",
                         ["sustained normal observations verified"]
                     )
+                    self.response.release(dev_id)
                     self.publish("incident", updated)
                     alert = self.store.sync_alert_with_incident(updated)
                     if alert:
@@ -251,15 +392,22 @@ class GatewayRuntime:
             raise ValueError("Unsupported response action")
         incident = self.store.incident(incident_id)
         if not incident: raise KeyError(f"Unknown incident: {incident_id}")
+        dev_id = incident.get("device_id")
         if action == "RECOVER":
             if incident["lifecycle_state"] == "CONTAINED":
                 incident = self.store.transition_incident(incident_id, "RECOVERING", actor, "Operator requested recovery verification; waiting for observable normal state.")
+            self.response.mark_recovering(dev_id)
             result = "PENDING_OBSERVABLE_VERIFICATION"
         else:
             if incident["lifecycle_state"] in {"DETECTED", "TRIAGED"}:
                 incident = self.store.transition_incident(incident_id, "RESPONDING", actor, f"Operator selected simulated {action}.")
             if incident["lifecycle_state"] == "RESPONDING":
                 incident = self.store.transition_incident(incident_id, "CONTAINED", actor, "Manual containment is simulated; no host policy changed.")
+            if dev_id:
+                if action in {"ISOLATE", "BLOCK"}:
+                    self.response.isolate(dev_id, action, f"Manual {action} requested by {actor}", state="CONTAINED")
+                elif action == "RATE_LIMIT":
+                    self.response.set_rate_limit(dev_id)
             result = "SIMULATED_NOT_ENFORCED"
         stored = self.store.record_action(event_id=incident["event_id"], incident_id=incident_id, action=action, reason="operator request", policy="manual-response-v1", mode="MANUAL", result=result)
         alert = self.store.sync_alert_with_incident(incident)

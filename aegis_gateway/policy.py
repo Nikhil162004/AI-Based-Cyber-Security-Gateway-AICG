@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import threading
+import time
+from typing import Any
 
 from .detection import Decision
-from .schema import TelemetryEvent
+from .schema import TelemetryEvent, utc_now
 
 
 @dataclass
@@ -17,24 +20,193 @@ class ResponsePlan:
     requires_incident: bool
 
 
+@dataclass
+class PolicyDecision:
+    action: str  # "ALLOW", "DROP", "RATE_LIMIT"
+    reason: str
+    enforced: bool = False
+    drop: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+class TokenBucket:
+    """Safe in-process per-device token bucket limiter using monotonic time."""
+
+    def __init__(self, capacity: float = 40.0, refill_rate: float = 20.0):
+        self.capacity = float(capacity)
+        self.refill_rate = float(refill_rate)
+        self.tokens = float(capacity)
+        self.last_update = time.monotonic()
+
+    def consume(self, count: float = 1.0) -> bool:
+        now = time.monotonic()
+        elapsed = max(0.0, now - self.last_update)
+        self.last_update = now
+        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)
+        if self.tokens >= count:
+            self.tokens -= count
+            return True
+        return False
+
+    def reset(self) -> None:
+        self.tokens = self.capacity
+        self.last_update = time.monotonic()
+
+
+class InProcessPolicyEnforcer:
+    """Deterministic in-process software policy boundary.
+
+    Operates strictly within Python memory on TelemetryEvent objects.
+    Never executes OS commands or touches host networking.
+    """
+
+    def __init__(self, enabled: bool = True):
+        self.enabled = enabled
+        self.active_isolates: dict[str, dict[str, Any]] = {}
+        self.rate_limiters: dict[str, TokenBucket] = {}
+        self._lock = threading.RLock()
+        self._sync_isolates_set: set[str] | None = None
+
+    def evaluate(self, device_id: str | None, event: TelemetryEvent) -> PolicyDecision:
+        if not self.enabled:
+            return PolicyDecision("ALLOW", "Software-level in-process mitigation enforcement is disabled by configuration", enforced=False, drop=False)
+        if not device_id:
+            return PolicyDecision("ALLOW", "No device_id; bypassing policy enforcement", enforced=False, drop=False)
+
+        with self._lock:
+            # 1. Check active isolation or block
+            if device_id in self.active_isolates:
+                rec = self.active_isolates[device_id]
+                # If device is under recovery verification trial, allow observation
+                if rec.get("state") == "RECOVERING":
+                    return PolicyDecision("ALLOW", f"Device '{device_id}' in recovery verification trial", enforced=False, drop=False)
+                act = rec.get("action", "ISOLATE")
+                reason = f"Device '{device_id}' actively {act}d in software policy boundary: {rec.get('reason', 'Mitigation active')}"
+                return PolicyDecision("DROP", reason, enforced=True, drop=True, metadata={"action": act, "enforced_action": act, "severity": rec.get("severity", "HIGH")})
+
+            # 2. Check active rate limit
+            if device_id in self.rate_limiters:
+                limiter = self.rate_limiters[device_id]
+                if limiter.consume(1.0):
+                    return PolicyDecision("ALLOW", f"Rate limit within bounds for device '{device_id}'", enforced=True, drop=False)
+                else:
+                    reason = f"Rate limit exceeded for device '{device_id}': token bucket exhausted"
+                    return PolicyDecision("DROP", reason, enforced=True, drop=True, metadata={"action": "RATE_LIMIT", "enforced_action": "RATE_LIMIT", "severity": "MEDIUM"})
+
+        return PolicyDecision("ALLOW", "No active mitigation state; proceed to detection", enforced=False, drop=False)
+
+    def isolate(self, device_id: str, action: str = "ISOLATE", reason: str = "", state: str = "CONTAINED", severity: str = "HIGH") -> None:
+        if not device_id:
+            return
+        act_upper = action.upper()
+        with self._lock:
+            self.active_isolates[device_id] = {
+                "action": act_upper,
+                "reason": reason,
+                "state": state,
+                "severity": severity,
+                "timestamp": utc_now(),
+            }
+            if self._sync_isolates_set is not None:
+                if act_upper == "ISOLATE":
+                    self._sync_isolates_set.add(device_id)
+                else:
+                    self._sync_isolates_set.discard(device_id)
+
+    def mark_recovering(self, device_id: str | None) -> None:
+        if not device_id:
+            return
+        with self._lock:
+            if device_id in self.active_isolates:
+                self.active_isolates[device_id]["state"] = "RECOVERING"
+
+    def set_rate_limit(self, device_id: str, capacity: float = 40.0, refill_rate: float = 20.0) -> None:
+        if not device_id:
+            return
+        with self._lock:
+            if device_id not in self.rate_limiters:
+                self.rate_limiters[device_id] = TokenBucket(capacity, refill_rate)
+
+    def release(self, device_id: str | None) -> None:
+        if not device_id:
+            return
+        with self._lock:
+            self.active_isolates.pop(device_id, None)
+            self.rate_limiters.pop(device_id, None)
+            if self._sync_isolates_set is not None:
+                self._sync_isolates_set.discard(device_id)
+
+    def reset(self) -> None:
+        with self._lock:
+            self.active_isolates.clear()
+            self.rate_limiters.clear()
+            if self._sync_isolates_set is not None:
+                self._sync_isolates_set.clear()
+
+
 class ResponseEngine:
-    def __init__(self, mode: str = "DRY_RUN", auto: bool = True):
+    def __init__(self, mode: str = "DRY_RUN", auto: bool = True, in_process_enforcement: bool = True):
         self.mode = mode.upper()
         self.auto = auto
+        self.in_process_enforcement = in_process_enforcement
+        self.enforcer = InProcessPolicyEnforcer(enabled=in_process_enforcement)
         self.simulated_isolates: set[str] = set()
+        self.enforcer._sync_isolates_set = self.simulated_isolates
+
+    def evaluate(self, device_id: str | None, event: TelemetryEvent) -> PolicyDecision:
+        return self.enforcer.evaluate(device_id, event)
+
+    def isolate(self, device_id: str, action: str = "ISOLATE", reason: str = "", state: str = "CONTAINED", severity: str = "HIGH") -> None:
+        if not device_id:
+            return
+        self.enforcer.isolate(device_id, action=action, reason=reason, state=state, severity=severity)
+
+    def mark_recovering(self, device_id: str | None) -> None:
+        if not device_id:
+            return
+        self.enforcer.mark_recovering(device_id)
+
+    def set_rate_limit(self, device_id: str, capacity: float = 40.0, refill_rate: float = 20.0) -> None:
+        if not device_id:
+            return
+        self.enforcer.set_rate_limit(device_id, capacity=capacity, refill_rate=refill_rate)
+
+    def release(self, device_id: str | None) -> None:
+        if not device_id:
+            return
+        self.enforcer.release(device_id)
+
+    def reset(self) -> None:
+        self.enforcer.reset()
 
     def plan(self, event: TelemetryEvent, decision: Decision) -> ResponsePlan:
         if decision.prediction == "NORMAL":
             return ResponsePlan("ALERT", "No containment needed; baseline observation recorded.", self.mode, "NOT_APPLIED", False)
         if not self.auto or self.mode == "MANUAL":
             return ResponsePlan("ALERT", "Manual approval required by response policy.", "MANUAL", "PENDING_OPERATOR", True)
-        if decision.severity == "CRITICAL": action = "ISOLATE"
-        elif event.attack_type in {"syn_flood", "slow_rate"}: action = "RATE_LIMIT"
-        else: action = "BLOCK"
-        return ResponsePlan(action, "Hybrid detection threshold reached; simulated response only.", self.mode, "SIMULATED_NOT_ENFORCED", True)
+
+        # MIT-02 Decoupling: Select action using observable features & inferences, not event.attack_type
+        rate = float(getattr(event, "packet_rate", 0) or 0.0)
+        has_syn = "S" in (getattr(event, "tcp_flags", "") or "")
+
+        if decision.severity == "CRITICAL":
+            action = "ISOLATE"
+        elif has_syn or (rate <= 80.0 and decision.severity in {"MEDIUM", "LOW", "INFO"}):
+            action = "RATE_LIMIT"
+        else:
+            action = "BLOCK"
+
+        return ResponsePlan(action, "Hybrid detection threshold reached; software mitigation planned.", self.mode, "SIMULATED_NOT_ENFORCED", True)
 
     def apply_simulation(self, plan: ResponsePlan, device_id: str | None) -> None:
-        if plan.action == "ISOLATE" and device_id and plan.mode != "MANUAL":
-            self.simulated_isolates.add(device_id)
-        if plan.action == "RECOVER" and device_id:
-            self.simulated_isolates.discard(device_id)
+        if not device_id:
+            return
+        if plan.mode != "MANUAL":
+            if plan.action == "ISOLATE":
+                self.isolate(device_id, "ISOLATE", plan.reason)
+            elif plan.action == "BLOCK":
+                self.isolate(device_id, "BLOCK", plan.reason)
+            elif plan.action == "RATE_LIMIT":
+                self.set_rate_limit(device_id)
+        if plan.action == "RECOVER":
+            self.release(device_id)

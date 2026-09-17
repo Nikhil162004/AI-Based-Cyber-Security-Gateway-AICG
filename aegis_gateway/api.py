@@ -819,6 +819,8 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         note = str(body.get("note", "operator transition"))
         try:
             item = runtime.store.transition_incident(incident_id, state, actor, note)
+            if state in {"CLOSED", "RESOLVED"} and item.get("device_id"):
+                runtime.response.release(item["device_id"])
             runtime.publish("incident", item)
             alert = runtime.store.sync_alert_with_incident(item)
             if alert:
@@ -1004,6 +1006,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         curr_user = get_current_user() or {"username": "admin", "role": "ADMIN"}
         stopped = runtime.stop_simulation()
         runtime.iam.reset_identities()
+        runtime.response.reset()
         runtime.start_baseline()
         baseline_event = runtime.ingest(generate_window("normal", intensity=1, sequence=0))
         actor = curr_user["username"]
