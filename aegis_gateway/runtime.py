@@ -38,7 +38,7 @@ class GatewayRuntime:
         self.store = GatewayStore(self.settings.database_path)
         self.detector = HybridDetector(self.settings.model_path)
         self.energy = EnergyModel()
-        self.iam = IAMService()
+        self.iam = IAMService(storage=self.store)
         self.response = ResponseEngine(self.settings.response_mode, self.settings.auto_response)
         self._subscribers: set[queue.Queue[dict[str, Any]]] = set()
         self._lock = threading.RLock()
@@ -80,8 +80,51 @@ class GatewayRuntime:
         item.normalize()
         self.energy.correlate(item)
         decision = self.detector.analyze(item)
-        identity, delta, trust_reason = self.iam.adjust_trust(item.device_id or item.source_id, attack=decision.prediction == "ATTACK", recovered=decision.prediction == "NORMAL")
-        access = self.iam.access(identity.identity)
+        dev_id = item.device_id or item.source_id
+        is_enrolled = self.iam.is_enrolled_sensor(dev_id)
+        auth_ok, auth_reason = self.iam.authenticate_device(
+            dev_id,
+            getattr(item, "auth_token", None),
+            item.timestamp,
+            item.flow_id,
+        )
+
+        if is_enrolled and not auth_ok:
+            # Impersonation attempt against an enrolled sensor:
+            # Deny access immediately without decaying the legitimate sensor's trust score.
+            identity = self.iam.get(dev_id)
+            delta = 0.0
+            trust_reason = "unauthenticated impersonation attempt rejected; legitimate sensor trust preserved"
+            access = {
+                "identity": dev_id,
+                "role": identity.role,
+                "authentication_status": "FAILED_OR_UNVERIFIED",
+                "mfa_status": identity.mfa_status,
+                "authorization_status": "DENIED",
+                "access_request": "gateway:telemetry",
+                "decision": "DENY",
+                "reason": f"Impersonation rejected: {auth_reason}",
+            }
+        elif not auth_ok and not is_enrolled:
+            # Untrusted or unregistered source (e.g. ATK-01 or rogue device)
+            identity, delta, trust_reason = self.iam.adjust_trust(
+                dev_id,
+                attack=decision.prediction == "ATTACK",
+                recovered=decision.prediction == "NORMAL",
+            )
+            access = self.iam.access(identity.identity)
+            access["authentication_status"] = "FAILED_OR_UNVERIFIED"
+            access["authorization_status"] = "DENIED"
+            access["decision"] = "DENY"
+            access["reason"] = f"Unenrolled/unverified device access denied: {auth_reason}"
+        else:
+            # Authenticated device
+            identity, delta, trust_reason = self.iam.adjust_trust(
+                dev_id,
+                attack=decision.prediction == "ATTACK",
+                recovered=decision.prediction == "NORMAL",
+            )
+            access = self.iam.access(identity.identity)
         item.label = decision.prediction
         item.confidence = decision.confidence
         item.model_version = decision.model_version

@@ -79,6 +79,7 @@ def _format_telemetry_row(event: dict[str, Any], runtime: GatewayRuntime) -> dic
     severity = event.get("severity") or ("HIGH" if is_attack else "INFO")
 
     row = dict(event)
+    row.pop("auth_token", None)
     row.update({
         "window_start": event.get("timestamp"),
         "packet_count": packet_count,
@@ -1071,12 +1072,82 @@ def create_app(runtime: GatewayRuntime) -> Flask:
 
     @app.get("/api/iam")
     def iam():
-        identity_list = [identity.__dict__ for identity in runtime.iam.identities.values()]
+        identity_list = []
+        for ident in runtime.iam.identities.values():
+            d = dict(ident.__dict__)
+            d.pop("auth_key_hash", None)
+            d.pop("auth_key", None)
+            d.pop("psk", None)
+            identity_list.append(d)
         return jsonify({
             "identities": identity_list,
             "devices": identity_list,
             "policy": "authenticated role plus trust >= 40"
         })
+
+    @app.get("/api/iam/devices")
+    @login_required
+    def list_iam_devices():
+        devices = runtime.store.list_device_identities()
+        sanitized = []
+        for dev in devices:
+            d = dict(dev)
+            d.pop("auth_key_hash", None)
+            sanitized.append(d)
+        return jsonify({"devices": sanitized, "count": len(sanitized)})
+
+    @app.post("/api/iam/devices")
+    @login_required
+    @permission_required(PERM_ADMIN_CONTROLS)
+    def manage_iam_devices():
+        curr_user = get_current_user() or {"username": "admin", "role": "ADMIN"}
+        body = request.get_json(silent=True) or {}
+        action = str(body.get("action", "")).lower()
+        device_id = str(body.get("device_id", "")).strip()
+
+        if action == "list":
+            devices = runtime.store.list_device_identities()
+            sanitized = []
+            for dev in devices:
+                d = dict(dev)
+                d.pop("auth_key_hash", None)
+                sanitized.append(d)
+            return jsonify({"ok": True, "devices": sanitized, "count": len(sanitized)}), 200
+
+        if not device_id:
+            return jsonify({"error": "device_id is required"}), 400
+
+        if action == "enroll":
+            role = str(body.get("role", "sensor")).lower()
+            custom_psk = body.get("psk")
+            enrolled = runtime.iam.enroll_device(device_id, role=role, psk=custom_psk)
+            runtime.store.record_audit(
+                username=curr_user["username"],
+                role=curr_user["role"],
+                action="DEVICE_ENROLLED",
+                resource="device",
+                resource_id=device_id,
+                result="SUCCESS",
+                details=f"Enrolled zero-trust device '{device_id}' with role '{role}'",
+                source_ip=request.remote_addr,
+            )
+            return jsonify({"ok": True, "device": enrolled}), 201
+
+        elif action == "revoke":
+            revoked = runtime.iam.revoke_device(device_id)
+            runtime.store.record_audit(
+                username=curr_user["username"],
+                role=curr_user["role"],
+                action="DEVICE_REVOKED",
+                resource="device",
+                resource_id=device_id,
+                result="SUCCESS",
+                details=f"Revoked zero-trust device '{device_id}'",
+                source_ip=request.remote_addr,
+            )
+            return jsonify({"ok": True, "device": revoked}), 200
+
+        return jsonify({"error": "action must be 'enroll', 'revoke', or 'list'"}), 400
 
     @app.get("/api/trust")
     def trust():

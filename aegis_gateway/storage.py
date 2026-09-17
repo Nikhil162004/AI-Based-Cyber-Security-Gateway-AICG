@@ -112,10 +112,19 @@ class GatewayStore:
                 );
                 CREATE INDEX IF NOT EXISTS admin_audit_timestamp_idx ON admin_audit_log(timestamp DESC);
                 CREATE INDEX IF NOT EXISTS admin_audit_action_idx ON admin_audit_log(action);
+                CREATE TABLE IF NOT EXISTS device_identities (
+                    device_id TEXT PRIMARY KEY, role TEXT NOT NULL DEFAULT 'sensor',
+                    status TEXT NOT NULL DEFAULT 'ENROLLED', auth_key_hash TEXT NOT NULL,
+                    trust_score REAL NOT NULL DEFAULT 100.0, failures INTEGER NOT NULL DEFAULT 0,
+                    mfa_status TEXT NOT NULL DEFAULT 'NOT_REQUIRED', created_at TEXT NOT NULL,
+                    last_seen TEXT
+                );
+                CREATE INDEX IF NOT EXISTS device_identities_status_idx ON device_identities(status);
                 """
             )
             self._migrate_schema(con)
             self._seed_default_users(con)
+            self._seed_default_device_identities(con)
 
     def _migrate_schema(self, con: sqlite3.Connection) -> None:
         """Backward-compatible schema migration for existing databases."""
@@ -171,11 +180,38 @@ class GatewayStore:
                 row
             )
 
+    def _seed_default_device_identities(self, con: sqlite3.Connection) -> None:
+        from .iam import DEFAULT_MASTER_KEY, derive_device_key, hash_device_key
+        now = utc_now()
+        devices = [
+            ("SENSOR-01", "sensor", "ENROLLED", 100.0, 0, "NOT_REQUIRED"),
+            ("SENSOR-02", "sensor", "ENROLLED", 100.0, 0, "NOT_REQUIRED"),
+            ("SENSOR-03", "sensor", "ENROLLED", 100.0, 0, "NOT_REQUIRED"),
+            ("SENSOR-GROUP-A", "sensor", "ENROLLED", 100.0, 0, "NOT_REQUIRED"),
+            ("ATK-01", "untrusted", "REVOKED", 35.0, 0, "FAILED"),
+            ("operator", "operator", "ENROLLED", 100.0, 0, "VERIFIED"),
+        ]
+        for dev_id, role, status, trust, fails, mfa in devices:
+            if role == "untrusted":
+                h = hash_device_key(f"untrusted-key-{dev_id}")
+            else:
+                psk = derive_device_key(dev_id, DEFAULT_MASTER_KEY)
+                h = hash_device_key(psk)
+            con.execute(
+                """
+                INSERT OR IGNORE INTO device_identities
+                (device_id, role, status, auth_key_hash, trust_score, failures, mfa_status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (dev_id, role, status, h, trust, fails, mfa, now),
+            )
+
     def append_telemetry(self, event: TelemetryEvent) -> None:
         event.normalize()
         values = event.to_dict()
+        values.pop("auth_token", None)
         columns = CANONICAL_FIELDS + ["raw_json"]
-        stored = [None if values[name] is None else str(values[name]) for name in CANONICAL_FIELDS]
+        stored = [None if values.get(name) is None else str(values[name]) for name in CANONICAL_FIELDS]
         stored.append(json.dumps(values, sort_keys=True))
         placeholders = ",".join("?" for _ in columns)
         with self.connection() as con:
@@ -360,6 +396,7 @@ class GatewayStore:
             "provenance": "DERIVED",
         }
         item = {**defaults, **item}
+        item.pop("auth_token", None)
         with self.connection() as con:
             con.execute("INSERT INTO iam_events VALUES (:iam_event_id,:timestamp,:identity,:role,:authentication_status,:authorization_status,:access_request,:decision,:reason,:provenance)", item)
 
@@ -827,3 +864,71 @@ class GatewayStore:
         with self.connection() as con:
             rows = con.execute(f"SELECT * FROM admin_audit_log{where} ORDER BY timestamp DESC LIMIT ?", params).fetchall()
         return [dict(row) for row in rows]
+
+    # =========================================================================
+    # PERSISTENT ZERO-TRUST DEVICE IDENTITY REGISTRY
+    # =========================================================================
+
+    def get_device_identity(self, device_id: str) -> dict[str, Any] | None:
+        with self.connection() as con:
+            row = con.execute("SELECT * FROM device_identities WHERE device_id = ?", (device_id,)).fetchone()
+        return dict(row) if row else None
+
+    def list_device_identities(self, status: str | None = None) -> list[dict[str, Any]]:
+        query = "SELECT * FROM device_identities"
+        params: list[Any] = []
+        if status:
+            query += " WHERE status = ?"
+            params.append(status.upper())
+        query += " ORDER BY device_id ASC"
+        with self.connection() as con:
+            rows = con.execute(query, params).fetchall()
+        return [dict(row) for row in rows]
+
+    def upsert_device_identity(
+        self,
+        device_id: str,
+        role: str = "sensor",
+        auth_key_hash: str = "",
+        status: str = "ENROLLED",
+        trust_score: float = 100.0,
+        failures: int = 0,
+        mfa_status: str = "NOT_REQUIRED",
+    ) -> dict[str, Any]:
+        now = utc_now()
+        with self.connection() as con:
+            con.execute(
+                """
+                INSERT INTO device_identities (device_id, role, status, auth_key_hash, trust_score, failures, mfa_status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(device_id) DO UPDATE SET
+                    role = excluded.role,
+                    status = excluded.status,
+                    auth_key_hash = CASE WHEN excluded.auth_key_hash != '' THEN excluded.auth_key_hash ELSE device_identities.auth_key_hash END,
+                    trust_score = excluded.trust_score,
+                    failures = excluded.failures,
+                    mfa_status = excluded.mfa_status
+                """,
+                (device_id, role.lower(), status.upper(), auth_key_hash, trust_score, failures, mfa_status, now),
+            )
+        return self.get_device_identity(device_id) or {}
+
+    def update_device_trust(self, device_id: str, score: float, failures: int | None = None) -> None:
+        with self.connection() as con:
+            if failures is not None:
+                con.execute("UPDATE device_identities SET trust_score = ?, failures = ? WHERE device_id = ?", (score, failures, device_id))
+            else:
+                con.execute("UPDATE device_identities SET trust_score = ? WHERE device_id = ?", (score, device_id))
+
+    def update_device_last_seen(self, device_id: str, timestamp: str | None = None) -> None:
+        ts = timestamp or utc_now()
+        with self.connection() as con:
+            con.execute("UPDATE device_identities SET last_seen = ? WHERE device_id = ?", (ts, device_id))
+
+    def set_device_status(self, device_id: str, status: str) -> dict[str, Any] | None:
+        with self.connection() as con:
+            con.execute("UPDATE device_identities SET status = ? WHERE device_id = ?", (status.upper(), device_id))
+        return self.get_device_identity(device_id)
+
+
+StorageHistorian = GatewayStore

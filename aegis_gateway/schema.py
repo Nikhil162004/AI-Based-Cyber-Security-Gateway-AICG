@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
@@ -97,6 +97,7 @@ class TelemetryEvent:
     response_action: str | None = None
     response_mode: str | None = None
     lifecycle_state: str | None = None
+    auth_token: str | None = field(default=None, repr=False)
 
     def normalize(self) -> "TelemetryEvent":
         self.event_id = self.event_id or str(uuid4())
@@ -120,7 +121,9 @@ class TelemetryEvent:
         return self
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        d.pop("auth_token", None)
+        return d
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "TelemetryEvent":
@@ -130,4 +133,6 @@ class TelemetryEvent:
 
 def public_event(event: TelemetryEvent | dict[str, Any]) -> dict[str, Any]:
     """Return JSON-safe canonical data without adding invented source values."""
-    return event.to_dict() if isinstance(event, TelemetryEvent) else dict(event)
+    d = event.to_dict() if isinstance(event, TelemetryEvent) else dict(event)
+    d.pop("auth_token", None)
+    return d

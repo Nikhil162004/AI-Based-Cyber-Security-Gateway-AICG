@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from random import Random
 from typing import Any
 
-from .schema import Provenance, TelemetryEvent
+from .schema import Provenance, TelemetryEvent, utc_now
 
 
 @dataclass(frozen=True)
@@ -74,16 +74,26 @@ def generate_window(scenario_id: str, intensity: int = 3, sequence: int = 0, see
     if scenario_id == "modbus_anomaly": dst_port = 502
     flags = "S" if scenario_id in {"syn_flood", "slow_rate"} else None
     sensor_idx = 1 + (sequence % 3)
+    dev_id = "ATK-01" if not normal else f"SENSOR-0{sensor_idx}"
+    flow_id = f"{scenario_id}-{sequence}"
+    ts = utc_now()
+    token = None
+    if normal:
+        from .iam import compute_device_token
+        token = compute_device_token(dev_id, ts, flow_id)
+
     return TelemetryEvent(
         source_type=source_type, source_id="ATK-SIM-01" if not normal else f"SENSOR-NODE-0{sensor_idx}",
-        device_id="ATK-01" if not normal else f"SENSOR-0{sensor_idx}",
+        device_id=dev_id,
+        timestamp=ts,
         src_ip="10.42.0.250" if not normal else f"10.42.0.{10 + sensor_idx}",
         dst_ip="10.42.0.1", src_port=40000 + sequence % 1000, dst_port=dst_port, protocol=protocol,
         protocol_layer="TRANSPORT", packet_count=packet_count, byte_count=round(packet_count * packet_size),
         packet_rate=round(rate, 2), byte_rate=round(rate * packet_size, 2), packet_size=round(packet_size, 2),
-        flow_id=f"{scenario_id}-{sequence}", unique_sources=src_count, unique_destinations=1, tcp_flags=flags,
+        flow_id=flow_id, unique_sources=src_count, unique_destinations=1, tcp_flags=flags,
         icmp_type="RPL_CONTROL" if scenario_id == "rpl_anomaly" else None,
         attack_type=None if normal else scenario_id,
         traffic_type="NORMAL" if normal else "CONTROLLED_ATTACK_SIMULATION",
         label="NORMAL" if normal else "ATTACK", scenario_id=scenario_id, provenance=provenance,
+        auth_token=token,
     ).normalize()
