@@ -19,8 +19,9 @@ GENESIS_HASH = "0" * 64
 
 
 class GatewayStore:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, master_key: str | None = None):
         self.path = path
+        self.master_key = master_key
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.initialize()
 
@@ -191,11 +192,12 @@ class GatewayStore:
             ("ATK-01", "untrusted", "REVOKED", 35.0, 0, "FAILED"),
             ("operator", "operator", "ENROLLED", 100.0, 0, "VERIFIED"),
         ]
+        eff_key = getattr(self, "master_key", None) or DEFAULT_MASTER_KEY
         for dev_id, role, status, trust, fails, mfa in devices:
             if role == "untrusted":
                 h = hash_device_key(f"untrusted-key-{dev_id}")
             else:
-                psk = derive_device_key(dev_id, DEFAULT_MASTER_KEY)
+                psk = derive_device_key(dev_id, eff_key)
                 h = hash_device_key(psk)
             con.execute(
                 """

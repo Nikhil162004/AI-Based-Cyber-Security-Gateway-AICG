@@ -10,6 +10,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
+LAB_MASTER_KEY_FALLBACK = "aicg-edge-device-master-lab-2026"
+LAB_SECRET_KEY_FALLBACK = "aicg-edge-gateway-lab-secret-key-2026"
+
+
 def _bool(name: str, default: bool) -> bool:
     value = os.getenv(name)
     return default if value is None else value.strip().lower() in {"1", "true", "yes", "on"}
@@ -24,17 +28,41 @@ class Settings:
     model_path: Path = ROOT / "models" / "hybrid_detector.joblib"
     report_dir: Path = ROOT / "reports"
     dataset_dir: Path = ROOT / "data" / "datasets"
+    cooja_dir: Path = field(default_factory=lambda: Path(os.getenv("AEGIS_COOJA_DIR", "/home/kali/contiki-ng/examples/ai_edge_iiot/data")))
     event_retention_days: int = int(os.getenv("AEGIS_RETENTION_DAYS", "30"))
     demo_tick_seconds: float = float(os.getenv("AEGIS_DEMO_TICK_SECONDS", "1.0"))
     response_mode: str = os.getenv("AEGIS_RESPONSE_MODE", "DRY_RUN").upper()
     auto_response: bool = _bool("AEGIS_AUTO_RESPONSE", True)
     host: str = os.getenv("AEGIS_HOST", "127.0.0.1")
     port: int = int(os.getenv("AEGIS_PORT", "8000"))
-    secret_key: str = os.getenv("AEGIS_SECRET_KEY", "aicg-edge-gateway-lab-secret-key-2026")
-    session_cookie_secure: bool = _bool("AEGIS_SESSION_COOKIE_SECURE", False)
+    production: bool = field(default_factory=lambda: _bool("AEGIS_PRODUCTION", False))
+    secret_key: str = field(
+        default_factory=lambda: os.getenv("AEGIS_SECRET_KEY", LAB_SECRET_KEY_FALLBACK),
+        repr=False,
+    )
+    device_master_key: str = field(
+        default_factory=lambda: os.getenv("AEGIS_MASTER_KEY") or os.getenv("AEGIS_DEVICE_MASTER_KEY") or LAB_MASTER_KEY_FALLBACK,
+        repr=False,
+    )
+    session_cookie_secure: bool = field(
+        default_factory=lambda: _bool(
+            "AEGIS_SESSION_COOKIE_SECURE",
+            _bool("AEGIS_COOKIE_SECURE", _bool("AEGIS_PRODUCTION", False)),
+        )
+    )
     auth_rate_limit_max: int = int(os.getenv("AEGIS_AUTH_RATE_LIMIT_MAX", "10"))
     auth_rate_limit_window_seconds: int = int(os.getenv("AEGIS_AUTH_RATE_LIMIT_WINDOW", "60"))
     in_process_enforcement: bool = field(default_factory=lambda: _bool("AEGIS_IN_PROCESS_ENFORCEMENT", True))
+
+    @property
+    def is_lab_master_key(self) -> bool:
+        """True when running with the insecure default lab master key."""
+        return self.device_master_key == LAB_MASTER_KEY_FALLBACK
+
+    @property
+    def is_lab_secret_key(self) -> bool:
+        """True when running with the insecure default lab secret key."""
+        return self.secret_key == LAB_SECRET_KEY_FALLBACK
 
     def ensure_directories(self) -> None:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)

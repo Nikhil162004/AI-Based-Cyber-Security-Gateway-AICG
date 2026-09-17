@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from urllib.parse import unquote, urlsplit
+
 from flask import Flask, Response, jsonify, redirect, render_template, request, session
 
 from .adapters import cooja_csv_events, ns3_csv_events, pcap_events, pcap_window_events
@@ -50,6 +52,85 @@ def _number(value: Any, default: int = 3) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def sanitize_redirect_url(target: str | None, default: str = "/") -> str:
+    """Validate and sanitize post-login redirect targets to prevent open redirect vulnerabilities (CWE-601).
+
+    Permits strictly relative paths (e.g., '/', '/admin/users', '/dashboard?q=1').
+    Rejects:
+    - Absolute external URLs (e.g., 'https://evil.com')
+    - Scheme-relative URLs (e.g., '//evil.example')
+    - Backslash-based browser trickery (e.g., '/\\evil.com', '\\evil.com')
+    - Control characters and CRLF injection (\\r, \\n, \\0)
+    - URL-encoded traversal/scheme exploits
+    Falls back to the safe default ('/').
+    """
+    if not target or not isinstance(target, str):
+        return default
+
+    cleaned = target.strip()
+    if not cleaned or any(c in cleaned for c in ("\r", "\n", "\0")):
+        return default
+
+    if "\\" in cleaned or cleaned.startswith("//") or cleaned.startswith("/\\"):
+        return default
+
+    try:
+        parsed = urlsplit(cleaned)
+        if parsed.scheme or parsed.netloc:
+            return default
+        if not parsed.path.startswith("/"):
+            return default
+
+        # Validate unquoted form to prevent URL-encoded bypasses (%2f%2f or %5c)
+        unquoted = unquote(cleaned)
+        if "\\" in unquoted or unquoted.startswith("//") or unquoted.startswith("/\\"):
+            return default
+        parsed_unquoted = urlsplit(unquoted)
+        if parsed_unquoted.scheme or parsed_unquoted.netloc:
+            return default
+        if not parsed_unquoted.path.startswith("/"):
+            return default
+
+        return cleaned
+    except Exception:
+        return default
+
+
+def resolve_contained_path(
+    candidate_path: str | Path | None,
+    allowed_roots: list[Path] | tuple[Path, ...],
+    default_root: Path | None = None,
+) -> Path:
+    """Resolve a candidate path and verify it is strictly contained within at least one allowed root.
+
+    Resolves symlinks, relative traversal components (..), and enforces boundary containment.
+    Raises ValueError if path traverses outside approved directories.
+    Raises FileNotFoundError if the target file does not exist or is not a regular file.
+    """
+    if not candidate_path:
+        raise ValueError("Path must not be empty")
+
+    p = Path(candidate_path)
+    if not p.is_absolute():
+        base = default_root or allowed_roots[0]
+        p = base / p
+
+    resolved = p.resolve()
+    resolved_roots = [r.resolve() for r in allowed_roots]
+
+    is_contained = any(
+        resolved == root or root in resolved.parents
+        for root in resolved_roots
+    )
+    if not is_contained:
+        raise ValueError(f"Access denied: path '{candidate_path}' is outside approved directories")
+
+    if not resolved.is_file():
+        raise FileNotFoundError(f"File not found or not a regular file: '{candidate_path}'")
+
+    return resolved
 
 
 def _format_telemetry_row(event: dict[str, Any], runtime: GatewayRuntime) -> dict[str, Any]:
@@ -194,7 +275,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
     @app.get("/login")
     def login_page():
         if get_current_user():
-            return redirect("/")
+            return redirect(sanitize_redirect_url(request.args.get("next")))
         return render_template("login.html")
 
     @app.route("/login", methods=["POST"])
@@ -319,15 +400,16 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             source_ip=request.remote_addr,
         )
 
+        target_next = sanitize_redirect_url(request.args.get("next") or (data.get("next") if isinstance(data, dict) else None))
         if request.is_json or request.path.startswith("/api/"):
             return jsonify({
                 "ok": True,
                 "authenticated": True,
                 "user": user_session,
                 "permissions": sorted(list(ROLE_PERMISSIONS.get(user["role"], set()))),
-                "redirect": request.args.get("next") or "/"
+                "redirect": target_next
             })
-        return redirect(request.args.get("next") or "/")
+        return redirect(target_next)
 
     @app.post("/api/auth/mfa/verify")
     def verify_mfa_endpoint():
@@ -411,7 +493,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             "authenticated": True,
             "user": user_session,
             "permissions": sorted(list(ROLE_PERMISSIONS.get(user["role"], set()))),
-            "redirect": "/"
+            "redirect": sanitize_redirect_url(data.get("next") or request.args.get("next") or "/")
         })
 
     @app.get("/api/auth/status")
@@ -1368,8 +1450,14 @@ def create_app(runtime: GatewayRuntime) -> Flask:
     def import_ns3():
         curr_user = get_current_user() or {"username": "admin", "role": "ADMIN"}
         body = request.get_json(silent=True) or {}
-        candidate = (runtime.settings.root / str(body.get("path", ""))).resolve()
-        if runtime.settings.root not in candidate.parents or not candidate.is_file():
+        raw_path = body.get("path", "")
+        try:
+            candidate = resolve_contained_path(
+                raw_path,
+                allowed_roots=[runtime.settings.root],
+                default_root=runtime.settings.root,
+            )
+        except (ValueError, FileNotFoundError):
             return jsonify({"error": "path must name a repository-local CSV"}), 400
         try:
             count = sum(1 for event in ns3_csv_events(candidate, body.get("scenario_id")) for _ in [runtime.ingest(event)])
@@ -1394,8 +1482,8 @@ def create_app(runtime: GatewayRuntime) -> Flask:
     @app.get("/api/cooja")
     @login_required
     def cooja():
-        cooja_dir = Path("/home/kali/contiki-ng/examples/ai_edge_iiot")
-        cooja_data = cooja_dir / "data" / "cooja_ml_ready_v1.csv"
+        cooja_dir = runtime.settings.cooja_dir
+        cooja_data = cooja_dir / "cooja_ml_ready_v1.csv"
         frozen_model = runtime.settings.root / "detection" / "cooja_attack_model_v1.pkl"
         available = cooja_data.exists()
         return jsonify({
@@ -1415,10 +1503,15 @@ def create_app(runtime: GatewayRuntime) -> Flask:
     def import_cooja():
         curr_user = get_current_user() or {"username": "admin", "role": "ADMIN"}
         body = request.get_json(silent=True) or {}
-        raw_path = body.get("path") or "/home/kali/contiki-ng/examples/ai_edge_iiot/data/cooja_ml_ready_v1.csv"
-        candidate = Path(raw_path).resolve()
-        if not candidate.is_file():
-            return jsonify({"error": f"File not found: {raw_path}"}), 400
+        raw_path = body.get("path") or str(runtime.settings.cooja_dir / "cooja_ml_ready_v1.csv")
+        try:
+            candidate = resolve_contained_path(
+                raw_path,
+                allowed_roots=[runtime.settings.root, runtime.settings.cooja_dir],
+                default_root=runtime.settings.cooja_dir,
+            )
+        except (ValueError, FileNotFoundError) as error:
+            return jsonify({"error": str(error)}), 400
         try:
             count = sum(1 for event in cooja_csv_events(candidate, body.get("scenario_id")) for _ in [runtime.ingest(event)])
             runtime.store.record_audit(
@@ -1446,8 +1539,14 @@ def create_app(runtime: GatewayRuntime) -> Flask:
     def replay_pcap():
         curr_user = get_current_user() or {"username": "admin", "role": "ADMIN"}
         body = request.get_json(silent=True) or {}
-        candidate = (runtime.settings.root / str(body.get("path", ""))).resolve()
-        if runtime.settings.root not in candidate.parents or not candidate.is_file():
+        raw_path = body.get("path", "")
+        try:
+            candidate = resolve_contained_path(
+                raw_path,
+                allowed_roots=[runtime.settings.root],
+                default_root=runtime.settings.root,
+            )
+        except (ValueError, FileNotFoundError):
             return jsonify({"error": "path must name a repository-local PCAP file"}), 400
         try:
             windowed = body.get("windowed", True)

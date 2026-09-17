@@ -6,18 +6,103 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import hashlib
 import hmac
+import os
+import threading
+import time
 from typing import Any
 
+from .config import LAB_MASTER_KEY_FALLBACK
 from .schema import utc_now
 
-DEFAULT_MASTER_KEY = "aicg-edge-device-master-lab-2026"
+DEFAULT_MASTER_KEY = os.getenv("AEGIS_MASTER_KEY") or os.getenv("AEGIS_DEVICE_MASTER_KEY") or LAB_MASTER_KEY_FALLBACK
 TOKEN_EXPIRATION_SECONDS = 300.0  # 5-minute replay window
 
 
-def derive_device_key(device_id: str, master_key: str = DEFAULT_MASTER_KEY) -> str:
+class TokenReplayCache:
+    """Thread-safe, bounded, in-memory process-local replay protection cache.
+
+    Stores cryptographic SHA-256 digests of valid authentication tokens along with their
+    expiration horizons. Never persists or exposes plaintext tokens. Upon process restart,
+    this cache resets; freshness drift windows prevent replay of tokens older than the
+    expiration window.
+    """
+
+    def __init__(self, max_size: int = 10000, default_retention_seconds: float = TOKEN_EXPIRATION_SECONDS):
+        self._lock = threading.Lock()
+        self._entries: dict[str, float] = {}  # token_hash -> expiry_monotonic
+        self._max_size = max(10, int(max_size))
+        self._retention_seconds = float(default_retention_seconds)
+
+    def check_and_record(
+        self,
+        device_id: str,
+        token: str,
+        token_timestamp: str | None = None,
+        retention_seconds: float | None = None,
+    ) -> tuple[bool, str]:
+        """Check whether the token has already been seen. If not, record its SHA-256 fingerprint.
+
+        Returns (True, 'Token accepted') if fresh, or (False, 'Authentication token replayed; duplicate token rejected')
+        if replayed.
+        """
+        if not token:
+            return False, "Missing token"
+
+        retention = float(retention_seconds or self._retention_seconds)
+        # Store strictly a SHA-256 digest binding device_id and token - never plaintext token
+        digest = hashlib.sha256(f"{device_id}:{token}".encode("utf-8")).hexdigest()
+        now_mono = time.monotonic()
+        expires_at = now_mono + retention
+
+        with self._lock:
+            # 1. Check if token fingerprint already in cache and unexpired
+            prev_expiry = self._entries.get(digest)
+            if prev_expiry is not None and prev_expiry > now_mono:
+                return False, "Authentication token replayed; duplicate token rejected"
+
+            # 2. Prune expired entries if table is growing
+            if len(self._entries) >= self._max_size:
+                self._prune_expired(now_mono)
+                # If still at max capacity, evict oldest 10%
+                if len(self._entries) >= self._max_size:
+                    sorted_items = sorted(self._entries.items(), key=lambda item: item[1])
+                    evict_count = max(1, len(sorted_items) // 10)
+                    for key, _ in sorted_items[:evict_count]:
+                        self._entries.pop(key, None)
+
+            # 3. Record new fingerprint
+            self._entries[digest] = expires_at
+            return True, "Token accepted"
+
+    def _prune_expired(self, now_mono: float) -> None:
+        expired_keys = [k for k, exp in self._entries.items() if exp <= now_mono]
+        for k in expired_keys:
+            self._entries.pop(k, None)
+
+    def clear(self) -> None:
+        """Clear all cached fingerprints."""
+        with self._lock:
+            self._entries.clear()
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._entries)
+
+    def __repr__(self) -> str:
+        return f"<TokenReplayCache size={len(self)} max_size={self._max_size}>"
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
+
+DEFAULT_REPLAY_CACHE = TokenReplayCache()
+
+
+def derive_device_key(device_id: str, master_key: str | None = None) -> str:
     """Derive a deterministic per-device preshared key using HMAC-SHA256."""
+    eff_key = master_key if master_key is not None else DEFAULT_MASTER_KEY
     return hmac.new(
-        master_key.encode("utf-8"),
+        eff_key.encode("utf-8"),
         f"device-psk:{device_id}".encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
@@ -32,11 +117,12 @@ def compute_device_token(
     device_id: str,
     timestamp: str,
     flow_id: str | None = None,
-    master_key: str = DEFAULT_MASTER_KEY,
+    master_key: str | None = None,
     psk: str | None = None,
 ) -> str:
     """Compute HMAC-SHA256 token binding device_id, timestamp, and flow_id."""
-    key = psk if psk is not None else derive_device_key(device_id, master_key)
+    eff_key = master_key if master_key is not None else DEFAULT_MASTER_KEY
+    key = psk if psk is not None else derive_device_key(device_id, eff_key)
     canonical_msg = f"{device_id}:{timestamp}:{flow_id or 'none'}"
     return hmac.new(
         key.encode("utf-8"),
@@ -50,9 +136,10 @@ def verify_device_token(
     token: str | None,
     timestamp: str | None,
     flow_id: str | None = None,
-    master_key: str = DEFAULT_MASTER_KEY,
+    master_key: str | None = None,
     psk: str | None = None,
     max_drift_seconds: float = TOKEN_EXPIRATION_SECONDS,
+    replay_cache: TokenReplayCache | None = None,
 ) -> tuple[bool, str]:
     """Verify device authentication token with replay protection and constant-time check."""
     if not token or not timestamp:
@@ -65,15 +152,29 @@ def verify_device_token(
         now = datetime.now(timezone.utc)
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=timezone.utc)
-        age = abs((now - ts).total_seconds())
-        if age > max_drift_seconds:
-            return False, f"Authentication token expired (timestamp drift {age:.1f}s > {max_drift_seconds:.0f}s)"
+        drift = (now - ts).total_seconds()
+        if drift < -5.0:
+            return False, f"Authentication token rejected: future timestamp drift {-drift:.1f}s > 5.0s"
+        if drift > max_drift_seconds:
+            return False, f"Authentication token expired (timestamp drift {drift:.1f}s > {max_drift_seconds:.0f}s)"
     except Exception:
         return False, "Invalid timestamp format in authentication request"
 
-    expected_token = compute_device_token(device_id, timestamp, flow_id, master_key, psk)
+    eff_key = master_key if master_key is not None else DEFAULT_MASTER_KEY
+    expected_token = compute_device_token(device_id, timestamp, flow_id, eff_key, psk)
     if not hmac.compare_digest(token, expected_token):
         return False, "Cryptographic token verification failed"
+
+    # Replay check: only verified tokens enter the replay cache
+    cache = replay_cache if replay_cache is not None else DEFAULT_REPLAY_CACHE
+    fresh, reason = cache.check_and_record(
+        device_id=device_id,
+        token=token,
+        token_timestamp=timestamp,
+        retention_seconds=max_drift_seconds,
+    )
+    if not fresh:
+        return False, reason
 
     return True, "Token verified"
 
@@ -97,9 +198,15 @@ class IAMService:
     Backs identity and trust states to persistent storage when available.
     """
 
-    def __init__(self, storage: Any | None = None, master_key: str = DEFAULT_MASTER_KEY):
+    def __init__(
+        self,
+        storage: Any | None = None,
+        master_key: str | None = None,
+        replay_cache: TokenReplayCache | None = None,
+    ):
         self.storage = storage
-        self.master_key = master_key
+        self.master_key = master_key if master_key is not None else DEFAULT_MASTER_KEY
+        self.replay_cache = replay_cache if replay_cache is not None else DEFAULT_REPLAY_CACHE
         self.identities: dict[str, Identity] = {}
         self._load_identities()
 
@@ -212,6 +319,7 @@ class IAMService:
             timestamp=timestamp,
             flow_id=flow_id,
             master_key=self.master_key,
+            replay_cache=self.replay_cache,
         )
         if valid and self.storage:
             try:
@@ -283,6 +391,8 @@ class IAMService:
             elif name.startswith("ATK"):
                 ident.trust_score = 35.0
                 ident.failures = 0
+        if self.replay_cache:
+            self.replay_cache.clear()
         if self.storage:
             for name, ident in self.identities.items():
                 try:
