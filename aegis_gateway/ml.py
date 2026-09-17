@@ -19,18 +19,20 @@ from sklearn.model_selection import GroupShuffleSplit
 from sklearn.preprocessing import StandardScaler
 
 from .detection import FEATURES, FEATURE_VERSION, feature_mapping
+from .energy import EnergyModel
 from .scenarios import CATALOGUE, generate_window
 
 
 DATASET_VERSION = "synthetic-lab-v2"
 
 
-def generate_dataset(output: Path, metadata_output: Path | None = None, *, samples_per_campaign: int = 35, seed: int = 20260913) -> dict[str, Any]:
+def generate_dataset(output: Path, metadata_output: Path | None = None, *, samples_per_campaign: int = 40, seed: int = 20260913) -> dict[str, Any]:
     """Generate varied windows; every row identifies its synthetic campaign.
 
     This does not duplicate existing captures and it deliberately never claims
     to be a field or industrial traffic dataset.
     """
+    energy_model = EnergyModel()
     rows: list[dict[str, Any]] = []
     campaigns = 0
     for scenario_id, scenario in CATALOGUE.items():
@@ -44,6 +46,7 @@ def generate_dataset(output: Path, metadata_output: Path | None = None, *, sampl
             campaigns += 1
             for sequence in range(samples_per_campaign):
                 event = generate_window(scenario_id, intensity, sequence, seed=seed + intensity, provenance="SYNTHETIC", source_type="DATASET_GENERATOR")
+                energy_model.correlate(event)
                 features = feature_mapping(event)
                 rows.append({
                     **features,
@@ -133,8 +136,8 @@ def _metrics(y_true: pd.Series, predictions: np.ndarray, probability: np.ndarray
     target = (y_true == "ATTACK").astype(int)
     if len(set(target)) > 1:
         result.update({
-            "roc_auc": float(roc_auc_score(target, probability)),
-            "pr_auc": float(average_precision_score(target, probability)),
+            "roc_auc": min(1.0, float(roc_auc_score(target, probability))),
+            "pr_auc": min(1.0, float(average_precision_score(target, probability))),
             "brier_score": float(brier_score_loss(target, probability))
         })
     return result

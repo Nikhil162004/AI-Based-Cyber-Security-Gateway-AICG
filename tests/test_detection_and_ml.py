@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from aegis_gateway.config import Settings
 from aegis_gateway.detection import FEATURES, HybridDetector, feature_mapping
+from aegis_gateway.energy import EnergyModel
 from aegis_gateway.ml import generate_dataset, train_and_evaluate
 from aegis_gateway.runtime import GatewayRuntime
 from aegis_gateway.scenarios import CATALOGUE, generate_window
@@ -79,14 +80,15 @@ def test_hybrid_detector_with_trained_bundle():
     detector = HybridDetector(settings.model_path)
     assert detector.bundle is not None
     assert detector.model_version == "hybrid-rf-if-v2"
+    energy_model = EnergyModel()
 
-    norm_ev = generate_window("normal", intensity=1, sequence=0)
+    norm_ev = energy_model.correlate(generate_window("normal", intensity=1, sequence=0))
     dec_norm = detector.analyze(norm_ev)
     assert dec_norm.prediction == "NORMAL"
     assert dec_norm.calibrated_probability is not None
     assert dec_norm.calibrated_probability < 0.20
 
-    atk_ev = generate_window("udp_flood", intensity=3, sequence=0)
+    atk_ev = energy_model.correlate(generate_window("udp_flood", intensity=3, sequence=0))
     dec_atk = detector.analyze(atk_ev)
     assert dec_atk.prediction == "ATTACK"
     assert dec_atk.calibrated_probability is not None
@@ -98,9 +100,10 @@ def test_attack_metadata_cannot_force_detection():
     settings = Settings()
     trained_detector = HybridDetector(settings.model_path if settings.model_path.exists() else None)
     untrained_detector = HybridDetector(model_path=None)
+    energy_model = EnergyModel()
 
     # 1. Benign observable telemetry with injected attack metadata MUST NOT trigger ATTACK
-    normal_ev = generate_window("normal", intensity=1, sequence=0)
+    normal_ev = energy_model.correlate(generate_window("normal", intensity=1, sequence=0))
     spoofed_ev = copy.deepcopy(normal_ev)
     spoofed_ev.attack_type = "udp_flood"
 
@@ -113,7 +116,7 @@ def test_attack_metadata_cannot_force_detection():
         assert dec_spoofed.severity == dec_normal.severity
 
     # 2. Attack telemetry with attack_type vs attack_type=None must yield identical decision scores
-    atk_ev = generate_window("udp_flood", intensity=4, sequence=0)
+    atk_ev = energy_model.correlate(generate_window("udp_flood", intensity=4, sequence=0))
     unlabeled_atk = copy.deepcopy(atk_ev)
     unlabeled_atk.attack_type = None
 
@@ -133,10 +136,11 @@ def test_unlabeled_attack_scenarios_remain_detectable():
         pytest.skip("Model bundle not yet generated at default path")
 
     detector = HybridDetector(settings.model_path)
+    energy_model = EnergyModel()
     for sc_id, sc in CATALOGUE.items():
         if sc_id == "normal":
             continue
-        ev = generate_window(sc_id, intensity=sc.intensity_range[0], sequence=0)
+        ev = energy_model.correlate(generate_window(sc_id, intensity=sc.intensity_range[0], sequence=0))
         ev.attack_type = None  # Strip ground truth simulation metadata
         dec = detector.analyze(ev)
         assert dec.prediction == "ATTACK", f"Scenario {sc_id} not detected when unlabeled"
@@ -147,8 +151,9 @@ def test_normal_telemetry_remains_normal():
     """Requirement C: Normal telemetry remains NORMAL across sequences."""
     settings = Settings()
     detector = HybridDetector(settings.model_path if settings.model_path.exists() else None)
+    energy_model = EnergyModel()
     for seq in range(10):
-        ev = generate_window("normal", intensity=1, sequence=seq)
+        ev = energy_model.correlate(generate_window("normal", intensity=1, sequence=seq))
         dec = detector.analyze(ev)
         assert dec.prediction == "NORMAL"
         assert dec.score < 0.50
@@ -188,3 +193,45 @@ def test_downstream_campaign_and_incident_attack_type_preservation(tmp_path: Pat
     active = runtime.store.find_active_incident(device_id=atk_ev.device_id, attack_type="slow_rate")
     assert active is not None
     assert active["incident_id"] == res["incident"]["incident_id"]
+
+
+def test_dataset_energy_variation(tmp_path: Path):
+    """Wave 2 Requirement A: Synthetic dataset generation produces non-zero variance for energy fields."""
+    import pandas as pd
+    ds_path = tmp_path / "energy_test_ds.csv"
+    meta = generate_dataset(ds_path, samples_per_campaign=5, seed=42)
+    assert ds_path.exists()
+    df = pd.read_csv(ds_path)
+    for col in ["cpu_activity", "memory_activity", "energy_deviation"]:
+        assert col in df.columns
+        assert float(df[col].std()) > 0.0, f"Column {col} has zero standard deviation"
+        assert float(df[col].max()) > float(df[col].min()), f"Column {col} has no range"
+
+
+def test_training_events_energy_correlation():
+    """Wave 2 Requirement B: EnergyModel correlation populates energy features prior to mapping."""
+    em = EnergyModel()
+    ev = generate_window("normal", intensity=1, sequence=0)
+    assert ev.cpu_activity is None
+    assert ev.energy_deviation is None
+    em.correlate(ev)
+    assert ev.cpu_activity is not None and ev.cpu_activity > 0
+    assert ev.memory_activity is not None and ev.memory_activity > 0
+    assert ev.energy_deviation is not None
+    mapping = feature_mapping(ev)
+    assert mapping["cpu_activity"] == ev.cpu_activity
+    assert mapping["memory_activity"] == ev.memory_activity
+    assert mapping["energy_deviation"] == ev.energy_deviation
+
+
+def test_energy_feature_importance_non_zero():
+    """Wave 2 Requirement E: Model bundle has non-zero feature importance for energy-related features."""
+    settings = Settings()
+    if not settings.model_path.exists():
+        pytest.skip("Model bundle not yet generated at default path")
+    detector = HybridDetector(settings.model_path)
+    assert detector.bundle is not None
+    classifier = detector.bundle["classifier"]
+    importances = dict(zip(detector.bundle["features"], classifier.feature_importances_))
+    for col in ["cpu_activity", "memory_activity", "energy_deviation"]:
+        assert importances[col] > 0.05, f"Energy feature {col} importance is too low: {importances[col]}"

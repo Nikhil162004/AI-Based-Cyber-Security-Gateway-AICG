@@ -1,7 +1,7 @@
 {
   "calibration": {
-    "brier_score_calibrated": 0.00012829874910056903,
-    "brier_score_raw": 0.002576064265203544,
+    "brier_score_calibrated": 9.829705613291242e-05,
+    "brier_score_raw": 0.0020433074574411655,
     "calibrated": true,
     "method": "sigmoid (Platt scaling) on held-out validation campaigns"
   },
@@ -9,26 +9,26 @@
     "ATTACK": 1160,
     "NORMAL": 320
   },
-  "dataset": "/home/kali/AI-Edge-DDoS-Gateway/data/datasets/synthetic_lab_v2.csv",
+  "dataset": "data/datasets/synthetic_lab_v2.csv",
   "dataset_version": "synthetic-lab-v2",
   "evaluation_protocol": "stratified campaign-grouped train/validation/test plus scenario-held-out evaluation",
-  "experiment_id": "EXP-bf4d2fe60d72",
+  "experiment_id": "EXP-9b8de5fc1b9d",
   "feature_importance": {
-    "byte_count": 0.09869381462650889,
-    "byte_rate": 0.08219015773810114,
-    "cpu_activity": 0.0,
-    "energy_deviation": 0.0,
-    "flow_count": 0.1631300189506608,
-    "icmp_ratio": 0.009447021212603776,
-    "memory_activity": 0.0,
-    "packet_count": 0.17977231453303932,
-    "packet_rate": 0.20278395884195852,
-    "packet_size": 0.008791976040724105,
-    "syn_ratio": 0.003828914504723609,
-    "tcp_ratio": 0.010979472181512741,
-    "udp_ratio": 0.038783823939512026,
+    "byte_count": 0.02198962119062525,
+    "byte_rate": 0.011881983982121444,
+    "cpu_activity": 0.1791035277740248,
+    "energy_deviation": 0.13742656677210532,
+    "flow_count": 0.10261870835225631,
+    "icmp_ratio": 0.0008000929723003898,
+    "memory_activity": 0.12334349562876107,
+    "packet_count": 0.11292314951330021,
+    "packet_rate": 0.1461305048379804,
+    "packet_size": 0.001540132559516981,
+    "syn_ratio": 0.0003175048795486753,
+    "tcp_ratio": 0.004326678747127633,
+    "udp_ratio": 0.01927411478654955,
     "unique_destinations": 0.0,
-    "unique_sources": 0.20159852743065504
+    "unique_sources": 0.13832391800378213
   },
   "feature_version": "window-features-v2",
   "model_version": "hybrid-rf-if-v2",
@@ -105,7 +105,7 @@
     "validation": 280
   },
   "test": {
-    "brier_score": 0.00012829874910056903,
+    "brier_score": 9.829705613291242e-05,
     "classification_report": {
       "ATTACK": {
         "f1-score": 1.0,
@@ -172,7 +172,7 @@
     }
   },
   "test_raw_rf": {
-    "brier_score": 0.002576064265203544,
+    "brier_score": 0.0020433074574411655,
     "classification_report": {
       "ATTACK": {
         "f1-score": 1.0,
@@ -238,9 +238,9 @@
       "NORMAL": 80
     }
   },
-  "timestamp": "2026-09-13T18:28:36.615336+00:00",
+  "timestamp": "2026-09-17T06:13:56.706580+00:00",
   "validation": {
-    "brier_score": 9.864918302650694e-05,
+    "brier_score": 1.7262076995150229e-06,
     "classification_report": {
       "ATTACK": {
         "f1-score": 1.0,
