@@ -45,7 +45,7 @@ def catalogue() -> list[dict[str, Any]]:
     return [scenario.public() for scenario in _CATALOGUE]
 
 
-def generate_window(scenario_id: str, intensity: int = 3, sequence: int = 0, seed: int = 7, provenance: str = Provenance.SIMULATED.value, source_type: str = "ATTACK_SIMULATOR") -> TelemetryEvent:
+def generate_window(scenario_id: str, intensity: int = 3, sequence: int = 0, seed: int = 7, provenance: str = Provenance.SIMULATED.value, source_type: str = "ATTACK_SIMULATOR", device_id: str | None = None) -> TelemetryEvent:
     """Generate one window of *modelled* attack/normal behavior, never traffic."""
     if scenario_id not in CATALOGUE:
         raise KeyError(f"Unknown scenario: {scenario_id}")
@@ -74,7 +74,7 @@ def generate_window(scenario_id: str, intensity: int = 3, sequence: int = 0, see
     if scenario_id == "modbus_anomaly": dst_port = 502
     flags = "S" if scenario_id in {"syn_flood", "slow_rate"} else None
     sensor_idx = 1 + (sequence % 3)
-    dev_id = "ATK-01" if not normal else f"SENSOR-0{sensor_idx}"
+    dev_id = device_id if device_id is not None else ("ATK-01" if not normal else f"SENSOR-0{sensor_idx}")
     flow_id = f"{scenario_id}-{sequence}"
     ts = utc_now()
     token = None
@@ -82,11 +82,22 @@ def generate_window(scenario_id: str, intensity: int = 3, sequence: int = 0, see
         from .iam import compute_device_token
         token = compute_device_token(dev_id, ts, flow_id)
 
+    src_id = (
+        ("ATK-SIM-01" if not normal else f"SENSOR-NODE-0{sensor_idx}")
+        if device_id is None
+        else (f"{dev_id}-SIM" if not normal else f"{dev_id}-NODE")
+    )
+    src_ip = (
+        ("10.42.0.250" if not normal else f"10.42.0.{10 + sensor_idx}")
+        if device_id is None
+        else ("10.42.0.250" if not normal else "10.42.0.250" if dev_id == "ATK-01" else f"10.42.0.{10 + sensor_idx}")
+    )
+
     return TelemetryEvent(
-        source_type=source_type, source_id="ATK-SIM-01" if not normal else f"SENSOR-NODE-0{sensor_idx}",
+        source_type=source_type, source_id=src_id,
         device_id=dev_id,
         timestamp=ts,
-        src_ip="10.42.0.250" if not normal else f"10.42.0.{10 + sensor_idx}",
+        src_ip=src_ip,
         dst_ip="10.42.0.1", src_port=40000 + sequence % 1000, dst_port=dst_port, protocol=protocol,
         protocol_layer="TRANSPORT", packet_count=packet_count, byte_count=round(packet_count * packet_size),
         packet_rate=round(rate, 2), byte_rate=round(rate * packet_size, 2), packet_size=round(packet_size, 2),

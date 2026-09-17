@@ -460,7 +460,7 @@ def test_incident_recovery_regression_on_recurring_attack(hardened_app):
 
     # 2. Ingest 3 normal windows -> transitions to RECOVERING
     for i in range(1, 4):
-        runtime.ingest(generate_window("normal", intensity=1, sequence=i))
+        runtime.ingest(generate_window("normal", intensity=1, sequence=i, device_id="ATK-01"))
 
     inc_rec = runtime.store.find_active_incident()
     assert inc_rec["lifecycle_state"] == "RECOVERING"
@@ -511,7 +511,7 @@ def test_historical_telemetry_immutability(hardened_app):
     runtime.ingest(generate_window("udp_flood", intensity=3, sequence=1))
     # Windows 2-6: Normal recovery
     for i in range(2, 7):
-        runtime.ingest(generate_window("normal", intensity=1, sequence=i))
+        runtime.ingest(generate_window("normal", intensity=1, sequence=i, device_id="ATK-01"))
 
     rows = runtime.store.telemetry(limit=10)
     assert len(rows) == 7

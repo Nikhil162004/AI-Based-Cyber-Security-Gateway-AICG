@@ -258,14 +258,14 @@ def test_incident_resolved_releases_mitigation(runtime_app):
 
     # 3 normal windows -> RECOVERING
     for i in range(1, 4):
-        runtime.ingest(generate_window("normal", intensity=1, sequence=i))
+        runtime.ingest(generate_window("normal", intensity=1, sequence=i, device_id="ATK-01"))
 
     inc = runtime.store.find_active_incident()
     assert inc["lifecycle_state"] == "RECOVERING"
 
     # 2 more normal windows (streak 5) -> RESOLVED
     for i in range(4, 6):
-        runtime.ingest(generate_window("normal", intensity=1, sequence=i))
+        runtime.ingest(generate_window("normal", intensity=1, sequence=i, device_id="ATK-01"))
 
     inc_resolved = runtime.store.find_active_incident()
     assert inc_resolved is None  # No active unclosed/unresolved incidents

@@ -554,7 +554,7 @@ def test_incident_lifecycle_stepper_contracts(runtime_app):
         # Contract 4: After 3 consecutive normal windows, incident transitions to RECOVERING ->
         # /api/status returns lifecycle_state: "RECOVERING".
         for i in range(1, 4):
-            runtime.ingest(generate_window("normal", 1, i))
+            runtime.ingest(generate_window("normal", 1, i, device_id="ATK-01"))
 
         res_status = client.get("/api/status")
         st = res_status.get_json()
@@ -564,7 +564,7 @@ def test_incident_lifecycle_stepper_contracts(runtime_app):
         # Contract 5: After 5 consecutive normal windows, incident transitions to RESOLVED ->
         # /api/status returns lifecycle_state: "RESOLVED".
         for i in range(4, 6):
-            runtime.ingest(generate_window("normal", 1, i))
+            runtime.ingest(generate_window("normal", 1, i, device_id="ATK-01"))
 
         res_status = client.get("/api/status")
         st = res_status.get_json()
@@ -644,13 +644,13 @@ def test_master_contracts_a_through_m(runtime_app):
         # Contract D: Autonomous recovery verification streak transitions CONTAINED -> RECOVERING -> RESOLVED
         # without human clicks
         for i in range(1, 4):
-            runtime.ingest(generate_window("normal", intensity=1, sequence=i))
+            runtime.ingest(generate_window("normal", intensity=1, sequence=i, device_id="ATK-01"))
         st_rec = client.get("/api/status").get_json()
         assert st_rec["lifecycle_state"] == "RECOVERING"
         assert st_rec["active_incident"]["lifecycle_state"] == "RECOVERING"
 
         for i in range(4, 6):
-            runtime.ingest(generate_window("normal", intensity=1, sequence=i))
+            runtime.ingest(generate_window("normal", intensity=1, sequence=i, device_id="ATK-01"))
         st_res = client.get("/api/status").get_json()
         assert st_res["lifecycle_state"] == "RESOLVED"
         assert st_res["active_incident"]["lifecycle_state"] == "RESOLVED"

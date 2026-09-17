@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections import deque
+from collections import defaultdict, deque
 from dataclasses import dataclass
 import queue
 import threading
@@ -48,8 +48,33 @@ class GatewayRuntime:
         self._lock = threading.RLock()
         self._simulations: dict[str, SimulationState] = {}
         self._recent: deque[dict[str, Any]] = deque(maxlen=120)
-        self._normal_streak = 0
+        self._device_normal_streaks: dict[str, int] = defaultdict(int)
         self._reconstruct_enforcement_state()
+
+    @property
+    def _normal_streak(self) -> int:
+        """Backward-compatible property: returns max streak across devices, or 0."""
+        with self._lock:
+            return max(self._device_normal_streaks.values(), default=0)
+
+    @_normal_streak.setter
+    def _normal_streak(self, value: int) -> None:
+        """Backward-compatible setter: clears streaks if 0, or sets default."""
+        with self._lock:
+            if value == 0:
+                self._device_normal_streaks.clear()
+            else:
+                self._device_normal_streaks["_default"] = value
+
+    def reset_streaks(self) -> None:
+        """Reset all per-device normal streaks."""
+        with self._lock:
+            self._device_normal_streaks.clear()
+
+    def reset_simulation(self) -> None:
+        """Reset runtime simulation and recovery streaks."""
+        self.stop_simulation()
+        self.reset_streaks()
 
     def _reconstruct_enforcement_state(self) -> None:
         """Reconstruct in-process policy enforcement state from persistent SQLite incidents upon startup."""
@@ -238,115 +263,127 @@ class GatewayRuntime:
         # 3. Detection & ML Inference (Only executed when event is allowed)
         decision = self.detector.analyze(item)
 
-        if is_impersonation:
-            delta = 0.0
-            trust_reason = "unauthenticated impersonation attempt rejected; legitimate sensor trust preserved"
-        elif not auth_ok and not is_enrolled:
-            identity, delta, trust_reason = self.iam.adjust_trust(
-                dev_id,
-                attack=decision.prediction == "ATTACK",
-                recovered=decision.prediction == "NORMAL",
-            )
-            access = self.iam.access(identity.identity)
-            access["authentication_status"] = "FAILED_OR_UNVERIFIED"
-            access["authorization_status"] = "DENIED"
-            access["decision"] = "DENY"
-            access["reason"] = f"Unenrolled/unverified device access denied: {auth_reason}"
-        else:
-            identity, delta, trust_reason = self.iam.adjust_trust(
-                dev_id,
-                attack=decision.prediction == "ATTACK",
-                recovered=decision.prediction == "NORMAL",
-            )
-            access = self.iam.access(identity.identity)
-
-        item.label = decision.prediction
-        item.confidence = decision.confidence
-        item.model_version = decision.model_version
-        item.feature_version = decision.feature_version
-        item.severity = decision.severity
-        item.iam_identity, item.role = identity.identity, identity.role
-        item.authentication_status, item.authorization_status = access["authentication_status"], access["authorization_status"]
-        item.access_request, item.access_decision, item.trust_score = access["access_request"], access["decision"], identity.trust_score
-        plan = self.response.plan(item, decision)
-        item.response_action, item.response_mode = plan.action, plan.mode
-        item.lifecycle_state = "DETECTED" if plan.requires_incident else "OBSERVED"
-        self.store.append_telemetry(item)
-        self.store.record_iam(access)
-        if delta:
-            self.store.record_trust(identity.identity, identity.trust_score, delta, trust_reason)
-            self.publish("trust", {"identity": identity.identity, "score": identity.trust_score, "delta": delta, "reason": trust_reason, "provenance": "DERIVED"})
-
-        incident = None
-        alert = None
-        if plan.requires_incident:
-            active = self.store.find_active_incident(device_id=item.device_id, attack_type=item.attack_type)
-            if active:
-                incident = self.store.correlate_incident(
-                    active["incident_id"],
-                    item,
-                    decision.evidence,
-                    "Ongoing campaign correlated across observation windows"
+        with self._lock:
+            if is_impersonation:
+                delta = 0.0
+                trust_reason = "unauthenticated impersonation attempt rejected; legitimate sensor trust preserved"
+            elif not auth_ok and not is_enrolled:
+                identity, delta, trust_reason = self.iam.adjust_trust(
+                    dev_id,
+                    attack=decision.prediction == "ATTACK",
+                    recovered=decision.prediction == "NORMAL",
                 )
-                if plan.mode != "MANUAL" and not is_impersonation:
-                    self.response.apply_simulation(plan, item.device_id)
+                access = self.iam.access(identity.identity)
+                access["authentication_status"] = "FAILED_OR_UNVERIFIED"
+                access["authorization_status"] = "DENIED"
+                access["decision"] = "DENY"
+                access["reason"] = f"Unenrolled/unverified device access denied: {auth_reason}"
             else:
-                incident = self.store.create_incident(item, decision.evidence, "CPU/RAM/radio/energy are model-correlated")
-                if plan.mode != "MANUAL":
-                    if not is_impersonation:
-                        self.response.apply_simulation(plan, item.device_id)
-                    incident = self.store.transition_incident(incident["incident_id"], "RESPONDING", "system", "Simulated response planned; no host enforcement.", decision.evidence)
-                    incident = self.store.transition_incident(incident["incident_id"], "CONTAINED", "system", "Containment state is simulated within the laboratory runtime.", decision.evidence)
-            alert = self.store.create_or_update_alert(incident, item, decision, plan)
-            self.store.record_action(event_id=item.event_id, incident_id=incident["incident_id"], action=plan.action, reason=plan.reason, policy="hybrid-response-v1", mode=plan.mode, result=plan.result)
-            self.publish("incident", incident)
-            if alert:
-                self.publish("alert", alert)
-            self.publish("response", {"incident_id": incident["incident_id"], **plan.__dict__, "provenance": "SIMULATED"})
-            self._normal_streak = 0
-        else:
-            self._normal_streak += 1
-            self._verify_recovery()
-        result = {"event": item.to_dict(), "decision": decision.as_dict(), "response": plan.__dict__, "incident": incident, "alert": alert}
-        self.publish("telemetry", result)
-        return result
+                identity, delta, trust_reason = self.iam.adjust_trust(
+                    dev_id,
+                    attack=decision.prediction == "ATTACK",
+                    recovered=decision.prediction == "NORMAL",
+                )
+                access = self.iam.access(identity.identity)
 
-    def _verify_recovery(self) -> None:
-        """Advance recovery only after actual consecutive normal runtime observations."""
-        if self._normal_streak < 3:
-            return
-        for incident in self.store.incidents(limit=100):
-            state = incident["lifecycle_state"]
-            dev_id = incident.get("device_id")
-            try:
-                if state in {"CONTAINED", "RESPONDING", "DETECTED"}:
-                    updated = self.store.transition_incident(
-                        incident["incident_id"],
-                        "RECOVERING",
-                        "system",
-                        f"Consecutive normal observations (streak={self._normal_streak}) verified traffic/resource recovery.",
-                        ["traffic returned toward modeled baseline"]
+            item.label = decision.prediction
+            item.confidence = decision.confidence
+            item.model_version = decision.model_version
+            item.feature_version = decision.feature_version
+            item.severity = decision.severity
+            item.iam_identity, item.role = identity.identity, identity.role
+            item.authentication_status, item.authorization_status = access["authentication_status"], access["authorization_status"]
+            item.access_request, item.access_decision, item.trust_score = access["access_request"], access["decision"], identity.trust_score
+            plan = self.response.plan(item, decision)
+            item.response_action, item.response_mode = plan.action, plan.mode
+            item.lifecycle_state = "DETECTED" if plan.requires_incident else "OBSERVED"
+            self.store.append_telemetry(item)
+            self.store.record_iam(access)
+            if delta:
+                self.store.record_trust(identity.identity, identity.trust_score, delta, trust_reason)
+                self.publish("trust", {"identity": identity.identity, "score": identity.trust_score, "delta": delta, "reason": trust_reason, "provenance": "DERIVED"})
+
+            incident = None
+            alert = None
+            if plan.requires_incident:
+                active = self.store.find_active_incident(device_id=item.device_id, attack_type=item.attack_type)
+                if active:
+                    incident = self.store.correlate_incident(
+                        active["incident_id"],
+                        item,
+                        decision.evidence,
+                        "Ongoing campaign correlated across observation windows"
                     )
-                    self.response.mark_recovering(dev_id)
-                    self.publish("incident", updated)
-                    alert = self.store.sync_alert_with_incident(updated)
-                    if alert:
-                        self.publish("alert", alert)
-                elif state == "RECOVERING" and self._normal_streak >= 5:
-                    updated = self.store.transition_incident(
-                        incident["incident_id"],
-                        "RESOLVED",
-                        "system",
-                        f"Recovery verified from sustained normal baseline ({self._normal_streak} normal windows).",
-                        ["sustained normal observations verified"]
-                    )
-                    self.response.release(dev_id)
-                    self.publish("incident", updated)
-                    alert = self.store.sync_alert_with_incident(updated)
-                    if alert:
-                        self.publish("alert", alert)
-            except (ValueError, KeyError):
-                continue
+                    if plan.mode != "MANUAL" and not is_impersonation:
+                        self.response.apply_simulation(plan, item.device_id)
+                else:
+                    incident = self.store.create_incident(item, decision.evidence, "CPU/RAM/radio/energy are model-correlated")
+                    if plan.mode != "MANUAL":
+                        if not is_impersonation:
+                            self.response.apply_simulation(plan, item.device_id)
+                        incident = self.store.transition_incident(incident["incident_id"], "RESPONDING", "system", "Simulated response planned; no host enforcement.", decision.evidence)
+                        incident = self.store.transition_incident(incident["incident_id"], "CONTAINED", "system", "Containment state is simulated within the laboratory runtime.", decision.evidence)
+                alert = self.store.create_or_update_alert(incident, item, decision, plan)
+                self.store.record_action(event_id=item.event_id, incident_id=incident["incident_id"], action=plan.action, reason=plan.reason, policy="hybrid-response-v1", mode=plan.mode, result=plan.result)
+                self.publish("incident", incident)
+                if alert:
+                    self.publish("alert", alert)
+                self.publish("response", {"incident_id": incident["incident_id"], **plan.__dict__, "provenance": "SIMULATED"})
+                if dev_id:
+                    self._device_normal_streaks[dev_id] = 0
+            else:
+                if dev_id:
+                    self._device_normal_streaks[dev_id] += 1
+                self._verify_recovery(dev_id)
+            result = {"event": item.to_dict(), "decision": decision.as_dict(), "response": plan.__dict__, "incident": incident, "alert": alert}
+            self.publish("telemetry", result)
+            return result
+
+    def _verify_recovery(self, device_id: str | None = None) -> None:
+        """Advance recovery only after actual consecutive normal observations for a specific device."""
+        with self._lock:
+            devices = [device_id] if device_id else list(self._device_normal_streaks.keys())
+            for dev in devices:
+                if not dev:
+                    continue
+                streak = self._device_normal_streaks.get(dev, 0)
+                if streak < 3:
+                    continue
+                incident = self.store.find_active_incident(device_id=dev)
+                if not incident:
+                    continue
+                state = incident.get("lifecycle_state")
+                inc_id = incident.get("incident_id")
+                try:
+                    if state in {"CONTAINED", "RESPONDING", "DETECTED"}:
+                        updated = self.store.transition_incident(
+                            inc_id,
+                            "RECOVERING",
+                            "system",
+                            f"Consecutive normal observations (streak={streak}) for device '{dev}' verified traffic/resource recovery.",
+                            ["traffic returned toward modeled baseline"]
+                        )
+                        self.response.mark_recovering(dev)
+                        self.publish("incident", updated)
+                        alert = self.store.sync_alert_with_incident(updated)
+                        if alert:
+                            self.publish("alert", alert)
+                    elif state == "RECOVERING" and streak >= 5:
+                        updated = self.store.transition_incident(
+                            inc_id,
+                            "RESOLVED",
+                            "system",
+                            f"Recovery verified from sustained normal baseline ({streak} normal windows) for device '{dev}'.",
+                            ["sustained normal observations verified"]
+                        )
+                        self.response.release(dev)
+                        self.publish("incident", updated)
+                        alert = self.store.sync_alert_with_incident(updated)
+                        if alert:
+                            self.publish("alert", alert)
+                        self._device_normal_streaks.pop(dev, None)
+                except (ValueError, KeyError):
+                    continue
 
     def start_simulation(self, scenario_id: str, intensity: int = 3, duration: float | None = None) -> dict[str, Any]:
         """Start a bounded in-process profile; it sends no network traffic."""

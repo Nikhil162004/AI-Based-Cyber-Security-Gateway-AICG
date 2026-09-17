@@ -89,32 +89,32 @@ def main():
 
         print("\n[Phase 3: Recovery Phase & Consecutive Benign Verification]")
         # 1st normal window (streak = 1)
-        norm_1 = generate_window("normal", intensity=1, sequence=10)
+        norm_1 = generate_window("normal", intensity=1, sequence=10, device_id="ATK-01")
         runtime.ingest(norm_1)
         inc = runtime.store.incidents(limit=1)[0]
         print(f"  Normal Window 1 (Streak=1): Incident State={inc['lifecycle_state']}, Recovery={inc['recovery_state']}")
 
         # 2nd normal window (streak = 2)
-        norm_2 = generate_window("normal", intensity=1, sequence=11)
+        norm_2 = generate_window("normal", intensity=1, sequence=11, device_id="ATK-01")
         runtime.ingest(norm_2)
         inc = runtime.store.incidents(limit=1)[0]
         print(f"  Normal Window 2 (Streak=2): Incident State={inc['lifecycle_state']}, Recovery={inc['recovery_state']}")
 
         # 3rd normal window (streak = 3 -> Should transition to RECOVERING)
-        norm_3 = generate_window("normal", intensity=1, sequence=12)
+        norm_3 = generate_window("normal", intensity=1, sequence=12, device_id="ATK-01")
         runtime.ingest(norm_3)
         inc = runtime.store.incidents(limit=1)[0]
         print(f"  Normal Window 3 (Streak=3): Incident State={inc['lifecycle_state']}, Recovery={inc['recovery_state']}")
         assert inc["lifecycle_state"] == "RECOVERING", f"Expected RECOVERING, got {inc['lifecycle_state']}"
 
         # 4th normal window (streak = 4)
-        norm_4 = generate_window("normal", intensity=1, sequence=13)
+        norm_4 = generate_window("normal", intensity=1, sequence=13, device_id="ATK-01")
         runtime.ingest(norm_4)
         inc = runtime.store.incidents(limit=1)[0]
         print(f"  Normal Window 4 (Streak=4): Incident State={inc['lifecycle_state']}, Recovery={inc['recovery_state']}")
 
         # 5th normal window (streak = 5 -> Should transition to RESOLVED with VERIFIED)
-        norm_5 = generate_window("normal", intensity=1, sequence=14)
+        norm_5 = generate_window("normal", intensity=1, sequence=14, device_id="ATK-01")
         runtime.ingest(norm_5)
         inc = runtime.store.incidents(limit=1)[0]
         print(f"  Normal Window 5 (Streak=5): Incident State={inc['lifecycle_state']}, Recovery={inc['recovery_state']}, ResolvedAt={inc['resolved_at']}")

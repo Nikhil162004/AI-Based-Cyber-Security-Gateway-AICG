@@ -77,10 +77,31 @@ class InProcessPolicyEnforcer:
             # 1. Check active isolation or block
             if device_id in self.active_isolates:
                 rec = self.active_isolates[device_id]
-                # If device is under recovery verification trial, allow observation
-                if rec.get("state") == "RECOVERING":
-                    return PolicyDecision("ALLOW", f"Device '{device_id}' in recovery verification trial", enforced=False, drop=False)
                 act = rec.get("action", "ISOLATE")
+                state = rec.get("state")
+                # If device is under recovery verification trial, allow observation
+                if state == "RECOVERING":
+                    return PolicyDecision("ALLOW", f"Device '{device_id}' in recovery verification trial", enforced=False, drop=False)
+
+                # If device is contained (and not explicitly BLOCKed), only permit baseline-rate
+                # observation windows to reach the detector strictly for recovery qualification.
+                # Active attack floods remain dropped at the boundary.
+                if state == "CONTAINED" and act != "BLOCK":
+                    rate = getattr(event, "packet_rate", None)
+                    flags = getattr(event, "tcp_flags", None) or ""
+                    if (
+                        rate is not None
+                        and 0.0 < float(rate) <= 30.0
+                        and "S" not in flags
+                    ):
+                        return PolicyDecision(
+                            "ALLOW",
+                            f"Contained device '{device_id}' baseline observation window permitted strictly for recovery qualification",
+                            enforced=False,
+                            drop=False,
+                            metadata={"recovery_observation": True},
+                        )
+
                 reason = f"Device '{device_id}' actively {act}d in software policy boundary: {rec.get('reason', 'Mitigation active')}"
                 return PolicyDecision("DROP", reason, enforced=True, drop=True, metadata={"action": act, "enforced_action": act, "severity": rec.get("severity", "HIGH")})
 

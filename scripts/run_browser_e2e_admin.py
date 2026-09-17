@@ -427,7 +427,7 @@ def run_e2e():
             # Simulate recovery (5 benign windows)
             print("  [*] Feeding consecutive benign windows to trigger autonomous recovery...")
             for s in range(20, 27):
-                runtime.ingest(generate_window("normal", intensity=1, sequence=s))
+                runtime.ingest(generate_window("normal", intensity=1, sequence=s, device_id="ATK-01"))
 
             inc_after_recovery = runtime.store.incidents(state="RESOLVED")
             assert any(i["incident_id"] == inc_id for i in inc_after_recovery), "Incident must be RESOLVED after recovery streak"

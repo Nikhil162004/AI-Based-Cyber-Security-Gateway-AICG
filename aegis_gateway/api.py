@@ -1089,6 +1089,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         stopped = runtime.stop_simulation()
         runtime.iam.reset_identities()
         runtime.response.reset()
+        runtime.reset_streaks()
         runtime.start_baseline()
         baseline_event = runtime.ingest(generate_window("normal", intensity=1, sequence=0))
         actor = curr_user["username"]

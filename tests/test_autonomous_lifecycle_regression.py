@@ -62,7 +62,7 @@ def test_autonomous_lifecycle_streak_progression(gateway_fixture):
 
     # 2. Ingest 3 consecutive normal windows -> verify autonomous transition to RECOVERING
     for _ in range(3):
-        norm_win = generate_window("normal")
+        norm_win = generate_window("normal", device_id=active_inc["device_id"])
         runtime.ingest(norm_win)
 
     inc = runtime.store.incident(active_inc["incident_id"])
@@ -70,7 +70,7 @@ def test_autonomous_lifecycle_streak_progression(gateway_fixture):
 
     # 3. Ingest 2 more consecutive normal windows (total streak 5) -> verify autonomous transition to RESOLVED
     for _ in range(2):
-        norm_win = generate_window("normal")
+        norm_win = generate_window("normal", device_id=active_inc["device_id"])
         runtime.ingest(norm_win)
 
     inc = runtime.store.incident(active_inc["incident_id"])
@@ -146,7 +146,7 @@ def test_incident_closure_atomically_syncs_admin_alerts(gateway_fixture):
 
     # Ingest 5 normal windows -> incident transitions to RESOLVED
     for _ in range(5):
-        runtime.ingest(generate_window("normal"))
+        runtime.ingest(generate_window("normal", device_id="ATK-01"))
 
     inc = runtime.store.incident(inc_id)
     assert inc["lifecycle_state"] == "RESOLVED"
