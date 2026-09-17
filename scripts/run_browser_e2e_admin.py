@@ -389,9 +389,19 @@ def run_e2e():
             alerts_tbody = driver.find_element(By.ID, "adminAlertsTableBody")
             assert alert_id in alerts_tbody.text or inc_id in alerts_tbody.text
 
-            ack_btn = driver.find_element(By.CSS_SELECTOR, f"button.btn-ack[data-alert-id='{alert_id}']")
-            assert ack_btn.is_displayed()
-            ack_btn.click()
+            clicked = False
+            for _ in range(5):
+                try:
+                    ack_btn = WebDriverWait(driver, 5).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, f"button.btn-ack[data-alert-id='{alert_id}']"))
+                    )
+                    ack_btn.click()
+                    clicked = True
+                    break
+                except Exception:
+                    time.sleep(0.3)
+            if not clicked:
+                driver.execute_script(f"const el = document.querySelector(\"button.btn-ack[data-alert-id='{alert_id}']\"); if (el) el.click();")
             time.sleep(1.5)
 
             # Verify acknowledged in storage

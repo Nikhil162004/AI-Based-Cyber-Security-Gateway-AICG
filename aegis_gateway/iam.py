@@ -26,6 +26,8 @@ class IAMService:
 
     identities: dict[str, Identity] = field(default_factory=lambda: {
         "SENSOR-01": Identity("SENSOR-01", "sensor", authenticated=True, trust_score=100.0, mfa_status="NOT_REQUIRED"),
+        "SENSOR-02": Identity("SENSOR-02", "sensor", authenticated=True, trust_score=100.0, mfa_status="NOT_REQUIRED"),
+        "SENSOR-03": Identity("SENSOR-03", "sensor", authenticated=True, trust_score=100.0, mfa_status="NOT_REQUIRED"),
         "SENSOR-GROUP-A": Identity("SENSOR-GROUP-A", "sensor", authenticated=True, trust_score=100.0, mfa_status="NOT_REQUIRED"),
         "ATK-01": Identity("ATK-01", "untrusted", authenticated=False, trust_score=35.0, mfa_status="FAILED"),
         "operator": Identity("operator", "operator", authenticated=True, trust_score=100.0, mfa_status="VERIFIED"),
@@ -34,9 +36,22 @@ class IAMService:
     def get(self, identity: str | None) -> Identity:
         name = identity or "UNKNOWN"
         if name not in self.identities:
-            mfa = "FAILED" if name.startswith("ATK") else ("REQUIRED" if "operator" in name.lower() else "NOT_REQUIRED")
-            self.identities[name] = Identity(name, "unknown", authenticated=False, trust_score=45.0, mfa_status=mfa)
+            if name.startswith("SENSOR-"):
+                self.identities[name] = Identity(name, "sensor", authenticated=True, trust_score=100.0, mfa_status="NOT_REQUIRED")
+            else:
+                mfa = "FAILED" if name.startswith("ATK") else ("REQUIRED" if "operator" in name.lower() else "NOT_REQUIRED")
+                self.identities[name] = Identity(name, "unknown", authenticated=False, trust_score=45.0, mfa_status=mfa)
         return self.identities[name]
+
+    def reset_identities(self) -> None:
+        """Reset identity reputation to clean baseline state."""
+        for name, ident in self.identities.items():
+            if name.startswith("SENSOR-") or name == "operator":
+                ident.trust_score = 100.0
+                ident.failures = 0
+            elif name.startswith("ATK"):
+                ident.trust_score = 35.0
+                ident.failures = 0
 
     def access(self, identity: str | None, resource: str = "gateway:telemetry") -> dict[str, Any]:
         item = self.get(identity)

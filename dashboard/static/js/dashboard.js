@@ -36,11 +36,12 @@ function updateSummary(summary, fullStatus) {
 
     const pred = summary.latest_prediction || "NORMAL";
     const isAttack = pred === "ATTACK";
+    const isThreatActive = isAttack || (summary.active_incident && !["RESOLVED", "CLOSED"].includes(summary.active_incident.lifecycle_state));
     const ddosProb = Number(summary.latest_ddos_probability ?? (isAttack ? 0.99 : 0.05));
     const pps = Number(summary.latest_packet_rate ?? 18.0);
     const byteRate = Number(summary.latest_bytes_per_second ?? 4140.0);
-    const secAction = summary.latest_security_action || (isAttack ? "BLOCK" : "ALERT");
-    const mitAction = summary.latest_mitigation_action || (isAttack ? "BLOCK" : "NONE");
+    const secAction = summary.latest_security_action || (isAttack ? "BLOCK" : (isThreatActive ? "ALERT" : "MONITOR"));
+    const mitAction = isThreatActive ? (summary.latest_mitigation_action || (isAttack ? "BLOCK" : "NONE")) : "NONE";
     const trustScore = Number(summary.trust_score ?? (isAttack ? 15.0 : 100.0));
 
     // Card 1: Throughput
@@ -92,7 +93,7 @@ function updateSummary(summary, fullStatus) {
     if (securityActionEl) securityActionEl.textContent = secAction;
     if (mitigationActionEl) {
         mitigationActionEl.textContent = mitAction;
-        mitigationActionEl.style.color = isAttack ? "var(--red)" : "var(--cyan)";
+        mitigationActionEl.style.color = isThreatActive ? "var(--red)" : "var(--cyan)";
     }
     if (fullStatus) {
         const mode = (fullStatus.response_mode || "DRY_RUN").replace(/_/g, "-");
@@ -1604,9 +1605,26 @@ window.executeManualAction = async function(actionName) {
     }
 };
 
-window.resetLifecycleToBaseline = function() {
+window.resetLifecycleToBaseline = async function() {
     hmiTargetIncident = null;
-    refreshDashboard();
+    try {
+        const res = await fetch("/api/simulations/reset", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({})
+        });
+        if (res.status === 401) {
+            window.location.href = "/login?expired=1";
+            return;
+        }
+    } catch (e) {
+        console.error("Backend reset failed:", e);
+    } finally {
+        refreshDashboard();
+        if (typeof refreshAdminAlerts === "function") {
+            refreshAdminAlerts();
+        }
+    }
 };
 
 window.transitionIncidentState = async function(incidentId, targetState) {

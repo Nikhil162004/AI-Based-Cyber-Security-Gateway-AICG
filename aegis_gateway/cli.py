@@ -47,6 +47,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"report": str(settings.report_dir / "evaluation.json"), "test": report["test"], "scenario_held_out": report["scenario_held_out"]}, indent=2)); return 0
     runtime = GatewayRuntime(settings)
     if args.command == "run":
+        runtime.start_baseline()
         app = create_app(runtime); app.run(host=args.host or settings.host, port=args.port or settings.port, debug=False, threaded=True); return 0
     if args.command == "demo":
         runtime.start_simulation("normal", 1, duration=2)

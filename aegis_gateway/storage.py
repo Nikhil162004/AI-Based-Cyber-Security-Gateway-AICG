@@ -148,6 +148,16 @@ class GatewayStore:
                 con.execute("UPDATE admin_audit_log SET prev_hash = ?, record_hash = ? WHERE rowid = ?", (curr_prev, h, row["rowid"]))
                 curr_prev = h
 
+        # Reconcile historical alerts whose parent incidents are already resolved or closed
+        con.execute(
+            "UPDATE admin_alerts SET status = 'CLOSED', lifecycle_state = 'CLOSED' "
+            "WHERE incident_id IN (SELECT incident_id FROM incidents WHERE lifecycle_state = 'CLOSED') AND status != 'CLOSED'"
+        )
+        con.execute(
+            "UPDATE admin_alerts SET status = 'RESOLVED', lifecycle_state = 'RESOLVED' "
+            "WHERE incident_id IN (SELECT incident_id FROM incidents WHERE lifecycle_state = 'RESOLVED') AND status NOT IN ('RESOLVED', 'CLOSED')"
+        )
+
     def _seed_default_users(self, con: sqlite3.Connection) -> None:
         from .security import hash_password
         now = utc_now()
@@ -317,6 +327,11 @@ class GatewayStore:
                 state, recovery, now, now if state == "RESOLVED" else current["resolved_at"], incident_id))
             con.execute("INSERT INTO incident_history VALUES (?,?,?,?,?,?,?,?)", (
                 str(uuid4()), incident_id, now, current["lifecycle_state"], state, actor, note, json.dumps(evidence or [])))
+            alert_status = "RESOLVED" if state == "RESOLVED" else ("CLOSED" if state == "CLOSED" else "ACTIVE")
+            con.execute(
+                "UPDATE admin_alerts SET lifecycle_state = ?, status = ?, timestamp = ? WHERE incident_id = ?",
+                (state, alert_status, now, incident_id)
+            )
         return self.incident(incident_id)  # type: ignore[return-value]
 
     def record_action(self, *, event_id: str | None, incident_id: str | None, action: str, reason: str, policy: str, mode: str, result: str, provenance: str = "SIMULATED") -> dict[str, Any]:
@@ -620,7 +635,7 @@ class GatewayStore:
         if not existing:
             return None
         new_state = incident.get("lifecycle_state") or existing["lifecycle_state"]
-        new_status = "RESOLVED" if new_state == "RESOLVED" else ("CLOSED" if new_state == "CLOSED" else existing["status"])
+        new_status = "RESOLVED" if new_state == "RESOLVED" else ("CLOSED" if new_state == "CLOSED" else "ACTIVE")
         now = utc_now()
         with self.connection() as con:
             con.execute(

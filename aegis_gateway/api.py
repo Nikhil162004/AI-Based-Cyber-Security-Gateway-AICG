@@ -722,13 +722,19 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         } if active_inc else None
         canonical_state = active_inc["lifecycle_state"] if active_inc else "OBSERVED"
 
+        is_threat_active = is_attack or (active_inc and active_inc.get("lifecycle_state") not in {"RESOLVED", "CLOSED"})
+        mit_action = (latest.get("response_action") or "NONE") if is_threat_active else "NONE"
+        sec_action = latest.get("response_action") or ("BLOCK" if is_attack else "ALERT")
+        if not is_threat_active and sec_action == "ALERT":
+            sec_action = "MONITOR"
+
         base_status["summary"] = {
             "latest_prediction": pred,
             "latest_packet_rate": float(latest.get("packet_rate") or 18.0),
             "latest_bytes_per_second": float(latest.get("byte_rate") or 4140.0),
             "latest_ddos_probability": ddos_p,
-            "latest_security_action": latest.get("response_action") or "ALERT",
-            "latest_mitigation_action": latest.get("response_action") or "NONE",
+            "latest_security_action": sec_action,
+            "latest_mitigation_action": mit_action,
             "trust_score": float(trust_val),
             "active_incident": active_inc_summary,
             "lifecycle_state": canonical_state,
@@ -981,6 +987,35 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             source_ip=request.remote_addr,
         )
         return jsonify({"stopped": stopped, "network_transmission": False})
+
+    @app.post("/api/simulations/reset")
+    @login_required
+    @permission_required(PERM_ADMIN_CONTROLS)
+    def reset_simulation():
+        curr_user = get_current_user() or {"username": "admin", "role": "ADMIN"}
+        stopped = runtime.stop_simulation()
+        runtime.iam.reset_identities()
+        runtime.start_baseline()
+        baseline_event = runtime.ingest(generate_window("normal", intensity=1, sequence=0))
+        actor = curr_user["username"]
+        runtime.store.record_audit(
+            username=actor,
+            role=curr_user["role"],
+            action="SIMULATION_RESET",
+            resource="simulation",
+            resource_id="baseline",
+            result="SUCCESS",
+            details=f"Reset simulation state to normal baseline rhythm: stopped {stopped}",
+            source_ip=request.remote_addr,
+        )
+        runtime.publish("simulation", {"state": "RESET", "scenario_id": "normal", "provenance": "SIMULATED"})
+        return jsonify({
+            "status": "RESET",
+            "stopped": stopped,
+            "baseline": "RUNNING",
+            "network_transmission": False,
+            "latest": baseline_event.get("event"),
+        })
 
     @app.post("/api/demo-data")
     @login_required
@@ -1357,5 +1392,6 @@ def create_app(runtime: GatewayRuntime) -> Flask:
 
 if __name__ == "__main__":
     runtime = GatewayRuntime()
+    runtime.start_baseline()
     app = create_app(runtime)
     app.run(host=runtime.settings.host, port=runtime.settings.port, debug=False, threaded=True)
