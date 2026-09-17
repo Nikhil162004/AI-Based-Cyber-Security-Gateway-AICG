@@ -1,0 +1,141 @@
+{
+  "baseline_runtime_model": "models/hybrid_detector.joblib",
+  "dataset": "data/datasets/realistic_benchmark_v1.csv",
+  "dataset_version": "realistic-benchmark-v1",
+  "evaluation_protocol": "campaign-grouped train/val/test with held-out stealth scenario",
+  "experiment_id": "EXP-REALISTIC-69f87f6ebc47",
+  "feature_importance": {
+    "byte_count": 0.07081689373501407,
+    "byte_rate": 0.08228285860669449,
+    "cpu_activity": 0.051873710193421886,
+    "energy_deviation": 0.12927286620513442,
+    "flow_count": 0.030501556377873006,
+    "icmp_ratio": 0.007906680827768476,
+    "memory_activity": 0.03249029696525778,
+    "packet_count": 0.1892014968324958,
+    "packet_rate": 0.22513025693287295,
+    "packet_size": 0.11399582349082694,
+    "syn_ratio": 0.023909145428829843,
+    "tcp_ratio": 0.011267002904174137,
+    "udp_ratio": 0.0055133645348498335,
+    "unique_destinations": 0.0,
+    "unique_sources": 0.025838046964786518
+  },
+  "feature_version": "window-features-v2",
+  "held_out_scenario": "slow_stealth",
+  "model_role": "realistic benchmark evaluation model",
+  "model_version": "realistic-rf-if-v1",
+  "provenance": "REALISTIC_SIMULATION",
+  "random_seed": 20260917,
+  "realistic_evaluation_model": "models/realistic_detector_v1.joblib",
+  "runtime_model_changed": false,
+  "scenario_held_out": {
+    "attack_f1": 0.8405797101449275,
+    "attack_precision": 1.0,
+    "attack_recall": 0.725,
+    "attack_sample_count": 160,
+    "confusion_matrix": [
+      [
+        0,
+        0
+      ],
+      [
+        44,
+        116
+      ]
+    ],
+    "evaluation_note": "The held-out scenario contains only ATTACK samples (160 samples, 0 NORMAL). Therefore, overall accuracy, false-positive rate, and NORMAL metrics are not defined or presented. Metrics represent attack recall on unseen slow_stealth attack mechanics.",
+    "f1": {
+      "ATTACK": 0.8405797101449275
+    },
+    "false_negatives": 44,
+    "held_out_attack_recall": 0.725,
+    "labels_present": [
+      "ATTACK"
+    ],
+    "normal_sample_count": 0,
+    "precision": {
+      "ATTACK": 1.0
+    },
+    "recall": {
+      "ATTACK": 0.725
+    },
+    "sample_count": 160,
+    "scenario": "slow_stealth",
+    "true_positives": 116
+  },
+  "splits": {
+    "scenario_held_out": 160,
+    "test": 360,
+    "train": 920,
+    "validation": 320
+  },
+  "test": {
+    "brier_score": 0.0733413045690581,
+    "classification_report": {
+      "ATTACK": {
+        "f1-score": 0.9145496535796767,
+        "precision": 0.8497854077253219,
+        "recall": 0.99,
+        "support": 200.0
+      },
+      "NORMAL": {
+        "f1-score": 0.8710801393728222,
+        "precision": 0.984251968503937,
+        "recall": 0.78125,
+        "support": 160.0
+      },
+      "accuracy": 0.8972222222222223,
+      "macro avg": {
+        "f1-score": 0.8928148964762495,
+        "precision": 0.9170186881146294,
+        "recall": 0.885625,
+        "support": 360.0
+      },
+      "weighted avg": {
+        "f1-score": 0.8952298694877413,
+        "precision": 0.9095483236269287,
+        "recall": 0.8972222222222223,
+        "support": 360.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        125,
+        35
+      ],
+      [
+        2,
+        198
+      ]
+    ],
+    "f1": {
+      "ATTACK": 0.9145496535796767,
+      "NORMAL": 0.8710801393728222
+    },
+    "false_negative_rate": 0.01,
+    "false_negatives": 2,
+    "false_positive_rate": 0.21875,
+    "false_positives": 35,
+    "labels": [
+      "NORMAL",
+      "ATTACK"
+    ],
+    "pr_auc": 0.9944636572788033,
+    "precision": {
+      "ATTACK": 0.8497854077253219,
+      "NORMAL": 0.984251968503937
+    },
+    "recall": {
+      "ATTACK": 0.99,
+      "NORMAL": 0.78125
+    },
+    "roc_auc": 0.992625,
+    "samples": 360,
+    "support": {
+      "ATTACK": 200,
+      "NORMAL": 160
+    }
+  },
+  "timestamp": "2026-09-17T16:56:57.334528+00:00"
+}

@@ -96,8 +96,10 @@ class HybridDetector:
         if values["energy_deviation"] >= .15:
             evidence.append("Modelled energy rate rose concurrently with traffic/resource activity.")
             rule_score += .08
+        rule_score = min(1.0, rule_score)
         if event.attack_type:
             evidence.append(f"Source scenario labels this controlled profile as {event.attack_type}.")
+
 
         supervised_prediction, anomaly_score, model_score = None, None, 0.0
         calibrated_probability: float | None = None
@@ -118,13 +120,22 @@ class HybridDetector:
             scaler = self.bundle.get("anomaly_scaler")
             if anomaly is not None and scaler is not None:
                 scaled = scaler.transform(df_sample)
-                raw = -float(anomaly.score_samples(scaled)[0])
-                anomaly_score = max(0.0, min(1.0, (raw + .7) / 1.4))
+                # Map IsolationForest decision_function: positive for normal inliers, negative for outliers.
+                # Bounded mapping in [0.0, 1.0] where inliers yield < 0.35 and anomalous outliers yield > 0.60.
+                raw_dfunc = float(anomaly.decision_function(scaled)[0])
+                anomaly_score = max(0.0, min(1.0, round(0.5 - raw_dfunc * 4.0, 4)))
                 if anomaly_score >= .6:
                     evidence.append("Isolation Forest found the window unlike benign training windows.")
 
+            # Explainable documentation of contradictory evidence between heuristic rules and ML
+            if rule_score >= 0.40 and model_score < 0.30:
+                evidence.append(f"Heuristic rule activation ({rule_score:.2f}) was dampened by low ML attack probability ({model_score:.2f}).")
+            elif model_score >= 0.70 and rule_score < 0.20:
+                evidence.append(f"ML model detected statistical attack pattern ({model_score:.2f}) despite weak heuristic rule activation ({rule_score:.2f}).")
+
         if self.bundle:
-            score = min(1.0, .55 * rule_score + .35 * model_score + .10 * (anomaly_score or 0.0))
+            # Audited Phase 23 Wave 2 candidate fusion: 0.40 Rule + 0.45 Supervised RF + 0.15 Isolation Forest
+            score = min(1.0, .40 * rule_score + .45 * model_score + .15 * (anomaly_score or 0.0))
         else:
             score = min(1.0, rule_score)
         attack = score >= .50
