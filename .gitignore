@@ -10,3 +10,7 @@ htmlcov/
 
 # Ralph verification runtime logs
 .ralph/
+
+# SQLite WAL runtime files
+data/*.sqlite3-wal
+data/*.sqlite3-shm
