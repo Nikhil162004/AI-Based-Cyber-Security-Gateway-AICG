@@ -41,6 +41,7 @@ def test_api_health_and_status(runtime_app):
         assert data["status"] == "ONLINE"
         assert data["host_enforcement"] is False
 
+        _login(client)
         res_status = client.get("/api/status")
         assert res_status.status_code == 200
         status_data = res_status.get_json()
@@ -79,6 +80,7 @@ def test_api_telemetry_and_events(runtime_app):
     runtime.ingest(generate_window("udp_flood", 3, 0))
 
     with app.test_client() as client:
+        _login(client)
         res = client.get("/api/telemetry")
         assert res.status_code == 200
         data = res.get_json()
@@ -266,6 +268,7 @@ def test_api_events_sse_endpoint(runtime_app):
 def test_api_status_trust_score(runtime_app):
     runtime, app = runtime_app
     with app.test_client() as client:
+        _login(client)
         res = client.get("/api/status")
         assert res.status_code == 200
         data = res.get_json()
@@ -285,6 +288,7 @@ def test_api_model_assurance_endpoint(tmp_path):
     runtime = GatewayRuntime(settings)
     app = create_app(runtime)
     with app.test_client() as client:
+        _login(client)
         res = client.get("/api/model-assurance")
         assert res.status_code == 200
         data = res.get_json()
@@ -309,6 +313,7 @@ def test_api_model_assurance_endpoint(tmp_path):
 def test_api_iam_endpoint(runtime_app):
     runtime, app = runtime_app
     with app.test_client() as client:
+        _login(client)
         res = client.get("/api/iam")
         assert res.status_code == 200
         data = res.get_json()
@@ -326,6 +331,7 @@ def test_protocol_percentages_normalize_correctly(runtime_app):
     """Verify /api/protocols returns valid distribution summing to ~100% and never exceeding 100%."""
     runtime, app = runtime_app
     with app.test_client() as client:
+        _login(client)
         res = client.get("/api/protocols")
         assert res.status_code == 200
         data = res.get_json()
@@ -374,6 +380,7 @@ def test_model_assurance_held_out_claims_and_consistency(tmp_path):
     runtime = GatewayRuntime(settings)
     app = create_app(runtime)
     with app.test_client() as client:
+        _login(client)
         res = client.get("/api/model-assurance")
         assert res.status_code == 200
         data = res.get_json()
@@ -444,6 +451,7 @@ def test_energy_baseline_causal_contract(runtime_app):
     """Verify that energy telemetry explicitly states modelled software telemetry boundary."""
     runtime, app = runtime_app
     with app.test_client() as client:
+        _login(client)
         res = client.get("/api/energy")
         assert res.status_code == 200
         data = res.get_json()

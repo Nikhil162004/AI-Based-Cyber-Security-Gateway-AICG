@@ -34,6 +34,16 @@ def gateway_fixture(tmp_path: Path):
     return runtime, app
 
 
+def _login(client, username="admin", password="Admin@AICG2026!"):
+    res = client.post("/api/auth/login", json={
+        "username": username,
+        "password": password,
+        "mfa_code": DEFAULT_SIMULATED_MFA_TOKEN,
+    })
+    assert res.status_code == 200
+    return res
+
+
 def test_autonomous_lifecycle_streak_progression(gateway_fixture):
     runtime, _ = gateway_fixture
 
@@ -90,6 +100,7 @@ def test_sensor_identities_and_baseline_trust_posture(gateway_fixture):
 
     # Check /api/status trust score
     with app.test_client() as client:
+        _login(client)
         res = client.get("/api/status")
         assert res.status_code == 200
         data = res.get_json()
@@ -109,6 +120,7 @@ def test_baseline_normal_status_mitigation_action_none(gateway_fixture):
 
     with app.test_client() as client:
         # Status endpoint is readable
+        _login(client)
         res = client.get("/api/status")
         assert res.status_code == 200
         data = res.get_json()

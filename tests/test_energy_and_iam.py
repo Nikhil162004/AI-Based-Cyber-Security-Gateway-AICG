@@ -329,6 +329,12 @@ def test_auth_token_transient_and_never_persisted_or_exposed(tmp_path: Path):
 
     # 4. Verify auth_token is absent from /api/telemetry
     with app.test_client() as client:
+        login_res = client.post("/api/auth/login", json={
+            "username": "admin",
+            "password": "Admin@AICG2026!",
+            "mfa_code": "123456",
+        })
+        assert login_res.status_code == 200
         res = client.get("/api/telemetry")
         assert res.status_code == 200
         telemetry_data = res.get_json()

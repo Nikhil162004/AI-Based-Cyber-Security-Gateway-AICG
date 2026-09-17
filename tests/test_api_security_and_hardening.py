@@ -540,3 +540,128 @@ def test_historical_telemetry_immutability(hardened_app):
     rows_after = runtime.store.telemetry(limit=10)
     attack_row_after = [r for r in rows_after if r["label"] == "ATTACK"][0]
     assert attack_row_after["lifecycle_state"] == "DETECTED"
+
+
+# =============================================================================
+# 8. PHASE 22 WAVE 4: PROTECTED OT TELEMETRY & AUTHORIZATION (C2)
+# =============================================================================
+
+def test_unauthenticated_ot_telemetry_access_rejected(hardened_app):
+    """Verify that unauthenticated access to protected OT telemetry endpoints returns 401 / AUTH_REQUIRED."""
+    runtime, app = hardened_app
+    runtime.ingest(generate_window("normal", intensity=1, sequence=0))
+
+    protected_endpoints = [
+        "/api/status",
+        "/api/telemetry",
+        "/api/events",
+        "/api/iam",
+        "/api/trust",
+        "/api/energy",
+        "/api/protocols",
+        "/api/topology",
+        "/api/model-assurance",
+        "/api/metrics",
+        "/api/scenarios",
+        "/api/ns3",
+        "/api/cooja",
+    ]
+
+    with app.test_client() as client:
+        for ep in protected_endpoints:
+            res = client.get(ep)
+            assert res.status_code == 401, f"Expected 401 for GET {ep}, got {res.status_code}"
+            data = res.get_json()
+            assert data["code"] == "AUTH_REQUIRED", f"Expected AUTH_REQUIRED code for {ep}, got {data.get('code')}"
+            assert data["authenticated"] is False
+
+        # POST /api/iam/access unauthenticated check
+        res_iam = client.post("/api/iam/access", json={"identity": "SENSOR-01", "resource": "gateway:telemetry"})
+        assert res_iam.status_code == 401, f"Expected 401 for POST /api/iam/access, got {res_iam.status_code}"
+        assert res_iam.get_json()["code"] == "AUTH_REQUIRED"
+
+
+def test_operator_permitted_ot_telemetry_read_access(hardened_app):
+    """Verify that authenticated ROLE_OPERATOR can read all protected OT telemetry endpoints with HTTP 200."""
+    runtime, app = hardened_app
+    runtime.ingest(generate_window("normal", intensity=1, sequence=0))
+
+    protected_endpoints = [
+        "/api/status",
+        "/api/telemetry",
+        "/api/events",
+        "/api/iam",
+        "/api/trust",
+        "/api/energy",
+        "/api/protocols",
+        "/api/topology",
+        "/api/model-assurance",
+        "/api/metrics",
+        "/api/scenarios",
+        "/api/ns3",
+        "/api/cooja",
+    ]
+
+    with app.test_client() as client:
+        _login_as(client, "operator", ROLE_OPERATOR)
+        for ep in protected_endpoints:
+            res = client.get(ep)
+            assert res.status_code == 200, f"Expected 200 for OPERATOR GET {ep}, got {res.status_code}"
+            assert res.is_json, f"Expected JSON response for {ep}"
+
+
+def test_iam_access_authorization_matrix(hardened_app):
+    """Verify IAM access evaluation endpoint RBAC: anonymous 401, operator 403, admin 200."""
+    runtime, app = hardened_app
+
+    # 1. Anonymous request -> 401
+    with app.test_client() as client:
+        res_anon = client.post("/api/iam/access", json={"identity": "SENSOR-01", "resource": "gateway:telemetry"})
+        assert res_anon.status_code == 401
+        assert res_anon.get_json()["code"] == "AUTH_REQUIRED"
+
+    # 2. Operator login -> 403 Forbidden (operator lacks PERM_ADMIN_CONTROLS)
+    with app.test_client() as client:
+        _login_as(client, "operator", ROLE_OPERATOR)
+        res_op = client.post("/api/iam/access", json={"identity": "SENSOR-01", "resource": "gateway:telemetry"})
+        assert res_op.status_code == 403
+        assert res_op.get_json()["code"] == "FORBIDDEN_PERMISSION"
+
+    # 3. Admin login -> 200 OK
+    with app.test_client() as client:
+        _login_as(client, "admin", ROLE_ADMIN)
+        res_admin = client.post("/api/iam/access", json={"identity": "SENSOR-01", "resource": "gateway:telemetry"})
+        assert res_admin.status_code == 200
+        data = res_admin.get_json()
+        assert "decision" in data
+        assert "identity" in data
+
+
+def test_public_health_endpoint_liveness_and_sanitization(hardened_app):
+    """Verify /api/health is public 200 with minimal liveness and no sensitive operational telemetry leakage."""
+    runtime, app = hardened_app
+    # Ingest baseline normal and attack telemetry to ensure runtime holds live data
+    runtime.ingest(generate_window("normal", intensity=1, sequence=0))
+    runtime.ingest(generate_window("udp_flood", intensity=3, sequence=1))
+
+    with app.test_client() as client:
+        res = client.get("/api/health")
+        assert res.status_code == 200
+        data = res.get_json()
+
+        # Expected liveness fields
+        assert data["ok"] is True
+        assert data["status"] == "ONLINE"
+        assert data["host_enforcement"] is False
+        assert data["response_mode"] == "DRY_RUN"
+        assert "safety" in data
+        assert "service" in data
+
+        # Explicit verification: MUST NOT leak sensitive telemetry, device IDs, or internal file paths
+        assert "latest" not in data, "Public /api/health must not expose 'latest' telemetry"
+        assert "database" not in data, "Public /api/health must not expose internal database path"
+        assert "active_simulations" not in data
+        assert "auth_token" not in str(data)
+        assert "password" not in str(data)
+        assert "psk" not in str(data)
+        assert "model_version" not in data

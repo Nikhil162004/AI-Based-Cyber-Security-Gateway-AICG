@@ -693,11 +693,16 @@ def create_app(runtime: GatewayRuntime) -> Flask:
     def health():
         return jsonify({
             "ok": True,
-            **runtime.status(),
-            "safety": "All simulator response actions are non-enforcing."
+            "status": "ONLINE",
+            "service": "AEGIS-OT laboratory gateway",
+            "response_mode": runtime.response.mode,
+            "auto_response": runtime.response.auto,
+            "host_enforcement": False,
+            "safety": "All simulator response actions are non-enforcing.",
         })
 
     @app.get("/api/status")
+    @login_required
     def status():
         base_status = runtime.status()
         latest = base_status.get("latest") or {}
@@ -751,6 +756,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         return jsonify(base_status)
 
     @app.get("/api/telemetry")
+    @login_required
     def telemetry():
         limit = _number(request.args.get("limit"), 100)
         raw_rows = runtime.store.telemetry(limit=limit)
@@ -762,6 +768,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         })
 
     @app.get("/api/events")
+    @login_required
     def events():
         limit = _number(request.args.get("limit"), 200)
         raw_rows = [row for row in runtime.store.telemetry(limit=limit) if row.get("label") == "ATTACK"]
@@ -936,6 +943,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             return jsonify({"error": str(error)}), 400
 
     @app.get("/api/scenarios")
+    @login_required
     def scenarios():
         return jsonify({
             "scenarios": catalogue(),
@@ -1063,6 +1071,8 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         return jsonify(cfg)
 
     @app.post("/api/iam/access")
+    @login_required
+    @permission_required(PERM_ADMIN_CONTROLS)
     def iam_access():
         body = request.get_json(silent=True) or {}
         decision = runtime.iam.access(body.get("identity"), str(body.get("resource", "gateway:telemetry")))
@@ -1071,6 +1081,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         return jsonify(decision)
 
     @app.get("/api/iam")
+    @login_required
     def iam():
         identity_list = []
         for ident in runtime.iam.identities.values():
@@ -1150,6 +1161,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         return jsonify({"error": "action must be 'enroll', 'revoke', or 'list'"}), 400
 
     @app.get("/api/trust")
+    @login_required
     def trust():
         return jsonify({
             "history": runtime.store.trust(request.args.get("identity")),
@@ -1157,6 +1169,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         })
 
     @app.get("/api/energy")
+    @login_required
     def energy():
         limit = _number(request.args.get("limit"), 100)
         raw_rows = runtime.store.telemetry(limit=limit)
@@ -1173,6 +1186,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         })
 
     @app.get("/api/protocols")
+    @login_required
     def protocols():
         rows = runtime.store.telemetry(limit=1000)
         counts: dict[str, int] = {}
@@ -1199,6 +1213,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         })
 
     @app.get("/api/topology")
+    @login_required
     def topology():
         sensors = [
             {"name": "SENSOR-01", "id": "SENSOR-01", "ip": "10.42.0.11", "role": "IIoT Sensor", "authorization": "AUTHORIZED", "trust": runtime.iam.get("SENSOR-01").trust_score},
@@ -1232,6 +1247,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         })
 
     @app.get("/api/metrics")
+    @login_required
     def metrics():
         path = runtime.settings.report_dir / "evaluation.json"
         return jsonify(json.loads(path.read_text(encoding="utf-8")) if path.exists() else {
@@ -1240,6 +1256,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         })
 
     @app.get("/api/model-assurance")
+    @login_required
     def model_assurance():
         eval_path = runtime.settings.report_dir / "evaluation.json"
         cm_path = runtime.settings.report_dir / "confusion_matrix.csv"
@@ -1329,6 +1346,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         return jsonify(data)
 
     @app.get("/api/ns3")
+    @login_required
     def ns3_status():
         root = runtime.settings.root / "ns-allinone-3.48" / "ns-3.48"
         scratch_dir = root / "scratch"
@@ -1371,6 +1389,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             return jsonify({"error": str(error)}), 400
 
     @app.get("/api/cooja")
+    @login_required
     def cooja():
         cooja_dir = Path("/home/kali/contiki-ng/examples/ai_edge_iiot")
         cooja_data = cooja_dir / "data" / "cooja_ml_ready_v1.csv"
