@@ -1,11 +1,13 @@
 """Tests for detection engine, feature extraction, ML training, evaluation, and calibration."""
 
+import copy
 from pathlib import Path
 import pytest
 from aegis_gateway.config import Settings
 from aegis_gateway.detection import FEATURES, HybridDetector, feature_mapping
 from aegis_gateway.ml import generate_dataset, train_and_evaluate
-from aegis_gateway.scenarios import generate_window
+from aegis_gateway.runtime import GatewayRuntime
+from aegis_gateway.scenarios import CATALOGUE, generate_window
 
 
 def test_feature_mapping_completeness():
@@ -89,3 +91,100 @@ def test_hybrid_detector_with_trained_bundle():
     assert dec_atk.prediction == "ATTACK"
     assert dec_atk.calibrated_probability is not None
     assert dec_atk.calibrated_probability > 0.80
+
+
+def test_attack_metadata_cannot_force_detection():
+    """Requirement A: event.attack_type must not influence inference decisions."""
+    settings = Settings()
+    trained_detector = HybridDetector(settings.model_path if settings.model_path.exists() else None)
+    untrained_detector = HybridDetector(model_path=None)
+
+    # 1. Benign observable telemetry with injected attack metadata MUST NOT trigger ATTACK
+    normal_ev = generate_window("normal", intensity=1, sequence=0)
+    spoofed_ev = copy.deepcopy(normal_ev)
+    spoofed_ev.attack_type = "udp_flood"
+
+    for det in [trained_detector, untrained_detector]:
+        dec_normal = det.analyze(normal_ev)
+        dec_spoofed = det.analyze(spoofed_ev)
+        assert dec_normal.prediction == "NORMAL"
+        assert dec_spoofed.prediction == "NORMAL"
+        assert dec_spoofed.score == dec_normal.score
+        assert dec_spoofed.severity == dec_normal.severity
+
+    # 2. Attack telemetry with attack_type vs attack_type=None must yield identical decision scores
+    atk_ev = generate_window("udp_flood", intensity=4, sequence=0)
+    unlabeled_atk = copy.deepcopy(atk_ev)
+    unlabeled_atk.attack_type = None
+
+    for det in [trained_detector, untrained_detector]:
+        dec_labeled = det.analyze(atk_ev)
+        dec_unlabeled = det.analyze(unlabeled_atk)
+        assert dec_labeled.prediction == "ATTACK"
+        assert dec_unlabeled.prediction == "ATTACK"
+        assert dec_labeled.score == dec_unlabeled.score
+        assert dec_labeled.severity == dec_unlabeled.severity
+
+
+def test_unlabeled_attack_scenarios_remain_detectable():
+    """Requirement B: All attack scenarios remain detectable when attack_type=None."""
+    settings = Settings()
+    if not settings.model_path.exists():
+        pytest.skip("Model bundle not yet generated at default path")
+
+    detector = HybridDetector(settings.model_path)
+    for sc_id, sc in CATALOGUE.items():
+        if sc_id == "normal":
+            continue
+        ev = generate_window(sc_id, intensity=sc.intensity_range[0], sequence=0)
+        ev.attack_type = None  # Strip ground truth simulation metadata
+        dec = detector.analyze(ev)
+        assert dec.prediction == "ATTACK", f"Scenario {sc_id} not detected when unlabeled"
+        assert dec.score >= 0.50, f"Scenario {sc_id} score {dec.score} < 0.50 when unlabeled"
+
+
+def test_normal_telemetry_remains_normal():
+    """Requirement C: Normal telemetry remains NORMAL across sequences."""
+    settings = Settings()
+    detector = HybridDetector(settings.model_path if settings.model_path.exists() else None)
+    for seq in range(10):
+        ev = generate_window("normal", intensity=1, sequence=seq)
+        dec = detector.analyze(ev)
+        assert dec.prediction == "NORMAL"
+        assert dec.score < 0.50
+
+
+def test_ml_feature_schema_strictly_15_features():
+    """Requirement D: Feature schema remains exactly 15 features without attack_type."""
+    assert len(FEATURES) == 15
+    assert "attack_type" not in FEATURES
+    assert "label" not in FEATURES
+    assert "scenario_id" not in FEATURES
+
+    settings = Settings()
+    if settings.model_path.exists():
+        detector = HybridDetector(settings.model_path)
+        assert detector.bundle is not None
+        assert len(detector.bundle["features"]) == 15
+        assert list(detector.bundle["features"]) == FEATURES
+
+
+def test_downstream_campaign_and_incident_attack_type_preservation(tmp_path: Path):
+    """Requirement E: Downstream incident storage and campaign grouping retain attack_type."""
+    settings = Settings(database_path=tmp_path / "test_downstream.sqlite3")
+    runtime = GatewayRuntime(settings=settings)
+
+    atk_ev = generate_window("slow_rate", intensity=2, sequence=0)
+    assert atk_ev.attack_type == "slow_rate"
+
+    res = runtime.ingest(atk_ev)
+    assert res["decision"]["prediction"] == "ATTACK"
+    assert res["incident"] is not None
+    assert res["incident"]["attack_type"] == "slow_rate"
+    # Policy dispatches RATE_LIMIT based on event.attack_type for non-critical attacks
+    assert res["response"]["action"] == "RATE_LIMIT"
+
+    # Campaign correlation by device_id and attack_type
+    active = runtime.store.find_active_incident(device_id=atk_ev.device_id, attack_type="slow_rate")
+    assert active is not None
+    assert active["incident_id"] == res["incident"]["incident_id"]

@@ -98,7 +98,6 @@ class HybridDetector:
             rule_score += .08
         if event.attack_type:
             evidence.append(f"Source scenario labels this controlled profile as {event.attack_type}.")
-            rule_score += .2
 
         supervised_prediction, anomaly_score, model_score = None, None, 0.0
         calibrated_probability: float | None = None
@@ -128,7 +127,7 @@ class HybridDetector:
             score = min(1.0, .55 * rule_score + .35 * model_score + .10 * (anomaly_score or 0.0))
         else:
             score = min(1.0, rule_score)
-        attack = score >= .50 or (event.attack_type is not None and rule_score >= .20)
+        attack = score >= .50
         if not evidence:
             evidence.append("Traffic is within the configured demonstration baseline; no attack signature fired.")
         if attack:
