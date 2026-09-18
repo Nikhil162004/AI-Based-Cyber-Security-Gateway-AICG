@@ -19,6 +19,7 @@ Verifies:
 from __future__ import annotations
 
 from pathlib import Path
+import queue
 import threading
 import time
 from unittest.mock import patch
@@ -684,3 +685,45 @@ def test_s_dashboard_state_authority_remains_active_when_telemetry_normal(runtim
     assert summary["active_incident"] is not None
     assert summary["active_incident"]["lifecycle_state"] == "CONTAINED"
     assert summary["lifecycle_state"] == "CONTAINED"
+
+
+def test_t_backend_emits_all_intermediate_lifecycle_events(runtime_app):
+    """Test T: Backend emits DETECTED, TRIAGED, RESPONDING, and CONTAINED sequentially to SSE subscribers."""
+    runtime, _ = runtime_app
+    sub_q: queue.Queue = queue.Queue(maxsize=100)
+    with runtime._lock:
+        runtime._subscribers.add(sub_q)
+
+    try:
+        # Ingest attack window
+        runtime.ingest(generate_window("udp_flood", intensity=3, sequence=0))
+
+        # Collect incident events from queue
+        incident_events = []
+        while not sub_q.empty():
+            msg = sub_q.get_nowait()
+            if msg.get("type") == "incident":
+                incident_events.append(msg["data"]["lifecycle_state"])
+
+        assert incident_events == ["DETECTED", "TRIAGED", "RESPONDING", "CONTAINED"]
+    finally:
+        with runtime._lock:
+            runtime._subscribers.discard(sub_q)
+
+
+def test_u_incident_history_contains_complete_pipeline(runtime_app):
+    """Test U: SQLite incident_history records DETECTED, TRIAGED, RESPONDING, and CONTAINED."""
+    runtime, _ = runtime_app
+    runtime.ingest(generate_window("udp_flood", intensity=3, sequence=0))
+    inc = runtime.store.find_active_incident(device_id="ATK-01")
+    assert inc is not None
+    assert inc["lifecycle_state"] == "CONTAINED"
+
+    full_inc = runtime.store.incident(inc["incident_id"])
+    assert full_inc is not None
+    history = full_inc.get("history", [])
+    history_states = [(h.get("previous_state"), h.get("state")) for h in history]
+    assert (None, "DETECTED") in history_states
+    assert ("DETECTED", "TRIAGED") in history_states
+    assert ("TRIAGED", "RESPONDING") in history_states
+    assert ("RESPONDING", "CONTAINED") in history_states

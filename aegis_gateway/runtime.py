@@ -341,14 +341,36 @@ class GatewayRuntime:
                         self.response.apply_simulation(plan, item.device_id)
                 else:
                     incident = self.store.create_incident(item, decision.evidence, "CPU/RAM/radio/energy are model-correlated")
+                    self.publish("incident", incident)
                     if plan.mode != "MANUAL":
+                        incident = self.store.transition_incident(
+                            incident["incident_id"],
+                            "TRIAGED",
+                            "system",
+                            "ML feature correlation and threat evidence analyzed.",
+                            decision.evidence,
+                        )
+                        self.publish("incident", incident)
+                        incident = self.store.transition_incident(
+                            incident["incident_id"],
+                            "RESPONDING",
+                            "system",
+                            "Simulated response planned; no host enforcement.",
+                            decision.evidence,
+                        )
+                        self.publish("incident", incident)
                         if not is_impersonation:
                             self.response.apply_simulation(plan, item.device_id)
-                        incident = self.store.transition_incident(incident["incident_id"], "RESPONDING", "system", "Simulated response planned; no host enforcement.", decision.evidence)
-                        incident = self.store.transition_incident(incident["incident_id"], "CONTAINED", "system", "Containment state is simulated within the laboratory runtime.", decision.evidence)
+                        incident = self.store.transition_incident(
+                            incident["incident_id"],
+                            "CONTAINED",
+                            "system",
+                            "Containment state is simulated within the laboratory runtime.",
+                            decision.evidence,
+                        )
+                        self.publish("incident", incident)
                 alert = self.store.create_or_update_alert(incident, item, decision, plan)
                 self.store.record_action(event_id=item.event_id, incident_id=incident["incident_id"], action=plan.action, reason=plan.reason, policy="hybrid-response-v1", mode=plan.mode, result=plan.result)
-                self.publish("incident", incident)
                 if alert:
                     self.publish("alert", alert)
                 self.publish("response", {"incident_id": incident["incident_id"], **plan.__dict__, "provenance": "SIMULATED"})

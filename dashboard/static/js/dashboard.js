@@ -1028,21 +1028,96 @@ function isBaselineState(state) {
     return ["NORMAL", "IDLE", "OBSERVED", "BASELINE", "NONE"].includes(s);
 }
 
+// Session reference to prevent replaying intro on page reload
+const pageSessionStartTime = Date.now();
+
 // Global reference to track active or transitioning incident in HMI session
 let hmiTargetIncident = null;
 
-function updateLifecycle(targetIncident, summary, telemetryContext) {
-    let state = "NORMAL";
-    let isNormal = true;
-    let inc = targetIncident || (summary && summary.active_incident ? summary.active_incident : null);
+const lifecycleVisualController = {
+    activeIncidentId: null,
+    currentVisualStage: null,
+    targetStage: null,
+    timer: null,
+    isAnimating: false,
+    queue: [],
+    cachedIncident: null,
+    cachedSummary: null,
+    cachedTelemetryContext: null
+};
 
-    if (inc && inc.lifecycle_state && !isBaselineState(inc.lifecycle_state)) {
-        state = inc.lifecycle_state.toUpperCase();
-        isNormal = false;
-    } else if (summary && summary.lifecycle_state && !isBaselineState(summary.lifecycle_state)) {
-        state = summary.lifecycle_state.toUpperCase();
-        isNormal = false;
+function shouldAnimateIntro(inc) {
+    if (!inc || !inc.created_at) return false;
+    const createdAtMs = new Date(inc.created_at).getTime();
+    if (isNaN(createdAtMs)) return false;
+    const ageMs = Date.now() - createdAtMs;
+    // Paced intro only plays for newly opened incidents (< 4000 ms old) created in this page session
+    if (ageMs > 4000) return false;
+    if (createdAtMs < (pageSessionStartTime - 1000)) return false;
+    const state = (inc.lifecycle_state || "").toUpperCase();
+    return ["DETECTED", "TRIAGED", "ANALYZING", "RESPONDING", "CONTAINED"].includes(state);
+}
+
+function startLifecycleIntroAnimation(inc, summary, telemetryContext) {
+    if (lifecycleVisualController.timer) {
+        clearTimeout(lifecycleVisualController.timer);
+        lifecycleVisualController.timer = null;
     }
+    lifecycleVisualController.activeIncidentId = inc.incident_id;
+    lifecycleVisualController.isAnimating = true;
+    lifecycleVisualController.cachedIncident = inc;
+    lifecycleVisualController.cachedSummary = summary;
+    lifecycleVisualController.cachedTelemetryContext = telemetryContext;
+
+    const rawState = (inc.lifecycle_state || "").toUpperCase();
+    const normTarget = rawState === "TRIAGED" ? "ANALYZING" : rawState;
+    lifecycleVisualController.targetStage = normTarget;
+
+    const introStages = ["DETECTED", "ANALYZING", "RESPONDING", "CONTAINED"];
+    let targetIdx = introStages.indexOf(normTarget);
+    if (targetIdx < 0) targetIdx = introStages.length - 1;
+
+    const stagesToPlay = introStages.slice(0, targetIdx + 1);
+    lifecycleVisualController.currentVisualStage = stagesToPlay[0];
+    lifecycleVisualController.queue = stagesToPlay.slice(1);
+
+    // Immediately display stage 1 (DETECTED)
+    renderLifecycleStage(lifecycleVisualController.currentVisualStage, inc, summary, telemetryContext);
+
+    function step() {
+        if (lifecycleVisualController.queue.length === 0) {
+            lifecycleVisualController.isAnimating = false;
+            lifecycleVisualController.timer = null;
+            const finalStage = lifecycleVisualController.targetStage || lifecycleVisualController.currentVisualStage;
+            renderLifecycleStage(
+                finalStage,
+                lifecycleVisualController.cachedIncident,
+                lifecycleVisualController.cachedSummary,
+                lifecycleVisualController.cachedTelemetryContext
+            );
+            return;
+        }
+
+        lifecycleVisualController.timer = setTimeout(() => {
+            const nextStage = lifecycleVisualController.queue.shift();
+            lifecycleVisualController.currentVisualStage = nextStage;
+            renderLifecycleStage(
+                nextStage,
+                lifecycleVisualController.cachedIncident,
+                lifecycleVisualController.cachedSummary,
+                lifecycleVisualController.cachedTelemetryContext
+            );
+            step();
+        }, 400);
+    }
+
+    step();
+}
+
+function renderLifecycleStage(rawState, inc, summary, telemetryContext) {
+    const isNormal = isBaselineState(rawState);
+    let state = (rawState || "NORMAL").toUpperCase();
+    if (state === "TRIAGED") state = "ANALYZING";
 
     const stateBadge = document.getElementById("lifecycleState");
     const stageText = document.getElementById("lifecycleStage");
@@ -1071,9 +1146,9 @@ function updateLifecycle(targetIncident, summary, telemetryContext) {
     } else {
         if (stateBadge) {
             stateBadge.textContent = state;
-            if (["DETECTED", "ANALYZING", "TRIAGED", "RESPONDING", "CONTAINED"].includes(state)) {
+            if (["DETECTED", "CONTAINED"].includes(state)) {
                 stateBadge.style.color = "var(--red)";
-            } else if (state === "RECOVERING") {
+            } else if (["ANALYZING", "RESPONDING", "RECOVERING"].includes(state)) {
                 stateBadge.style.color = "var(--amber)";
             } else {
                 stateBadge.style.color = "var(--green)";
@@ -1083,7 +1158,6 @@ function updateLifecycle(targetIncident, summary, telemetryContext) {
             const stageDesc = {
                 "DETECTED": "THREAT DETECTED • TRIAGING",
                 "ANALYZING": "EVIDENCE CORRELATION",
-                "TRIAGED": "EVIDENCE CORRELATION",
                 "RESPONDING": "AUTONOMOUS RESPONSE ENGAGED",
                 "CONTAINED": "SIMULATED MITIGATION ACTIVE (DRY_RUN)",
                 "RECOVERING": "OBSERVING RECOVERY STREAK",
@@ -1130,13 +1204,19 @@ function updateLifecycle(targetIncident, summary, telemetryContext) {
         }
 
         if (idx === currentIdx) {
-            if (["DETECTED", "ANALYZING", "RESPONDING", "CONTAINED"].includes(step)) {
+            if (["DETECTED", "CONTAINED"].includes(step)) {
                 node.classList.add("threat-active");
+            } else if (["ANALYZING", "RESPONDING", "RECOVERING"].includes(step)) {
+                node.classList.add("stage-active-amber");
             } else {
                 node.classList.add("resolved-active");
             }
         } else if (idx < currentIdx) {
-            node.classList.add("resolved-active");
+            if (currentIdx >= 5) {
+                node.classList.add("resolved-active");
+            } else {
+                node.classList.add("pipeline-done");
+            }
         }
     });
 
@@ -1148,7 +1228,6 @@ function updateLifecycle(targetIncident, summary, telemetryContext) {
             const pipeIdx = {
                 "DETECTED": 1,
                 "ANALYZING": 2,
-                "TRIAGED": 2,
                 "RESPONDING": 3,
                 "CONTAINED": 4,
                 "RECOVERING": 5,
@@ -1182,6 +1261,57 @@ function updateLifecycle(targetIncident, summary, telemetryContext) {
         }
     }
 }
+
+function updateLifecycle(targetIncident, summary, telemetryContext) {
+    let state = "NORMAL";
+    let isNormal = true;
+    let inc = targetIncident || (summary && summary.active_incident ? summary.active_incident : null);
+
+    if (inc && inc.lifecycle_state && !isBaselineState(inc.lifecycle_state)) {
+        state = inc.lifecycle_state.toUpperCase();
+        isNormal = false;
+    } else if (summary && summary.lifecycle_state && !isBaselineState(summary.lifecycle_state)) {
+        state = summary.lifecycle_state.toUpperCase();
+        isNormal = false;
+    }
+
+    if (isNormal) {
+        if (lifecycleVisualController.timer) {
+            clearTimeout(lifecycleVisualController.timer);
+            lifecycleVisualController.timer = null;
+        }
+        lifecycleVisualController.isAnimating = false;
+        lifecycleVisualController.activeIncidentId = null;
+        lifecycleVisualController.currentVisualStage = null;
+        renderLifecycleStage("NORMAL", null, summary, telemetryContext);
+        return;
+    }
+
+    // If an intro animation is already playing for this incident, update cache but don't disrupt
+    if (lifecycleVisualController.isAnimating && inc && inc.incident_id === lifecycleVisualController.activeIncidentId) {
+        lifecycleVisualController.cachedIncident = inc;
+        lifecycleVisualController.cachedSummary = summary;
+        lifecycleVisualController.cachedTelemetryContext = telemetryContext;
+        const norm = state === "TRIAGED" ? "ANALYZING" : state;
+        lifecycleVisualController.targetStage = norm;
+        return;
+    }
+
+    // If this is a newly opened incident eligible for visual intro pacing:
+    if (inc && inc.incident_id !== lifecycleVisualController.activeIncidentId && shouldAnimateIntro(inc)) {
+        startLifecycleIntroAnimation(inc, summary, telemetryContext);
+        return;
+    }
+
+    // Authoritative direct render (reload, reconnect, recovery, resolved, closed, or post-animation)
+    lifecycleVisualController.activeIncidentId = inc ? inc.incident_id : null;
+    lifecycleVisualController.currentVisualStage = state;
+    lifecycleVisualController.targetStage = state;
+    renderLifecycleStage(state, inc, summary, telemetryContext);
+}
+
+window.updateLifecycle = updateLifecycle;
+window.lifecycleVisualController = lifecycleVisualController;
 
 
 /* ==========================================================================
@@ -1996,7 +2126,22 @@ function initSSE() {
     try {
         const source = new EventSource("/events");
         source.addEventListener("telemetry", () => scheduleCoalescedRefresh());
-        source.addEventListener("incident", () => scheduleCoalescedRefresh());
+        source.addEventListener("incident", (e) => {
+            try {
+                if (e && e.data) {
+                    const incData = JSON.parse(e.data);
+                    if (incData && incData.incident_id) {
+                        hmiTargetIncident = incData;
+                        if (shouldAnimateIntro(incData) && lifecycleVisualController.activeIncidentId !== incData.incident_id) {
+                            startLifecycleIntroAnimation(incData, null, null);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("Error parsing incident SSE", err);
+            }
+            scheduleCoalescedRefresh();
+        });
         source.addEventListener("response", () => scheduleCoalescedRefresh());
         source.addEventListener("trust", () => scheduleCoalescedRefresh());
         source.addEventListener("simulation", () => scheduleCoalescedRefresh());
