@@ -392,6 +392,8 @@ class GatewayRuntime:
                         if alert:
                             self.publish("alert", alert)
                     elif state == "RECOVERING" and streak >= 5:
+                        self.response.release(dev)
+                        self._device_normal_streaks.pop(dev, None)
                         updated = self.store.transition_incident(
                             inc_id,
                             "RESOLVED",
@@ -399,12 +401,10 @@ class GatewayRuntime:
                             f"Recovery verified from sustained normal baseline ({streak} normal windows) for device '{dev}'.",
                             ["sustained normal observations verified"]
                         )
-                        self.response.release(dev)
                         self.publish("incident", updated)
                         alert = self.store.sync_alert_with_incident(updated)
                         if alert:
                             self.publish("alert", alert)
-                        self._device_normal_streaks.pop(dev, None)
                 except (ValueError, KeyError):
                     continue
 
@@ -522,6 +522,7 @@ class GatewayRuntime:
                 if action in {"ISOLATE", "BLOCK"}:
                     self.response.isolate(dev_id, action, f"Manual {action} requested by {actor}", state="CONTAINED")
                 elif action == "RATE_LIMIT":
+                    self.response.isolate(dev_id, "RATE_LIMIT", f"Manual RATE_LIMIT requested by {actor}", state="CONTAINED")
                     self.response.set_rate_limit(dev_id)
             result = "SIMULATED_NOT_ENFORCED"
         stored = self.store.record_action(event_id=incident["event_id"], incident_id=incident_id, action=action, reason="operator request", policy="manual-response-v1", mode="MANUAL", result=result)
@@ -544,17 +545,20 @@ class GatewayRuntime:
                 stop_evt = self._baseline_stop
                 while not stop_evt.is_set():
                     with self._lock:
-                        active_sims = bool(self._simulations)
-                    if not active_sims:
+                        has_active_attack_sims = any(
+                            s.scenario_id != "normal" and not s.stop.is_set()
+                            for s in self._simulations.values()
+                        )
+                    if not has_active_attack_sims:
                         try:
                             self.ingest(generate_window("normal", intensity=1, sequence=sequence))
                             sequence += 1
                         except Exception:
                             pass
-                        try:
-                            self.step_device_recovery()
-                        except Exception:
-                            pass
+                    try:
+                        self.step_device_recovery()
+                    except Exception:
+                        pass
                     stop_evt.wait(interval)
 
             self._baseline_thread = threading.Thread(target=run, name="aegis-live-baseline", daemon=True)

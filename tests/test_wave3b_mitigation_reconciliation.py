@@ -510,3 +510,177 @@ def test_o_reset_concurrency_while_baseline_worker_active(runtime_app):
 
     # Clean up baseline
     runtime.stop_baseline()
+
+
+def test_p_asynchronous_baseline_worker_recovers_active_block_incident(tmp_path: Path):
+    """Test P: Real asynchronous background baseline worker recovery in ACTIVE mode with BLOCK action.
+
+    Verifies:
+    1. Gateway running in ACTIVE mode with in-process enforcement.
+    2. Attack simulation runs in background thread, containing ATK-01 with action BLOCK.
+    3. Attack simulation stops naturally or via duration.
+    4. Without calling _verify_recovery(), step_device_recovery(), transition_incident(), or resolve():
+       Background worker 'aegis-live-baseline' automatically generates recovery observations.
+    5. Contained device with BLOCK action is NOT dropped by policy.
+    6. Device normal streak drives progression: CONTAINED -> RECOVERING (streak >= 3) -> RESOLVED (streak >= 5).
+    7. ATK-01 is released from active_isolates upon resolution.
+    8. Incident and linked alert in SQLite are both synchronized to RESOLVED.
+    """
+    settings = Settings(
+        database_path=tmp_path / "test_p.sqlite3",
+        response_mode="ACTIVE",
+        in_process_enforcement=True,
+        demo_tick_seconds=0.05,
+    )
+    runtime = GatewayRuntime(settings)
+    runtime.start_baseline(tick_seconds=0.05)
+    app = create_app(runtime)
+    client = app.test_client()
+    _login(client)
+
+    try:
+        # 1. Start simulation with high-rate attack (duration = 0.25s)
+        res = client.post("/api/simulations/start", json={
+            "scenario_id": "udp_flood",
+            "intensity": 3,
+            "duration": 0.25
+        })
+        assert res.status_code == 202
+
+        # 2. Wait until incident is created and contained
+        inc = None
+        for _ in range(50):
+            inc = runtime.store.find_active_incident(device_id="ATK-01")
+            if inc and inc["lifecycle_state"] == "CONTAINED":
+                break
+            time.sleep(0.05)
+
+        assert inc is not None
+        assert inc["lifecycle_state"] == "CONTAINED"
+        assert "ATK-01" in runtime.response.enforcer.active_isolates
+        initial_action = runtime.response.enforcer.active_isolates["ATK-01"]["action"]
+        assert initial_action in {"BLOCK", "ISOLATE"}
+
+        # 3. Wait for attack simulation thread to stop
+        for _ in range(50):
+            if "udp_flood" not in runtime._simulations:
+                break
+            time.sleep(0.05)
+        assert "udp_flood" not in runtime._simulations
+
+        # 4. Without any manual intervention, allow background worker to drive recovery to RESOLVED
+        # (Bounded wait up to 4 seconds)
+        resolved = False
+        curr = None
+        for _ in range(80):
+            curr = runtime.store.incident(inc["incident_id"])
+            if curr and curr["lifecycle_state"] == "RESOLVED" and "ATK-01" not in runtime.response.enforcer.active_isolates:
+                resolved = True
+                break
+            time.sleep(0.05)
+
+        assert resolved, f"Background baseline worker failed to autonomously resolve incident: state={curr['lifecycle_state'] if curr else None}, streaks={dict(runtime._device_normal_streaks)}"
+        assert curr["recovery_state"] == "VERIFIED"
+        assert "ATK-01" not in runtime.response.enforcer.active_isolates
+        assert runtime.store.find_active_incident(device_id="ATK-01") is None
+
+        # Verify linked alert is RESOLVED
+        alerts = runtime.store.list_alerts()
+        linked = [a for a in alerts if a["incident_id"] == inc["incident_id"]]
+        assert len(linked) == 1
+        assert linked[0]["status"] == "RESOLVED"
+
+    finally:
+        runtime.stop_baseline()
+
+
+def test_q_block_isolate_rate_limit_contained_recovery_qualification(runtime_app):
+    """Test Q: Devices contained under BLOCK, ISOLATE, or RATE_LIMIT all qualify for recovery observations."""
+    runtime, _ = runtime_app
+
+    # Test BLOCK
+    runtime.response.isolate("DEV-BLK", "BLOCK", "Volumetric block", state="CONTAINED")
+    recovery_win = generate_window("normal", intensity=1, sequence=0, device_id="DEV-BLK", source_type="RECOVERY_OBSERVER")
+    dec_rec = runtime.response.evaluate("DEV-BLK", recovery_win)
+    assert dec_rec.drop is False
+    assert dec_rec.action == "ALLOW"
+
+    flood_win = generate_window("udp_flood", intensity=4, sequence=0, device_id="DEV-BLK")
+    dec_flood = runtime.response.evaluate("DEV-BLK", flood_win)
+    assert dec_flood.drop is True
+    assert dec_flood.action == "DROP"
+
+    # Test ISOLATE
+    runtime.response.isolate("DEV-ISO", "ISOLATE", "Threat isolation", state="CONTAINED")
+    dec_rec_iso = runtime.response.evaluate("DEV-ISO", recovery_win)
+    assert dec_rec_iso.drop is False
+    assert dec_rec_iso.action == "ALLOW"
+
+    dec_flood_iso = runtime.response.evaluate("DEV-ISO", flood_win)
+    assert dec_flood_iso.drop is True
+    assert dec_flood_iso.action == "DROP"
+
+    # Test RATE_LIMIT
+    runtime.response.isolate("DEV-RL", "RATE_LIMIT", "Rate limit contained", state="CONTAINED")
+    dec_rec_rl = runtime.response.evaluate("DEV-RL", recovery_win)
+    assert dec_rec_rl.drop is False
+    assert dec_rec_rl.action == "ALLOW"
+
+    dec_flood_rl = runtime.response.evaluate("DEV-RL", flood_win)
+    assert dec_flood_rl.drop is True
+    assert dec_flood_rl.action == "DROP"
+
+
+def test_r_normal_simulation_does_not_suppress_recovery_worker(runtime_app):
+    """Test R: Launching a 'normal' simulation does not suppress step_device_recovery()."""
+    runtime, app = runtime_app
+    client = app.test_client()
+    _login(client)
+
+    # 1. Contained device ATK-01 exists
+    runtime.ingest(generate_window("udp_flood", intensity=3, sequence=0))
+    inc = runtime.store.find_active_incident(device_id="ATK-01")
+    assert inc is not None
+    assert inc["lifecycle_state"] == "CONTAINED"
+
+    # 2. Start 'normal' simulation
+    res = client.post("/api/simulations/start", json={"scenario_id": "normal", "intensity": 1})
+    assert res.status_code == 202
+    assert "normal" in runtime._simulations
+
+    # 3. step_device_recovery generates observations for ATK-01 even while 'normal' simulation is active
+    obs = runtime.step_device_recovery()
+    assert len(obs) >= 1
+    assert any(o["event"]["device_id"] == "ATK-01" for o in obs)
+    assert runtime._device_normal_streaks["ATK-01"] >= 1
+
+    runtime.stop_simulation("normal")
+
+
+def test_s_dashboard_state_authority_remains_active_when_telemetry_normal(runtime_app):
+    """Test S: /api/status provides active_incident and lifecycle_state so dashboard stays active while telemetry is normal."""
+    runtime, app = runtime_app
+    client = app.test_client()
+    _login(client)
+
+    # 1. Attack creates active incident
+    runtime.ingest(generate_window("udp_flood", intensity=3, sequence=0))
+    inc = runtime.store.find_active_incident(device_id="ATK-01")
+    assert inc is not None
+    assert inc["lifecycle_state"] == "CONTAINED"
+
+    # 2. Normal sensor window arrives
+    runtime.ingest(generate_window("normal", sequence=1, device_id="SENSOR-01"))
+
+    # 3. Query /api/status
+    res = client.get("/api/status")
+    assert res.status_code == 200
+    data = res.json
+    summary = data["summary"]
+
+    # Telemetry prediction is NORMAL
+    assert summary["latest_prediction"] == "NORMAL"
+    # But active_incident is present and CONTAINED
+    assert summary["active_incident"] is not None
+    assert summary["active_incident"]["lifecycle_state"] == "CONTAINED"
+    assert summary["lifecycle_state"] == "CONTAINED"

@@ -36,7 +36,10 @@ function updateSummary(summary, fullStatus) {
 
     const pred = summary.latest_prediction || "NORMAL";
     const isAttack = pred === "ATTACK";
-    const isThreatActive = isAttack || (summary.active_incident && !["RESOLVED", "CLOSED"].includes(summary.active_incident.lifecycle_state));
+    const activeInc = summary.active_incident;
+    const hasActiveIncident = Boolean(activeInc && !["RESOLVED", "CLOSED"].includes(activeInc.lifecycle_state));
+    const activeState = hasActiveIncident ? String(activeInc.lifecycle_state).toUpperCase() : null;
+    const isThreatActive = isAttack || hasActiveIncident;
     const ddosProb = Number(summary.latest_ddos_probability ?? (isAttack ? 0.99 : 0.05));
     const pps = Number(summary.latest_packet_rate ?? 18.0);
     const byteRate = Number(summary.latest_bytes_per_second ?? 4140.0);
@@ -65,22 +68,31 @@ function updateSummary(summary, fullStatus) {
 
     const pctStr = `${(ddosProb * 100).toFixed(1)}%`;
     if (ddosProbEl) ddosProbEl.textContent = pctStr;
-    if (threatStatusEl) threatStatusEl.textContent = isAttack ? "ATTACK" : "CLEAR";
-    if (threatMetaEl) threatMetaEl.textContent = isAttack ? "DDoS Attack Vector" : "Baseline Normal";
     if (classificationEl) classificationEl.textContent = pred;
+
+    if (threatStatusEl) {
+        threatStatusEl.textContent = isAttack ? "ATTACK" : (hasActiveIncident ? activeState : "CLEAR");
+        threatStatusEl.style.color = isThreatActive ? (isAttack ? "var(--red)" : "var(--amber)") : "var(--green)";
+    }
+    if (threatMetaEl) {
+        threatMetaEl.textContent = isAttack
+            ? "DDoS Attack Vector Active"
+            : (hasActiveIncident ? `Incident ${activeInc.incident_id} (${activeState})` : "Baseline Normal");
+    }
     if (kpiRiskTag) {
-        kpiRiskTag.textContent = isAttack ? "CRITICAL" : "CLEAR";
-        kpiRiskTag.className = `kpi-status-tag ${isAttack ? "tag-red" : "tag-green"}`;
+        kpiRiskTag.textContent = isAttack ? "CRITICAL" : (hasActiveIncident ? activeState : "CLEAR");
+        kpiRiskTag.className = `kpi-status-tag ${isAttack ? "tag-red" : (hasActiveIncident ? "tag-amber" : "tag-green")}`;
     }
     if (headerThreatPill) {
-        headerThreatPill.className = `threat-state-pill ${isAttack ? "attack" : "clear"}`;
+        headerThreatPill.className = `threat-state-pill ${isAttack ? "attack" : (hasActiveIncident ? "recovering" : "clear")}`;
+        headerThreatPill.textContent = isAttack ? "ATTACK ACTIVE" : (hasActiveIncident ? `THREAT ${activeState}` : "SYSTEM SECURE");
     }
 
     // Card 3: Plant State
     const plantStateVal = document.getElementById("plantStateVal");
     if (plantStateVal) {
-        plantStateVal.textContent = isAttack ? "ATTACKED" : "CLEAR";
-        plantStateVal.style.color = isAttack ? "var(--red)" : "var(--green)";
+        plantStateVal.textContent = isAttack ? "ATTACKED" : (hasActiveIncident ? activeState : "CLEAR");
+        plantStateVal.style.color = isThreatActive ? (isAttack ? "var(--red)" : "var(--amber)") : "var(--green)";
     }
 
     // Card 4: Mitigation State
@@ -120,7 +132,10 @@ function updateStatusBanner(prediction, ddosProb, summary) {
     if (!banner || !headline) return;
 
     const isAttack = prediction === "ATTACK";
-    const isRecovering = summary.lifecycle_state === "RECOVERING";
+    const activeInc = summary.active_incident;
+    const hasActiveIncident = Boolean(activeInc && !["RESOLVED", "CLOSED"].includes(activeInc.lifecycle_state));
+    const activeState = hasActiveIncident ? String(activeInc.lifecycle_state).toUpperCase() : (summary.lifecycle_state || "NORMAL");
+    const isRecovering = activeState === "RECOVERING" || summary.lifecycle_state === "RECOVERING";
 
     if (isAttack) {
         banner.className = "security-status-banner banner-threat";
@@ -138,9 +153,19 @@ function updateStatusBanner(prediction, ddosProb, summary) {
         if (badge) badge.textContent = "🔄";
         headline.textContent = "RECOVERING • TRAFFIC RETURNING TO BASELINE • VERIFYING STREAK";
         if (detail) detail.textContent = "Telemetry within normal bounds. Awaiting consecutive normal verification windows.";
-        if (target) target.textContent = "GATEWAY-01";
+        if (target) target.textContent = (activeInc && activeInc.incident_id) || "GATEWAY-01";
         if (severity) {
             severity.textContent = "MEDIUM";
+            severity.style.color = "var(--amber)";
+        }
+    } else if (hasActiveIncident) {
+        banner.className = "security-status-banner banner-recovering";
+        if (badge) badge.textContent = "🛡️";
+        headline.textContent = `CONTAINED • ${activeState} • OBSERVING BASELINE TELEMETRY`;
+        if (detail) detail.textContent = "Simulated software mitigation active. Observing device baseline for qualification.";
+        if (target) target.textContent = (activeInc && activeInc.incident_id) || "GATEWAY-01";
+        if (severity) {
+            severity.textContent = activeInc.severity || "HIGH";
             severity.style.color = "var(--amber)";
         }
     } else {
