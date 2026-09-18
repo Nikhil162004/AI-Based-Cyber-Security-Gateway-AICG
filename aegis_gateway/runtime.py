@@ -27,6 +27,7 @@ class SimulationState:
     stop: threading.Event
     thread: threading.Thread
     windows: int = 0
+    device_id: str | None = None
 
 
 class GatewayRuntime:
@@ -77,24 +78,46 @@ class GatewayRuntime:
         self.reset_streaks()
 
     def _reconstruct_enforcement_state(self) -> None:
-        """Reconstruct in-process policy enforcement state from persistent SQLite incidents upon startup."""
+        """Reconstruct in-process policy enforcement state deterministically from persistent SQLite incidents upon startup."""
         try:
-            active_incidents = self.store.incidents(limit=100)
-            for inc in active_incidents:
-                state = inc.get("lifecycle_state")
+            all_incidents = self.store.incidents(limit=200)
+            latest_by_device: dict[str, dict[str, Any]] = {}
+            for inc in all_incidents:
                 dev_id = inc.get("device_id")
                 if not dev_id:
                     continue
+                if dev_id not in latest_by_device:
+                    latest_by_device[dev_id] = inc
+
+            for dev_id, inc in latest_by_device.items():
+                state = inc.get("lifecycle_state")
+                if state not in {"RESPONDING", "CONTAINED", "RECOVERING"}:
+                    continue
+
+                act = inc.get("response_action") or "ISOLATE"
+                severity = inc.get("severity", "HIGH")
                 if state in {"RESPONDING", "CONTAINED"}:
-                    act = inc.get("response_action") or "ISOLATE"
                     if act in {"ISOLATE", "BLOCK"}:
-                        self.response.isolate(dev_id, act, "Reconstructed from persistent active incident", state=state, severity=inc.get("severity", "HIGH"))
+                        self.response.isolate(
+                            dev_id,
+                            act,
+                            "Reconstructed from persistent active incident",
+                            state=state,
+                            severity=severity,
+                        )
                     elif act == "RATE_LIMIT":
                         self.response.set_rate_limit(dev_id)
                 elif state == "RECOVERING":
-                    act = inc.get("response_action") or "ISOLATE"
                     if act in {"ISOLATE", "BLOCK"}:
-                        self.response.isolate(dev_id, act, "Reconstructed in recovering state", state="RECOVERING", severity=inc.get("severity", "HIGH"))
+                        self.response.isolate(
+                            dev_id,
+                            act,
+                            "Reconstructed in recovering state",
+                            state="RECOVERING",
+                            severity=severity,
+                        )
+                    with self._lock:
+                        self._device_normal_streaks[dev_id] = 3
         except Exception:
             pass
 
@@ -178,7 +201,7 @@ class GatewayRuntime:
             policy_decision = self.response.evaluate(dev_id, item) if self.settings.in_process_enforcement else None
 
         # 2. In-Process Policy Enforcement Boundary
-        if self.settings.in_process_enforcement and policy_decision and policy_decision.drop:
+        if self.settings.in_process_enforcement and self.response.mode in {"ACTIVE", "ENFORCING"} and policy_decision and policy_decision.drop:
             # Drop intercepted event at software boundary before detection ML inference
             # Preserves credential sanitization and audits drop in telemetry
             item.label = "ATTACK"
@@ -385,7 +408,7 @@ class GatewayRuntime:
                 except (ValueError, KeyError):
                     continue
 
-    def start_simulation(self, scenario_id: str, intensity: int = 3, duration: float | None = None) -> dict[str, Any]:
+    def start_simulation(self, scenario_id: str, intensity: int = 3, duration: float | None = None, device_id: str | None = None) -> dict[str, Any]:
         """Start a bounded in-process profile; it sends no network traffic."""
         if scenario_id not in CATALOGUE:
             raise KeyError(f"Unknown scenario: {scenario_id}")
@@ -393,26 +416,27 @@ class GatewayRuntime:
             raise ValueError(f"Simulation already running: {scenario_id}")
         stop = threading.Event()
         state_ref: list[SimulationState] = []
+        target_dev = device_id if device_id is not None else ("ATK-01" if scenario_id != "normal" else None)
 
         def run() -> None:
             sequence = 0
             started = time.monotonic()
             try:
                 while not stop.is_set() and (duration is None or time.monotonic() - started < duration):
-                    result = self.ingest(generate_window(scenario_id, intensity, sequence))
+                    result = self.ingest(generate_window(scenario_id, intensity, sequence, device_id=device_id))
                     state_ref[0].windows += 1
                     sequence += 1
                     stop.wait(self.settings.demo_tick_seconds)
             finally:
                 with self._lock: self._simulations.pop(scenario_id, None)
-                self.publish("simulation", {"scenario_id": scenario_id, "state": "STOPPED", "windows": sequence, "provenance": "SIMULATED"})
+                self.publish("simulation", {"scenario_id": scenario_id, "state": "STOPPED", "windows": sequence, "provenance": "SIMULATED", "device_id": target_dev})
 
         thread = threading.Thread(target=run, name=f"aegis-{scenario_id}", daemon=True)
-        state = SimulationState(scenario_id, max(1, min(intensity, 6)), time.time(), stop, thread)
+        state = SimulationState(scenario_id, max(1, min(intensity, 6)), time.time(), stop, thread, device_id=target_dev)
         state_ref.append(state)
         with self._lock: self._simulations[scenario_id] = state
         thread.start()
-        payload = {"scenario_id": scenario_id, "intensity": state.intensity, "duration": duration, "state": "RUNNING", "provenance": "SIMULATED", "network_transmission": False}
+        payload = {"scenario_id": scenario_id, "intensity": state.intensity, "duration": duration, "state": "RUNNING", "provenance": "SIMULATED", "network_transmission": False, "device_id": target_dev}
         self.publish("simulation", payload)
         return payload
 
@@ -420,8 +444,62 @@ class GatewayRuntime:
         with self._lock:
             targets = [scenario_id] if scenario_id else list(self._simulations)
             states = [self._simulations[name] for name in targets if name in self._simulations]
-        for state in states: state.stop.set()
+        for state in states:
+            state.stop.set()
+        for state in states:
+            if state.thread and state.thread.is_alive() and state.thread != threading.current_thread():
+                state.thread.join(timeout=3.0)
         return [state.scenario_id for state in states]
+
+    def step_device_recovery(self, device_id: str | None = None) -> list[dict[str, Any]]:
+        """Generate strictly in-process recovery observation windows for quiescent contained devices."""
+        with self._lock:
+            if device_id:
+                candidate_devs = [device_id]
+            else:
+                candidate_devs = list({
+                    dev for dev, rec in self.response.enforcer.active_isolates.items()
+                    if rec.get("state") in {"CONTAINED", "RECOVERING"}
+                })
+                try:
+                    for inc in self.store.incidents(limit=50):
+                        if inc.get("lifecycle_state") in {"CONTAINED", "RECOVERING"}:
+                            d = inc.get("device_id")
+                            if d and d not in candidate_devs:
+                                candidate_devs.append(d)
+                except Exception:
+                    pass
+
+            # Exclude any device currently associated with an active attack simulation
+            active_attack_devices = {
+                s.device_id
+                for s in self._simulations.values()
+                if s.scenario_id != "normal" and not s.stop.is_set() and s.device_id is not None
+            }
+            if active_attack_devices:
+                candidate_devs = [d for d in candidate_devs if d not in active_attack_devices]
+
+        results: list[dict[str, Any]] = []
+        for dev in candidate_devs:
+            with self._lock:
+                rec = self.response.enforcer.active_isolates.get(dev)
+                inc = self.store.find_active_incident(device_id=dev)
+                state = rec.get("state") if rec else (inc.get("lifecycle_state") if inc else None)
+                if state not in {"CONTAINED", "RECOVERING"}:
+                    continue
+                streak = self._device_normal_streaks.get(dev, 0)
+
+            event = generate_window(
+                "normal",
+                intensity=1,
+                sequence=streak,
+                device_id=dev,
+                provenance="SIMULATED",
+                source_type="RECOVERY_OBSERVER",
+            )
+            res = self.ingest(event)
+            results.append(res)
+        return results
 
     def manual_action(self, incident_id: str, action: str, actor: str = "operator") -> dict[str, Any]:
         action = action.upper()
@@ -455,37 +533,51 @@ class GatewayRuntime:
 
     def start_baseline(self, tick_seconds: float | None = None) -> None:
         """Continuously generate legitimate baseline OT traffic windows when no attack simulation is active."""
-        if hasattr(self, "_baseline_thread") and self._baseline_thread and self._baseline_thread.is_alive():
-            return
-        self._baseline_stop = threading.Event()
-        interval = tick_seconds or self.settings.demo_tick_seconds
+        with self._lock:
+            if hasattr(self, "_baseline_thread") and self._baseline_thread and self._baseline_thread.is_alive():
+                return
+            self._baseline_stop = threading.Event()
+            interval = tick_seconds or self.settings.demo_tick_seconds
 
-        def run() -> None:
-            sequence = 0
-            while not self._baseline_stop.is_set():
-                with self._lock:
-                    active_sims = bool(self._simulations)
-                if not active_sims:
-                    try:
-                        self.ingest(generate_window("normal", intensity=1, sequence=sequence))
-                        sequence += 1
-                    except Exception:
-                        pass
-                self._baseline_stop.wait(interval)
+            def run() -> None:
+                sequence = 0
+                stop_evt = self._baseline_stop
+                while not stop_evt.is_set():
+                    with self._lock:
+                        active_sims = bool(self._simulations)
+                    if not active_sims:
+                        try:
+                            self.ingest(generate_window("normal", intensity=1, sequence=sequence))
+                            sequence += 1
+                        except Exception:
+                            pass
+                        try:
+                            self.step_device_recovery()
+                        except Exception:
+                            pass
+                    stop_evt.wait(interval)
 
-        self._baseline_thread = threading.Thread(target=run, name="aegis-live-baseline", daemon=True)
-        self._baseline_thread.start()
+            self._baseline_thread = threading.Thread(target=run, name="aegis-live-baseline", daemon=True)
+            self._baseline_thread.start()
 
     def stop_baseline(self) -> None:
         """Stop the background baseline telemetry generator."""
-        if hasattr(self, "_baseline_stop") and self._baseline_stop:
-            self._baseline_stop.set()
+        with self._lock:
+            stop_evt = getattr(self, "_baseline_stop", None)
+            thread = getattr(self, "_baseline_thread", None)
+            if stop_evt:
+                stop_evt.set()
+        if thread and thread.is_alive() and thread != threading.current_thread():
+            thread.join(timeout=3.0)
+        with self._lock:
+            self._baseline_thread = None
+            self._baseline_stop = None
 
     def status(self) -> dict[str, Any]:
         latest = self.store.telemetry(limit=1)
         return {
             "service": "AEGIS-OT laboratory gateway", "status": "ONLINE", "source_modes": ["SIMULATED", "SYNTHETIC", "REPLAYED", "MEASURED (opt-in capture)"],
             "response_mode": self.response.mode, "auto_response": self.response.auto, "host_enforcement": False,
-            "latest": latest[-1] if latest else None, "active_simulations": [{"scenario_id": state.scenario_id, "intensity": state.intensity, "windows": state.windows} for state in self._simulations.values()],
+            "latest": latest[-1] if latest else None, "active_simulations": [{"scenario_id": state.scenario_id, "intensity": state.intensity, "windows": state.windows, "device_id": state.device_id} for state in self._simulations.values()],
             "model_version": self.detector.model_version, "feature_version": "window-features-v2", "database": str(self.settings.database_path),
         }

@@ -30,6 +30,7 @@ def runtime_app(tmp_path: Path):
         database_path=tmp_path / "test_wave3a_recovery.sqlite3",
         report_dir=tmp_path / "reports",
         dataset_dir=tmp_path / "datasets",
+        response_mode="ACTIVE",
     )
     runtime = GatewayRuntime(settings)
     app = create_app(runtime)

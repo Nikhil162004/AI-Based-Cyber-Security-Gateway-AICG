@@ -342,11 +342,11 @@ class GatewayStore:
 
     def transition_incident(self, incident_id: str, state: str, actor: str, note: str, evidence: list[str] | None = None) -> dict[str, Any]:
         allowed = {
-            "DETECTED": {"TRIAGED", "RESPONDING", "CONTAINED"},
+            "DETECTED": {"TRIAGED", "RESPONDING", "CONTAINED", "CLOSED"},
             "TRIAGED": {"RESPONDING", "CONTAINED", "CLOSED"},
-            "RESPONDING": {"CONTAINED", "RECOVERING"},
-            "CONTAINED": {"RECOVERING", "RESPONDING", "RESOLVED"},
-            "RECOVERING": {"RESOLVED", "RESPONDING", "CONTAINED"},
+            "RESPONDING": {"CONTAINED", "RECOVERING", "CLOSED"},
+            "CONTAINED": {"RECOVERING", "RESPONDING", "RESOLVED", "CLOSED"},
+            "RECOVERING": {"RESOLVED", "RESPONDING", "CONTAINED", "CLOSED"},
             "RESOLVED": {"CLOSED", "RESPONDING"},
             "CLOSED": {"RESPONDING", "DETECTED"},
         }
@@ -371,6 +371,38 @@ class GatewayStore:
                 (state, alert_status, now, incident_id)
             )
         return self.incident(incident_id)  # type: ignore[return-value]
+
+    def reset_active_incidents_and_alerts(self, actor: str = "system", note: str = "Simulation reset") -> int:
+        """Atomically transition all active (unresolved, unclosed) incidents and linked alerts to CLOSED in SQLite."""
+        now = utc_now()
+        with self.connection() as con:
+            rows = con.execute(
+                "SELECT incident_id, lifecycle_state FROM incidents WHERE lifecycle_state NOT IN ('RESOLVED', 'CLOSED')"
+            ).fetchall()
+            if not rows:
+                return 0
+            inc_ids = [r["incident_id"] for r in rows]
+            placeholders = ",".join("?" for _ in inc_ids)
+
+            # 1. Update incidents to CLOSED with recovery_state RESET
+            con.execute(
+                f"UPDATE incidents SET lifecycle_state = 'CLOSED', recovery_state = 'RESET', "
+                f"updated_at = ?, resolved_at = ? WHERE incident_id IN ({placeholders})",
+                [now, now] + inc_ids,
+            )
+            # 2. Add history records for each closed incident
+            for r in rows:
+                con.execute(
+                    "INSERT INTO incident_history VALUES (?,?,?,?,?,?,?,?)",
+                    (str(uuid4()), r["incident_id"], now, r["lifecycle_state"], "CLOSED", actor, note, "[]"),
+                )
+            # 3. Synchronize all linked alerts to CLOSED
+            con.execute(
+                f"UPDATE admin_alerts SET status = 'CLOSED', lifecycle_state = 'CLOSED', timestamp = ? "
+                f"WHERE incident_id IN ({placeholders})",
+                [now] + inc_ids,
+            )
+            return len(inc_ids)
 
     def record_action(self, *, event_id: str | None, incident_id: str | None, action: str, reason: str, policy: str, mode: str, result: str, provenance: str = "SIMULATED") -> dict[str, Any]:
         item = {"action_id": str(uuid4()), "timestamp": utc_now(), "event_id": event_id, "incident_id": incident_id,

@@ -31,7 +31,7 @@ class Settings:
     cooja_dir: Path = field(default_factory=lambda: Path(os.getenv("AEGIS_COOJA_DIR", "/home/kali/contiki-ng/examples/ai_edge_iiot/data")))
     event_retention_days: int = int(os.getenv("AEGIS_RETENTION_DAYS", "30"))
     demo_tick_seconds: float = float(os.getenv("AEGIS_DEMO_TICK_SECONDS", "1.0"))
-    response_mode: str = os.getenv("AEGIS_RESPONSE_MODE", "DRY_RUN").upper()
+    response_mode: str = field(default_factory=lambda: os.getenv("AEGIS_RESPONSE_MODE", "DRY_RUN").upper())
     auto_response: bool = _bool("AEGIS_AUTO_RESPONSE", True)
     host: str = os.getenv("AEGIS_HOST", "127.0.0.1")
     port: int = int(os.getenv("AEGIS_PORT", "8000"))

@@ -67,11 +67,29 @@ class InProcessPolicyEnforcer:
         self._lock = threading.RLock()
         self._sync_isolates_set: set[str] | None = None
 
-    def evaluate(self, device_id: str | None, event: TelemetryEvent) -> PolicyDecision:
+    def evaluate(self, device_id: str | None, event: TelemetryEvent, mode: str = "ACTIVE") -> PolicyDecision:
         if not self.enabled:
             return PolicyDecision("ALLOW", "Software-level in-process mitigation enforcement is disabled by configuration", enforced=False, drop=False)
         if not device_id:
             return PolicyDecision("ALLOW", "No device_id; bypassing policy enforcement", enforced=False, drop=False)
+
+        mode_upper = (mode or "ACTIVE").upper()
+
+        # DRY_RUN contract: detection/lifecycle/planning/audit YES, actual software DROP/QUARANTINE/RATE_LIMIT NO.
+        # PolicyDecision.drop MUST remain False in DRY_RUN.
+        if mode_upper == "DRY_RUN":
+            with self._lock:
+                if device_id in self.active_isolates:
+                    rec = self.active_isolates[device_id]
+                    act = rec.get("action", "ISOLATE")
+                    return PolicyDecision(
+                        "ALLOW",
+                        f"DRY_RUN mode active: device '{device_id}' {act} simulated without software drop",
+                        enforced=False,
+                        drop=False,
+                        metadata={"simulated_action": act, "dry_run": True, "action": act, "severity": rec.get("severity", "HIGH")},
+                    )
+            return PolicyDecision("ALLOW", "No active mitigation state; proceed to detection", enforced=False, drop=False)
 
         with self._lock:
             # 1. Check active isolation or block
@@ -175,7 +193,7 @@ class ResponseEngine:
         self.enforcer._sync_isolates_set = self.simulated_isolates
 
     def evaluate(self, device_id: str | None, event: TelemetryEvent) -> PolicyDecision:
-        return self.enforcer.evaluate(device_id, event)
+        return self.enforcer.evaluate(device_id, event, mode=self.mode)
 
     def isolate(self, device_id: str, action: str = "ISOLATE", reason: str = "", state: str = "CONTAINED", severity: str = "HIGH") -> None:
         if not device_id:
@@ -217,7 +235,8 @@ class ResponseEngine:
         else:
             action = "BLOCK"
 
-        return ResponsePlan(action, "Hybrid detection threshold reached; software mitigation planned.", self.mode, "SIMULATED_NOT_ENFORCED", True)
+        result_desc = "SOFTWARE_ENFORCEMENT_PLANNED" if (self.in_process_enforcement and self.mode in {"ACTIVE", "ENFORCING"}) else "SIMULATED_NOT_ENFORCED"
+        return ResponsePlan(action, "Hybrid detection threshold reached; software mitigation planned.", self.mode, result_desc, True)
 
     def apply_simulation(self, plan: ResponsePlan, device_id: str | None) -> None:
         if not device_id:

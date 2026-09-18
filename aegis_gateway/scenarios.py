@@ -78,7 +78,7 @@ def generate_window(scenario_id: str, intensity: int = 3, sequence: int = 0, see
     flow_id = f"{scenario_id}-{sequence}"
     ts = utc_now()
     token = None
-    if normal:
+    if normal and (dev_id.startswith("SENSOR-") or dev_id == "operator"):
         from .iam import compute_device_token
         token = compute_device_token(dev_id, ts, flow_id)
 

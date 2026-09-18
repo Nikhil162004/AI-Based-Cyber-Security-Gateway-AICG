@@ -1043,9 +1043,10 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         scenario_id = str(body.get("scenario_id", ""))
         intensity = _number(body.get("intensity"), 3)
         duration = body.get("duration")
+        device_id = body.get("device_id")
         actor = curr_user["username"]
         try:
-            payload = runtime.start_simulation(scenario_id, intensity, duration)
+            payload = runtime.start_simulation(scenario_id, intensity, duration, device_id=device_id)
             runtime.store.record_audit(
                 username=actor,
                 role=curr_user["role"],
@@ -1086,24 +1087,27 @@ def create_app(runtime: GatewayRuntime) -> Flask:
     @permission_required(PERM_ADMIN_CONTROLS)
     def reset_simulation():
         curr_user = get_current_user() or {"username": "admin", "role": "ADMIN"}
-        stopped = runtime.stop_simulation()
-        runtime.iam.reset_identities()
-        runtime.response.reset()
-        runtime.reset_streaks()
-        runtime.start_baseline()
-        baseline_event = runtime.ingest(generate_window("normal", intensity=1, sequence=0))
         actor = curr_user["username"]
-        runtime.store.record_audit(
-            username=actor,
-            role=curr_user["role"],
-            action="SIMULATION_RESET",
-            resource="simulation",
-            resource_id="baseline",
-            result="SUCCESS",
-            details=f"Reset simulation state to normal baseline rhythm: stopped {stopped}",
-            source_ip=request.remote_addr,
-        )
-        runtime.publish("simulation", {"state": "RESET", "scenario_id": "normal", "provenance": "SIMULATED"})
+        stopped = runtime.stop_simulation()
+        runtime.stop_baseline()
+        with runtime._lock:
+            runtime.store.reset_active_incidents_and_alerts(actor=actor, note="Simulation reset via dashboard/API")
+            runtime.iam.reset_identities()
+            runtime.response.reset()
+            runtime.reset_streaks()
+            runtime.start_baseline()
+            baseline_event = runtime.ingest(generate_window("normal", intensity=1, sequence=0))
+            runtime.store.record_audit(
+                username=actor,
+                role=curr_user["role"],
+                action="SIMULATION_RESET",
+                resource="simulation",
+                resource_id="baseline",
+                result="SUCCESS",
+                details=f"Reset simulation state to normal baseline rhythm: stopped {stopped}",
+                source_ip=request.remote_addr,
+            )
+            runtime.publish("simulation", {"state": "RESET", "scenario_id": "normal", "provenance": "SIMULATED"})
         return jsonify({
             "status": "RESET",
             "stopped": stopped,

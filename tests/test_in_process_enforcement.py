@@ -47,6 +47,7 @@ def runtime_app(tmp_path: Path):
         database_path=tmp_path / "test_enforcement.sqlite3",
         report_dir=tmp_path / "reports",
         dataset_dir=tmp_path / "datasets",
+        response_mode="ACTIVE",
     )
     runtime = GatewayRuntime(settings)
     app = create_app(runtime)
@@ -387,17 +388,29 @@ def test_attack_type_preserved_as_incident_metadata(runtime_app):
     assert res["alert"]["attack_type"] == "slow_rate"
 
 
-def test_dry_run_invariant_and_no_host_enforcement(runtime_app):
-    """20 & 21. DRY_RUN remains True and no host network commands are invoked."""
-    runtime, _ = runtime_app
+def test_dry_run_invariant_and_no_host_enforcement(tmp_path: Path):
+    """20 & 21. DRY_RUN remains passive (no software drops, drop=False) and no host network commands are invoked."""
+    settings = Settings(
+        database_path=tmp_path / "test_dry_run.sqlite3",
+        response_mode="DRY_RUN",
+        in_process_enforcement=True,
+    )
+    runtime = GatewayRuntime(settings)
     assert runtime.settings.response_mode == "DRY_RUN"
     assert runtime.response.mode == "DRY_RUN"
 
+    # Isolate device
+    runtime.response.isolate("ATK-01", "ISOLATE", "Threat isolation")
+    # In DRY_RUN, policy decision drop must be strictly False
+    ev_check = generate_window("udp_flood", intensity=4, sequence=0)
+    decision = runtime.response.evaluate("ATK-01", ev_check)
+    assert decision.drop is False
+
     # Intercept subprocess.run and os.system to verify no network commands are executed
     with patch("subprocess.run") as mock_sub, patch("os.system") as mock_sys:
-        # Ingest attack and subsequent filtered event
-        runtime.ingest(generate_window("udp_flood", intensity=4, sequence=0))
-        runtime.ingest(generate_window("udp_flood", intensity=4, sequence=1))
+        res = runtime.ingest(ev_check)
+        assert res.get("mitigation_enforced") is not True
+        assert res["event"]["lifecycle_state"] != "FILTERED"
 
         mock_sub.assert_not_called()
         mock_sys.assert_not_called()
@@ -412,6 +425,7 @@ def test_feature_flag_settings_runtime_behavior(tmp_path: Path):
     settings_enabled = Settings(
         database_path=tmp_path / "enforcement_enabled.sqlite3",
         in_process_enforcement=True,
+        response_mode="ACTIVE",
     )
     runtime_enabled = GatewayRuntime(settings_enabled)
     runtime_enabled.response.isolate("ATK-01", "ISOLATE", "Threat isolation")
@@ -465,6 +479,7 @@ def test_feature_flag_env_var_controls_enforcement(tmp_path: Path, monkeypatch):
 
     # Test AEGIS_IN_PROCESS_ENFORCEMENT=true
     monkeypatch.setenv("AEGIS_IN_PROCESS_ENFORCEMENT", "true")
+    monkeypatch.setenv("AEGIS_RESPONSE_MODE", "ACTIVE")
     st_on = Settings(database_path=tmp_path / "env_on.sqlite3")
     assert st_on.in_process_enforcement is True
     rt_on = GatewayRuntime(st_on)
