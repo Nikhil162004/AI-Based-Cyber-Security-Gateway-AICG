@@ -3,7 +3,7 @@
 [![Python](https://img.shields.io/badge/Python-3.14-blue.svg)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Framework-Flask_3.1-green.svg)](https://flask.palletsprojects.com/)
 [![scikit-learn](https://img.shields.io/badge/ML-scikit--learn_1.9-orange.svg)](https://scikit-learn.org/)
-[![Test Suite](https://img.shields.io/badge/Tests-86_Passed-brightgreen.svg)]()
+[![Test Suite](https://img.shields.io/badge/Tests-236_Passed-brightgreen.svg)]()
 [![Safety](https://img.shields.io/badge/Boundary-100%25_Dry--Run_/_Simulated-red.svg)]()
 
 A technically defensible, end-to-end edge cybersecurity gateway engineered for Industrial IoT (IIoT) and Industry 4.0 automation networks. The platform combines real-time multi-source telemetry ingestion, physics-informed cause-based energy correlation, Platt-calibrated hybrid AI/ML attack detection, dynamic Zero-Trust Identity and Access Management (IAM), multi-window campaign correlation, and closed-loop incident lifecycle state governance.
@@ -106,22 +106,22 @@ source .venv/bin/activate
 ```
 
 ### Running the Test Suite
-Run the 86-test automated verification suite:
+Run the 236-test automated verification suite:
 ```bash
-.venv/bin/pytest tests/
+.venv/bin/pytest
 ```
-*Expected Output: `86 passed in ~20s`.*
+*Expected Output: `236 passed in ~55s`.*
 
 ### End-to-End Headless Browser Verification
 Run the comprehensive headless browser E2E suite (MFA, RBAC, alert lifecycle, and viewports):
 ```bash
-.venv/bin/python scripts/run_browser_e2e_admin.py
+.venv/bin/python backend/scripts/run_browser_e2e_admin.py
 ```
 
 ### Starting the Gateway & HMI
 Launch the gateway runtime and operator dashboard:
 ```bash
-.venv/bin/python -m aegis_gateway.api
+.venv/bin/python backend/app.py
 ```
 - **Operator HMI**: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
 - **Attacker Console**: [http://127.0.0.1:8000/attacker](http://127.0.0.1:8000/attacker)
@@ -132,49 +132,27 @@ Launch the gateway runtime and operator dashboard:
 
 ```
 AI-Edge-DDoS-Gateway/
-├── aegis_gateway/               # Core Gateway Engine
-│   ├── adapters.py             # Multi-source adapters (NS-3, Cooja, PCAP)
-│   ├── api.py                  # Flask REST API, SSE streaming, route mounts, security
-│   ├── config.py               # Repository configuration & environment flags
-│   ├── detection.py            # HybridDetector, feature extraction, rules
-│   ├── energy.py               # Cause-based edge energy model (MODELLED)
-│   ├── iam.py                  # Dynamic Zero-Trust IAM & Trust governance
-│   ├── ml.py                   # Dataset generation, calibration, training
-│   ├── policy.py               # ResponseEngine (100% DRY_RUN simulation)
-│   ├── runtime.py              # Thread-safe GatewayRuntime & lifecycle state
-│   ├── scenarios.py            # 10-vector attack catalogue & generators
-│   ├── schema.py               # Canonical TelemetryEvent dataclass & bounds
-│   ├── security.py             # Auth rate limiting, session rotation, RBAC decorators
-│   └── storage.py              # SQLite historian, FKs, WAL, SHA-256 audit hash chain
-├── dashboard/                  # Web Interface & Visualizations
-│   ├── static/                 # CSS styling & vanilla JavaScript SSE client
-│   └── templates/
-│       ├── index.html          # Operator HMI (Topology, Incidents, Metrics)
-│       └── attacker.html       # Attacker simulation console
-├── dataset/                    # Sample NS-3 & synthetic training data
-├── models/                     # Evaluated laboratory model artifacts
-│   └── hybrid_detector.joblib  # Trained, Platt-calibrated model bundle
-├── reports/                    # Model validation metrics & confusion matrix
-│   ├── evaluation.json         # Stratified group-split evaluation metrics
-│   ├── confusion_matrix.csv    # Test set confusion matrix
-│   └── evidence/screenshots/   # Browser E2E verification evidence
-├── scripts/                    # Acceptance & utility scripts
-│   ├── e2e_acceptance_verification.py
-│   └── run_browser_e2e_admin.py
-├── tests/                      # Automated test suite (Pytest - 86 tests)
-│   ├── test_adapters.py
-│   ├── test_admin_security_layer.py
-│   ├── test_api_and_runtime.py
-│   ├── test_api_security_and_hardening.py
-│   ├── test_detection_and_ml.py
-│   ├── test_energy_and_iam.py
-│   ├── test_policy_and_incidents.py
-│   ├── test_scenarios.py
-│   ├── test_schema.py
-│   └── test_storage_and_export.py
-└── docs/                       # Architectural documentation & guides
-    ├── ADMINISTRATIVE_SECURITY_LAYER_V1.md  # Phase 20 Architecture & Integrity Spec
-    └── DEMO_GUIDE.md           # Step-by-step evaluator demonstration guide
+├── backend/                         # Server-side runtime, ML, API, and tests
+│   ├── aegis_gateway/               # Core Gateway Engine (adapters, api, config, detection, energy, iam, ml, policy, runtime, scenarios, schema, security, storage)
+│   ├── app.py                       # Unified backend launcher
+│   ├── data/                        # SQLite historian & canonical datasets
+│   ├── dataset/                     # Raw NS-3 and PCAP simulation traces
+│   ├── legacy_prototypes/           # Historical prototype scripts and models
+│   ├── models/                      # Trained ML bundles (hybrid_detector, realistic_detector)
+│   ├── reports/                     # Validation metrics, screenshots, and academic SRS drafts
+│   ├── scripts/                     # E2E acceptance & browser automation scripts
+│   ├── simulation/                  # NS-3 C++ topology simulation (normal_iiot.cc)
+│   └── tests/                       # 17-file automated test suite (236 passing tests)
+├── frontend/                        # Human-Machine Interface (HMI) & static assets
+│   ├── archive/                     # Historical UI revisions (.bak*)
+│   ├── static/                      # CSS styling & vanilla JavaScript SSE client
+│   └── templates/                   # Jinja2 templates (index.html, login.html, attacker.html)
+├── ns-allinone-3.48/                # Network Simulator 3 (NS-3.48) workspace
+├── dashboard/                       # Backward-compatibility shim
+├── data -> backend/data             # Root compatibility symlink
+├── dataset -> backend/dataset       # Root compatibility symlink
+├── models -> backend/models         # Root compatibility symlink
+└── simulation -> backend/simulation # Root compatibility symlink
 ```
 
 ---

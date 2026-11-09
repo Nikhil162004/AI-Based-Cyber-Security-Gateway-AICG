@@ -1,17 +1,27 @@
-"""Compatibility launcher for the unified AEGIS-OT gateway API/HMI."""
+"""Backward-compatibility shim redirecting to backend/app.py."""
 
+from __future__ import annotations
+
+import runpy
 import sys
 from pathlib import Path
 
-# Ensure repository root is on sys.path for direct launcher execution
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Ensure backend directory and repository root are on sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+BACKEND_DIR = PROJECT_ROOT / "backend"
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(1, str(PROJECT_ROOT))
 
-from aegis_gateway.api import create_app
-from aegis_gateway.runtime import GatewayRuntime
-
-runtime = GatewayRuntime()
-runtime.start_baseline()
-app = create_app(runtime)
+backend_app = BACKEND_DIR / "app.py"
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=8000, debug=False, threaded=True)
+    runpy.run_path(str(backend_app), run_name="__main__")
+else:
+    _exported = runpy.run_path(str(backend_app), run_name=__name__)
+    app = _exported.get("app")
+    runtime = _exported.get("runtime")
+    create_app = _exported.get("create_app")
+    GatewayRuntime = _exported.get("GatewayRuntime")
+    __all__ = ["app", "runtime", "create_app", "GatewayRuntime"]

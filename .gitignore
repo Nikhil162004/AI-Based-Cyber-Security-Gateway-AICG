@@ -14,3 +14,9 @@ htmlcov/
 # SQLite WAL runtime files
 data/*.sqlite3-wal
 data/*.sqlite3-shm
+
+# Backend SQLite runtime database
+backend/data/*.sqlite3
+backend/data/*.sqlite3-journal
+backend/data/*.sqlite3-wal
+backend/data/*.sqlite3-shm

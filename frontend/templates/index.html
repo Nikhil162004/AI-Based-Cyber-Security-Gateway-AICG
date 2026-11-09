@@ -1,0 +1,1934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI EDGE SECURITY GATEWAY • AICG Industrial SOC &amp; OT Operations HMI</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+
+<div class="hmi-shell">
+
+    <!-- ===================================================== -->
+    <!-- TOP STICKY HEADER -->
+    <!-- ===================================================== -->
+    <header class="hmi-header">
+        
+        <div class="header-brand">
+            <button class="btn-sidebar-toggle" id="sidebarToggle" type="button" onclick="toggleSidebar()" title="Toggle Navigation Sidebar">
+                <span>☰</span>
+                <span class="btn-toggle-label">NAV</span>
+            </button>
+            <div class="brand-shield">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+                </svg>
+            </div>
+            <div class="brand-info">
+                <h1>
+                    AI EDGE SECURITY GATEWAY
+                    <span class="tag">AICG</span>
+                    <span class="tag">INDUSTRY 4.0</span>
+                </h1>
+                <div class="brand-context">
+                    Plant • OT Cell (6LoWPAN / CoAP / MQTT) • Edge Gateway • Zero-Trust Defense
+                </div>
+            </div>
+        </div>
+
+        <div class="header-center-badges">
+            <div class="badge-item pulse-green">
+                <span class="indicator-dot" id="statusDot"></span>
+                <span>PLANT:</span>
+                <strong id="systemStatus">ONLINE</strong>
+            </div>
+            <div class="badge-item neutral">
+                <span>GATEWAY:</span>
+                <strong>AICG-GW-01</strong>
+            </div>
+            <div class="badge-item neutral">
+                <span>RUNTIME:</span>
+                <strong>CANONICAL HYBRID</strong>
+            </div>
+            <div class="badge-item" style="border-color: rgba(56, 189, 248, 0.35); color: var(--cyan);">
+                <span>MODE:</span>
+                <strong>DRY_RUN (SIMULATED)</strong>
+            </div>
+        </div>
+
+        <div class="header-actions">
+            <div class="clock-widget">
+                <div class="clock-time" id="liveClock">00:00:00 UTC</div>
+                <div class="clock-uptime" id="liveUptime">UPTIME: 00h 00m 00s</div>
+            </div>
+            
+            <div class="threat-state-pill clear" id="headerThreatPill">
+                <span style="font-size: 8px;">●</span>
+                <span id="threatStatus">CLEAR</span>
+            </div>
+
+            <div class="header-user-session" id="headerUserBadge">
+                <span class="indicator-dot green" id="headerAuthDot"></span>
+                <span id="headerUserLabel" style="font-family: var(--font-mono); font-size: 11px; font-weight: 700;">ADMIN</span>
+                <span class="tag" id="headerRoleTag" style="font-size: 9px; padding: 1px 5px; border-color: rgba(56,189,248,0.4); color: var(--cyan);">ADMIN</span>
+                <form action="/logout" method="POST" id="headerLogoutForm" style="display: inline; margin: 0; padding: 0;">
+                    <button type="submit" class="btn-header-tool" id="headerLogoutBtn" title="Terminate Session" style="padding: 3px 8px; font-size: 11px; margin-left: 2px; font-family: inherit; line-height: inherit; cursor: pointer;">
+                        🚪 <span>Logout</span>
+                    </button>
+                </form>
+            </div>
+
+            <a href="/api/export/telemetry.csv" download class="btn-header-tool" title="Quick CSV Export">
+                📥 <span>Export CSV</span>
+            </a>
+
+            <a href="/attacker" target="_blank" class="btn-header-tool btn-header-remote" title="Open Dedicated AICG Attacker Console">
+                📱 <span>Attacker</span>
+            </a>
+        </div>
+
+    </header>
+
+    <!-- Main Body Layout: Left Sidebar + Main Content Area -->
+    <div class="hmi-body-layout" id="hmiBodyLayout">
+
+        <!-- Left-Side Quick Navigation (Compact Rail by Default, Expandable Drawer) -->
+        <aside class="hmi-sidebar" id="hmiSidebar" aria-label="Dashboard Navigation">
+
+            <!-- OVERVIEW -->
+            <div class="hmi-sidebar-group">
+                <div class="hmi-sidebar-title">OVERVIEW</div>
+                <a href="#sec-kpis" class="hmi-sidebar-link active" data-target="sec-kpis" title="Security Overview">
+                    <span class="link-icon">📊</span>
+                    <span class="link-text">Security Overview</span>
+                </a>
+                <a href="#sec-status-gauges" class="hmi-sidebar-link" data-target="sec-status-gauges" title="Live KPIs">
+                    <span class="link-icon">⚡</span>
+                    <span class="link-text">Live KPIs</span>
+                </a>
+            </div>
+
+            <!-- MONITORING -->
+            <div class="hmi-sidebar-group">
+                <div class="hmi-sidebar-title">MONITORING</div>
+                <a href="#sec-telemetry" class="hmi-sidebar-link" data-target="sec-telemetry" title="Live Network Traffic">
+                    <span class="link-icon">📈</span>
+                    <span class="link-text">Live Network Traffic</span>
+                </a>
+                <a href="#sec-telemetry" class="hmi-sidebar-link" data-target="sec-telemetry" title="Energy Monitoring">
+                    <span class="link-icon">🔋</span>
+                    <span class="link-text">Energy Monitoring</span>
+                </a>
+                <a href="#sec-topology" class="hmi-sidebar-link" data-target="sec-topology" title="Protocol Mix">
+                    <span class="link-icon">🍩</span>
+                    <span class="link-text">Protocol Mix</span>
+                </a>
+                <a href="#sec-flows" class="hmi-sidebar-link" data-target="sec-flows" title="Raw Flows">
+                    <span class="link-icon">🌊</span>
+                    <span class="link-text">Raw Flows</span>
+                </a>
+            </div>
+
+            <!-- ADMINISTRATION -->
+            <div class="hmi-sidebar-group">
+                <div class="hmi-sidebar-title">ADMINISTRATION</div>
+                <a href="#sec-admin-overview" id="nav-admin-overview" class="hmi-sidebar-link" data-target="sec-admin-overview" title="Administrative Overview">
+                    <span class="link-icon">🛡️</span>
+                    <span class="link-text">Admin Overview</span>
+                </a>
+                <a href="#sec-admin-alerts" id="nav-admin-alerts" class="hmi-sidebar-link" data-target="sec-admin-alerts" title="Active Alerts &amp; Alert Center">
+                    <span class="link-icon">🚨</span>
+                    <span class="link-text">Active Alerts</span>
+                    <span class="badge-counter" id="sidebarAlertCounter" style="display: none; background: var(--red); color: white; font-size: 9px; padding: 1px 5px; border-radius: 8px; margin-left: 4px; font-weight: 700;">0</span>
+                </a>
+                <a href="#sec-admin-users" id="nav-admin-users" class="hmi-sidebar-link" data-target="sec-admin-users" title="Users &amp; Roles (Admin Only)">
+                    <span class="link-icon">👥</span>
+                    <span class="link-text">Users &amp; Roles</span>
+                </a>
+                <a href="#sec-admin-audit" id="nav-admin-audit" class="hmi-sidebar-link" data-target="sec-admin-audit" title="Administrative Audit Log">
+                    <span class="link-icon">📜</span>
+                    <span class="link-text">Audit Log</span>
+                </a>
+                <a href="#sec-admin-posture" id="nav-admin-posture" class="hmi-sidebar-link" data-target="sec-admin-posture" title="Security &amp; Zero Trust Posture">
+                    <span class="link-icon">⚙️</span>
+                    <span class="link-text">Security Posture</span>
+                </a>
+            </div>
+
+            <!-- SECURITY -->
+            <div class="hmi-sidebar-group">
+                <div class="hmi-sidebar-title">SECURITY</div>
+                <a href="#sec-xai" class="hmi-sidebar-link" data-target="sec-xai" title="AI Detection / XAI">
+                    <span class="link-icon">🔍</span>
+                    <span class="link-text">AI Detection / XAI</span>
+                </a>
+                <a href="#sec-lifecycle" class="hmi-sidebar-link" data-target="sec-lifecycle" title="Incident Lifecycle">
+                    <span class="link-icon">🔄</span>
+                    <span class="link-text">Incident Lifecycle</span>
+                </a>
+                <a href="#sec-incidents" class="hmi-sidebar-link" data-target="sec-incidents" title="Incident Journal">
+                    <span class="link-icon">📋</span>
+                    <span class="link-text">Incident Journal</span>
+                </a>
+                <a href="#sec-lifecycle" class="hmi-sidebar-link" data-target="sec-lifecycle" title="Autonomous Response">
+                    <span class="link-icon">🤖</span>
+                    <span class="link-text">Autonomous Response</span>
+                </a>
+            </div>
+
+            <!-- IDENTITY -->
+            <div class="hmi-sidebar-group">
+                <div class="hmi-sidebar-title">IDENTITY</div>
+                <a href="#sec-iam" class="hmi-sidebar-link" data-target="sec-iam" title="Identity &amp; Access (IAM)">
+                    <span class="link-icon">🛡️</span>
+                    <span class="link-text">Identity &amp; Access (IAM)</span>
+                </a>
+                <a href="#sec-iam" class="hmi-sidebar-link" data-target="sec-iam" title="Zero Trust">
+                    <span class="link-icon">🔐</span>
+                    <span class="link-text">Zero Trust</span>
+                </a>
+            </div>
+
+            <!-- IIoT / OT -->
+            <div class="hmi-sidebar-group">
+                <div class="hmi-sidebar-title">IIoT / OT</div>
+                <a href="#sec-topology" class="hmi-sidebar-link" data-target="sec-topology" title="Plant Mimic">
+                    <span class="link-icon">🏭</span>
+                    <span class="link-text">Plant Mimic</span>
+                </a>
+                <a href="#sec-iam" class="hmi-sidebar-link" data-target="sec-iam" title="IIoT Protocol Stack">
+                    <span class="link-icon">📶</span>
+                    <span class="link-text">IIoT Protocol Stack</span>
+                </a>
+            </div>
+
+            <!-- MODEL -->
+            <div class="hmi-sidebar-group">
+                <div class="hmi-sidebar-title">MODEL</div>
+                <a href="#sec-assurance" class="hmi-sidebar-link" data-target="sec-assurance" title="Model Assurance">
+                    <span class="link-icon">🎯</span>
+                    <span class="link-text">Model Assurance</span>
+                </a>
+                <a href="#sec-assurance" class="hmi-sidebar-link" data-target="sec-assurance" title="Confusion Matrix">
+                    <span class="link-icon">🔲</span>
+                    <span class="link-text">Confusion Matrix</span>
+                </a>
+            </div>
+
+            <!-- SIMULATION -->
+            <div class="hmi-sidebar-group">
+                <div class="hmi-sidebar-title">SIMULATION</div>
+                <a href="#sec-controls" class="hmi-sidebar-link highlight" data-target="sec-controls" title="AICG Attack Simulator">
+                    <span class="link-icon">⚡</span>
+                    <span class="link-text">AICG Attack Simulator</span>
+                </a>
+            </div>
+
+            <!-- Sidebar Footer Status -->
+            <div class="hmi-sidebar-footer">
+                <div class="sidebar-status-tag" title="Gateway Status: Live in-process">
+                    <span class="dot-small green"></span>
+                    <span class="link-text">LIVE IN-PROCESS</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Backdrop for expanded drawer -->
+        <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="collapseSidebar()" aria-hidden="true"></div>
+
+        <!-- Main Content Area -->
+        <main class="hmi-main-area" id="hmiMainArea">
+
+
+    <!-- ===================================================== -->
+    <!-- 1. TOP KPI STRIP (6 CARDS) -->
+    <!-- ===================================================== -->
+    <section class="kpi-strip" id="sec-kpis">
+
+        <!-- Card 1: Throughput -->
+        <div class="kpi-card">
+            <div class="kpi-header">
+                <span>Throughput</span>
+                <span class="kpi-icon">⚡</span>
+            </div>
+            <div class="kpi-body">
+                <div class="kpi-value" id="packetRate">0.0</div>
+                <div class="kpi-unit">pkts/s</div>
+            </div>
+            <div class="kpi-footer">
+                <span class="kpi-subtext"><span id="throughput">0.00</span> KB/s</span>
+                <span class="kpi-status-tag tag-blue" id="rateStatusTag">NORMAL</span>
+            </div>
+        </div>
+
+        <!-- Card 2: Risk Index -->
+        <div class="kpi-card" id="kpiCardRisk">
+            <div class="kpi-header">
+                <span>DDoS Risk Index</span>
+                <span class="kpi-icon">🛡️</span>
+            </div>
+            <div class="kpi-body">
+                <div class="kpi-value" id="ddosProbability">0.0%</div>
+                <div class="kpi-unit" id="threatMeta">Baseline Normal</div>
+            </div>
+            <div class="kpi-footer">
+                <span class="kpi-subtext" id="classification">NORMAL</span>
+                <span class="kpi-status-tag tag-green" id="kpiRiskTag">CLEAR</span>
+            </div>
+        </div>
+
+        <!-- Card 3: Plant State -->
+        <div class="kpi-card" id="kpiCardPlant">
+            <div class="kpi-header">
+                <span>Plant State</span>
+                <span class="kpi-icon">🏭</span>
+            </div>
+            <div class="kpi-body">
+                <div class="kpi-value" id="plantStateVal" style="color: var(--green);">CLEAR</div>
+            </div>
+            <div class="kpi-footer">
+                <span class="kpi-subtext">Cell: MSME Line 3</span>
+                <span class="kpi-status-tag tag-green">OPERATIONAL</span>
+            </div>
+        </div>
+
+        <!-- Card 4: Mitigation State -->
+        <div class="kpi-card">
+            <div class="kpi-header">
+                <span>Mitigation</span>
+                <span class="kpi-icon">⚔️</span>
+            </div>
+            <div class="kpi-body">
+                <div class="kpi-value" id="mitigationAction" style="font-size: 18px;">NONE</div>
+            </div>
+            <div class="kpi-footer">
+                <span class="kpi-subtext" id="securityAction">ALERT</span>
+                <span class="kpi-status-tag tag-amber" id="mitigationModeTag">DRY-RUN</span>
+            </div>
+        </div>
+
+        <!-- Card 5: Detection Pipeline Configuration -->
+        <div class="kpi-card" id="kpiCardPipeline">
+            <div class="kpi-header">
+                <span>Detection Pipeline</span>
+                <span class="kpi-icon">⚙️</span>
+            </div>
+            <div class="kpi-body">
+                <div class="kpi-value" id="pipelineFusionVal" style="font-size: 16px;">HYBRID FUSION</div>
+                <div class="kpi-unit" id="pipelineThresholdVal">θ = 0.50</div>
+            </div>
+            <div class="kpi-footer">
+                <span class="kpi-subtext" id="pipelineWeightsVal">0.40 Rule • 0.45 RF • 0.15 iForest</span>
+                <span class="kpi-status-tag tag-blue" id="pipelineStatusTag">CALIBRATED</span>
+            </div>
+        </div>
+
+        <!-- Card 6: Gateway Load -->
+        <div class="kpi-card">
+            <div class="kpi-header">
+                <span>Gateway Load</span>
+                <span class="kpi-icon">💻</span>
+            </div>
+            <div class="kpi-body">
+                <div class="kpi-value" id="gatewayCpuVal">15.0</div>
+                <div class="kpi-unit">% CPU</div>
+            </div>
+            <div class="kpi-footer">
+                <span class="kpi-subtext">RAM: <span id="gatewayRamVal">22</span>% • Radio: <span id="gatewayRadioVal">18</span>%</span>
+                <span class="kpi-status-tag tag-blue">MODELLED</span>
+            </div>
+        </div>
+
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- 2. SECURITY STATUS BANNER & CIRCULAR PERCENTAGE GAUGES -->
+    <!-- ===================================================== -->
+    <section class="status-gauges-row" id="sec-status-gauges">
+
+        <!-- Wide Security Status Banner -->
+        <div class="security-status-banner" id="securityStatusBanner">
+            <div class="banner-left">
+                <div class="banner-icon-badge" id="bannerIconBadge">✓</div>
+                <div class="banner-headlines">
+                    <div class="banner-headline" id="bannerHeadline">
+                        CLEAR • NO ACTIVE DDOS ANOMALY • PLANT WITHIN BASELINE
+                    </div>
+                    <div class="banner-detail" id="bannerDetail">
+                        Baseline sensor telemetry active across 6LoWPAN mesh. In-process defense pipeline armed.
+                    </div>
+                </div>
+            </div>
+            <div class="banner-meta">
+                <div>TARGET: <strong id="bannerTarget">GATEWAY (10.42.0.1)</strong></div>
+                <div>SEVERITY: <strong id="severity">INFO</strong></div>
+            </div>
+        </div>
+
+        <!-- Circular Percentage Gauges -->
+        <div class="gauges-container">
+            
+            <!-- Gauge 1: AI Threat Confidence -->
+            <div class="gauge-item">
+                <div class="gauge-svg-wrap">
+                    <svg class="gauge-svg" viewBox="0 0 80 80">
+                        <circle class="gauge-bg" cx="40" cy="40" r="34" />
+                        <circle class="gauge-progress gauge-threat-progress" id="aiThreatGaugeCircle" cx="40" cy="40" r="34"
+                                stroke-dasharray="213.6" stroke-dashoffset="213.6" />
+                    </svg>
+                    <div class="gauge-center-text" id="aiThreatGaugeText">0%</div>
+                </div>
+                <div class="gauge-label">AI Threat Confidence</div>
+                <div class="gauge-sublabel">Platt-Calibrated</div>
+            </div>
+
+            <!-- Gauge 2: Security / Trust Posture -->
+            <div class="gauge-item">
+                <div class="gauge-svg-wrap">
+                    <svg class="gauge-svg" viewBox="0 0 80 80">
+                        <circle class="gauge-bg" cx="40" cy="40" r="34" />
+                        <circle class="gauge-progress gauge-trust-progress" id="trustGaugeCircle" cx="40" cy="40" r="34"
+                                stroke-dasharray="213.6" stroke-dashoffset="0" />
+                    </svg>
+                    <div class="gauge-center-text" id="trustGaugeText">100</div>
+                </div>
+                <div class="gauge-label">Trust Posture</div>
+                <div class="gauge-sublabel">IAM Reputation (0-100)</div>
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- 3. PRIMARY ANALYTICS: EXACTLY TWO PRIMARY TIME-SERIES CHARTS -->
+    <!-- ===================================================== -->
+    <section class="primary-charts-grid" id="sec-telemetry">
+
+        <!-- Primary Chart #1: Live Network Traffic / Packets Per Second -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title-group">
+                    <div class="panel-title">
+                        <span>HISTORIAN • LIVE OT NETWORK TRAFFIC</span>
+                    </div>
+                    <div class="panel-subtitle">
+                        Continuous packet flow • Legitimate OT baseline (~18 pps) vs live traffic vs simulated surge
+                    </div>
+                </div>
+                <div class="panel-actions">
+                    <span class="panel-badge" style="color: var(--green); border-color: rgba(16,185,129,0.3);">● LIVE INGRESS</span>
+                </div>
+            </div>
+
+            <div class="chart-stage">
+                <canvas id="trafficChart"></canvas>
+            </div>
+
+            <div class="chart-legend-custom">
+                <div class="legend-item">
+                    <span class="legend-color-box" style="background: #10b981; height: 2px; border-top: 2px dashed #10b981;"></span>
+                    <span>OT Baseline (~18 pps)</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color-box" style="background: #38bdf8;"></span>
+                    <span>Live Observed Traffic</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color-box" style="background: #f43f5e;"></span>
+                    <span>Attack Surge Condition</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color-box" style="background: #f59e0b; height: 2px; border-top: 2px dashed #f59e0b;"></span>
+                    <span>Simulated Throttle (DRY_RUN)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Primary Chart #2: Resource Impact / Modelled Energy Dissipation (mW) -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title-group">
+                    <div class="panel-title">
+                        <span>RESOURCE IMPACT • MODELLED POWER DISSIPATION (mW)</span>
+                    </div>
+                    <div class="panel-subtitle">
+                        Continuous hardware power dissipation • Derived software model (~55 mW baseline vs attack saturation)
+                    </div>
+                </div>
+                <div class="panel-actions">
+                    <span class="panel-badge" style="color: var(--cyan); border-color: rgba(56,189,248,0.3);">MODELLED mW</span>
+                </div>
+            </div>
+
+            <div class="chart-stage">
+                <canvas id="energyChart"></canvas>
+            </div>
+
+            <div class="chart-legend-custom">
+                <div class="legend-item">
+                    <span class="legend-color-box" style="background: #10b981; height: 2px; border-top: 2px dashed #10b981;"></span>
+                    <span>Modelled Baseline (~55 mW)</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color-box" style="background: #f59e0b;"></span>
+                    <span>Live Modelled Power (mW)</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color-box" style="background: #f43f5e;"></span>
+                    <span>Attack Saturation Surge</span>
+                </div>
+            </div>
+
+            <!-- Hidden compatibility canvas for threatChart if referenced -->
+            <canvas id="threatChart" style="display:none;"></canvas>
+        </div>
+
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- 4. TOPOLOGY (PLANT MIMIC) & PROTOCOL MIX (DONUT) -->
+    <!-- ===================================================== -->
+    <section class="topology-protocol-grid" id="sec-topology">
+
+        <!-- Left: Plant Mimic / OT Topology -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title-group">
+                    <div class="panel-title">
+                        <span>PLANT MIMIC • OT NETWORK TOPOLOGY</span>
+                    </div>
+                    <div class="panel-subtitle">
+                        Declarative lab topology • In-process simulation • Nodes: <span id="topologyDeviceCount">5</span> • Links: <span id="topologyLinkCount">4</span> • Status: <span id="topologyStatus">ONLINE</span> (<span id="topologyEnvironment">CONTROLLED SIMULATION</span>)
+                    </div>
+                </div>
+                <div class="panel-badge">DECLARATIVE TOPOLOGY (IN-PROCESS)</div>
+            </div>
+
+            <!-- Plant Mimic SVG Visualizer -->
+            <div class="mimic-canvas-wrap" id="mimicContainer">
+                <svg class="mimic-svg" id="plantMimicSvg" viewBox="0 0 680 220">
+                    <defs>
+                        <linearGradient id="linkGradNormal" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.6"/>
+                            <stop offset="100%" stop-color="#10b981" stop-opacity="0.8"/>
+                        </linearGradient>
+                        <linearGradient id="linkGradAttack" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.9"/>
+                            <stop offset="100%" stop-color="#e11d48" stop-opacity="0.4"/>
+                        </linearGradient>
+                    </defs>
+
+                    <!-- Communication Flow Links -->
+                    <g id="mimicLinks">
+                        <!-- SENSOR-01 -> GATEWAY -->
+                        <line x1="100" y1="60" x2="340" y2="110" stroke="#1e3a5f" stroke-width="2"/>
+                        <line id="linkSensor1" x1="100" y1="60" x2="340" y2="110" stroke="#38bdf8" stroke-width="2" class="flow-packet-anim"/>
+
+                        <!-- SENSOR-02 -> GATEWAY -->
+                        <line x1="100" y1="160" x2="340" y2="110" stroke="#1e3a5f" stroke-width="2"/>
+                        <line id="linkSensor2" x1="100" y1="160" x2="340" y2="110" stroke="#38bdf8" stroke-width="2" class="flow-packet-anim"/>
+
+                        <!-- GATEWAY -> PLC-SINK -->
+                        <line x1="340" y1="110" x2="580" y2="110" stroke="#1e3a5f" stroke-width="2.5"/>
+                        <line id="linkGatewayPlc" x1="340" y1="110" x2="580" y2="110" stroke="#10b981" stroke-width="2.5" class="flow-packet-anim"/>
+
+                        <!-- ATK-01 -> GATEWAY (Active during attack) -->
+                        <line id="linkAttackBack" x1="220" y1="20" x2="340" y2="110" stroke="rgba(244,63,94,0.2)" stroke-width="2" stroke-dasharray="3,3"/>
+                        <line id="linkAttack" x1="220" y1="20" x2="340" y2="110" stroke="#f43f5e" stroke-width="3" class="flow-packet-anim" style="display: none;"/>
+                    </g>
+
+                    <!-- Network Nodes -->
+                    <g id="mimicNodes">
+                        <!-- Node: SENSOR-01 -->
+                        <g class="mimic-node" transform="translate(100, 60)">
+                            <circle r="18" fill="#0c1d36" stroke="#38bdf8" stroke-width="2"/>
+                            <text y="-24" text-anchor="middle" fill="#94a3b8" font-size="9" font-weight="700">SENSOR-01</text>
+                            <text y="4" text-anchor="middle" fill="#38bdf8" font-size="9" font-family="monospace">10.42.0.11</text>
+                            <text y="28" text-anchor="middle" fill="#10b981" font-size="8">TRUST: 100</text>
+                        </g>
+
+                        <!-- Node: SENSOR-02 -->
+                        <g class="mimic-node" transform="translate(100, 160)">
+                            <circle r="18" fill="#0c1d36" stroke="#38bdf8" stroke-width="2"/>
+                            <text y="-24" text-anchor="middle" fill="#94a3b8" font-size="9" font-weight="700">SENSOR-02</text>
+                            <text y="4" text-anchor="middle" fill="#38bdf8" font-size="9" font-family="monospace">10.42.0.12</text>
+                            <text y="28" text-anchor="middle" fill="#10b981" font-size="8">TRUST: 100</text>
+                        </g>
+
+                        <!-- Central Node: EDGE GATEWAY -->
+                        <g class="mimic-node" transform="translate(340, 110)">
+                            <circle id="gatewayPulseRing" r="28" fill="none" stroke="#6366f1" stroke-width="1.5" class="node-pulse-ring"/>
+                            <circle r="26" fill="#131b38" stroke="#818cf8" stroke-width="2.5"/>
+                            <text y="-34" text-anchor="middle" fill="#fff" font-size="11" font-weight="800">EDGE-GW-01</text>
+                            <text y="4" text-anchor="middle" fill="#818cf8" font-size="10" font-family="monospace">10.42.0.1</text>
+                            <text y="40" text-anchor="middle" fill="#38bdf8" font-size="8.5" font-weight="700">AICG GATEWAY</text>
+                        </g>
+
+                        <!-- Node: PLC SINK / SCADA -->
+                        <g class="mimic-node" transform="translate(580, 110)">
+                            <circle r="20" fill="#08201a" stroke="#10b981" stroke-width="2"/>
+                            <text y="-26" text-anchor="middle" fill="#94a3b8" font-size="9" font-weight="700">PLC-SINK</text>
+                            <text y="4" text-anchor="middle" fill="#10b981" font-size="9" font-family="monospace">10.42.0.10</text>
+                            <text y="30" text-anchor="middle" fill="#10b981" font-size="8">SCADA / OT</text>
+                        </g>
+
+                        <!-- Node: ATK-01 (Controlled Attacker) -->
+                        <g class="mimic-node" id="nodeAttacker" transform="translate(220, 20)">
+                            <circle id="atkCircle" r="16" fill="#200d14" stroke="#64748b" stroke-width="1.5"/>
+                            <text y="-22" text-anchor="middle" fill="#f43f5e" font-size="9" font-weight="800">ATK-01 (LAB)</text>
+                            <text y="4" text-anchor="middle" fill="#94a3b8" font-size="8.5" font-family="monospace">10.42.0.250</text>
+                            <text id="atkStatusText" y="26" text-anchor="middle" fill="#64748b" font-size="7.5">IDLE</text>
+                        </g>
+                    </g>
+                </svg>
+            </div>
+
+            <div class="mimic-legend">
+                <div class="mimic-legend-items">
+                    <span class="node-indicator"><span class="node-dot dot-sensor"></span> Authorized Sensors</span>
+                    <span class="node-indicator"><span class="node-dot dot-gateway"></span> Gateway Core</span>
+                    <span class="node-indicator"><span class="node-dot dot-plc"></span> OT PLC Sink</span>
+                    <span class="node-indicator"><span class="node-dot dot-atk"></span> Lab Attacker</span>
+                </div>
+                <span id="topologyLinkSummary" style="font-size: 9px; color: var(--cyan);">Declarative lab graph • In-process simulation only • No external packets transmitted</span>
+            </div>
+
+            <!-- Hidden compatibility containers -->
+            <div style="display:none;" id="topologySensors"></div>
+            <div style="display:none;" id="topologyGateway"></div>
+            <div style="display:none;" id="topologyServer"></div>
+            <div style="display:none;" id="topologyAttackNode"></div>
+        </div>
+
+        <!-- Right: Protocol Mix Circular / Donut Chart -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title-group">
+                    <div class="panel-title">
+                        <span>PROTOCOL MIX • OT / IIoT TRAFFIC</span>
+                    </div>
+                    <div class="panel-subtitle">
+                        Observed packet distribution across OT cell protocols
+                    </div>
+                </div>
+                <div class="panel-badge">DIVERSIFIED</div>
+            </div>
+
+            <div class="donut-stage-wrap">
+                <div class="donut-chart-box">
+                    <canvas id="protocolDonutChart"></canvas>
+                    <div class="donut-center-label">
+                        <div class="donut-center-val" id="donutPrimaryProto">UDP</div>
+                        <div class="donut-center-sub" id="donutPrimaryPct">60%</div>
+                    </div>
+                </div>
+
+                <div class="protocol-pills-list" id="protocolPillsList">
+                    <div class="proto-pill">
+                        <div class="proto-pill-left">
+                            <span class="proto-color-indicator" style="background: #38bdf8;"></span>
+                            <span>UDP (CoAP/Floods)</span>
+                        </div>
+                        <div class="proto-pill-right" id="protoCountUDP">58%</div>
+                    </div>
+                    <div class="proto-pill">
+                        <div class="proto-pill-left">
+                            <span class="proto-color-indicator" style="background: #818cf8;"></span>
+                            <span>TCP (SYN/Modbus)</span>
+                        </div>
+                        <div class="proto-pill-right" id="protoCountTCP">22%</div>
+                    </div>
+                    <div class="proto-pill">
+                        <div class="proto-pill-left">
+                            <span class="proto-color-indicator" style="background: #f43f5e;"></span>
+                            <span>ICMP / ICMPv6 (RPL)</span>
+                        </div>
+                        <div class="proto-pill-right" id="protoCountICMP">12%</div>
+                    </div>
+                    <div class="proto-pill">
+                        <div class="proto-pill-left">
+                            <span class="proto-color-indicator" style="background: #10b981;"></span>
+                            <span>MQTT / MQTT-SN</span>
+                        </div>
+                        <div class="proto-pill-right" id="protoCountMQTT">8%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- 5. ENERGY VS BASELINE + DETECTION EVIDENCE (XAI) -->
+    <!-- ===================================================== -->
+    <section class="two-col-grid" id="sec-energy">
+
+        <!-- Column 1: Energy vs Baseline (Cause) -->
+        <div class="panel" id="energy-context-section">
+            <div class="panel-header">
+                <div class="panel-title-group">
+                    <div class="panel-title">
+                        <span>ENERGY VS BASELINE (MODELLED TELEMETRY)</span>
+                    </div>
+                    <div class="panel-subtitle">
+                        Modelled hardware power dissipation &amp; concurrent RF activity (Derived software model)
+                    </div>
+                </div>
+                <div class="panel-badge">MODELLED TELEMETRY</div>
+            </div>
+
+            <div class="causal-chain-bar">
+                <span class="chain-node">Traffic Activity</span>
+                <span class="chain-arrow">→</span>
+                <span class="chain-node">Packet/Byte Rate</span>
+                <span class="chain-arrow">→</span>
+                <span class="chain-node">Radio TX/RX</span>
+                <span class="chain-arrow">→</span>
+                <span class="chain-node">CPU Activity</span>
+                <span class="chain-arrow">→</span>
+                <span class="chain-node">Modelled Power</span>
+                <span class="chain-arrow">→</span>
+                <span class="chain-node">Baseline Deviation</span>
+            </div>
+
+            <div class="energy-meters-stack">
+                <div class="energy-headline-row">
+                    <div class="energy-stat">
+                        <span>CURRENT</span>
+                        <strong id="energyRate">55.0</strong> <small style="font-size: 9px; color: var(--text-muted);">mW</small>
+                    </div>
+                    <div class="energy-stat">
+                        <span>BASELINE</span>
+                        <strong id="energyBaseline">55.0</strong> <small style="font-size: 9px; color: var(--text-muted);">mW</small>
+                    </div>
+                    <div class="energy-stat deviation" id="energyDevStat">
+                        <span>DEVIATION</span>
+                        <strong id="energyDeviation">+0.0%</strong>
+                    </div>
+                </div>
+
+                <div class="energy-bar-group">
+                    <div class="bar-header">
+                        <span>TX Radio Power</span>
+                        <span id="energyTxVal">12.0%</span>
+                    </div>
+                    <div class="bar-track">
+                        <div class="bar-fill tx" id="barEnergyTx" style="width: 12%;"></div>
+                    </div>
+                </div>
+
+                <div class="energy-bar-group">
+                    <div class="bar-header">
+                        <span>RX Radio Power</span>
+                        <span id="energyRxVal">18.0%</span>
+                    </div>
+                    <div class="bar-track">
+                        <div class="bar-fill rx" id="barEnergyRx" style="width: 18%;"></div>
+                    </div>
+                </div>
+
+                <div class="energy-bar-group">
+                    <div class="bar-header">
+                        <span>CPU Dissipation</span>
+                        <span id="energyCpuVal">15.0%</span>
+                    </div>
+                    <div class="bar-track">
+                        <div class="bar-fill cpu" id="barEnergyCpu" style="width: 15%;"></div>
+                    </div>
+                </div>
+
+                <div class="energy-cause-box">
+                    <span>IDENTIFIED CAUSE:</span>
+                    <p id="energyCause">MODELLED: baseline sensor activity (idle power state)</p>
+                </div>
+
+                <div class="energy-disclaimer">
+                    * Modelled / Derived software telemetry. Energy is a consequence of radio/CPU activity; correlation does not prove an attack alone.
+                </div>
+            </div>
+
+            <!-- Hidden compatibility tags -->
+            <div style="display:none;" id="energyConsumed"></div>
+            <div style="display:none;" id="energyTable"></div>
+        </div>
+
+        <!-- Column 2: Detection Analysis & Evidence (XAI) -->
+        <div class="panel" id="explainability-section">
+            <div class="panel-header">
+                <div class="panel-title-group">
+                    <div class="panel-title">
+                        <span>DETECTION ANALYSIS &amp; EVIDENCE (XAI)</span>
+                    </div>
+                    <div class="panel-subtitle">
+                        AI/ML inference features and classification evidence
+                    </div>
+                </div>
+                <div class="panel-badge" id="explainabilityStatus">OBSERVED</div>
+            </div>
+
+            <div class="detection-details-table">
+                <div class="detail-row">
+                    <span class="detail-label">PATTERN</span>
+                    <span class="detail-val" id="detPatternVal">NORMAL_RHYTHM</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">PROTOCOL</span>
+                    <span class="detail-val" id="detProtocolVal">UDP (CoAP)</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">SOURCE VECTOR</span>
+                    <span class="detail-val" id="detSourceVal">10.42.0.11 → 10.42.0.1</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">INTENSITY</span>
+                    <span class="detail-val" id="detIntensityVal">LEVEL 1 (NORMAL)</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">ANOMALY SCORE</span>
+                    <span class="detail-val safe" id="detAnomalyScore">0.05 (BENIGN)</span>
+                </div>
+
+                <div class="evidence-list-box">
+                    <div class="evidence-list-title">Observed Explainability Evidence:</div>
+                    <div id="evidenceItemsContainer">
+                        <div class="evidence-item">Packet rate conforms to baseline (20.0 pps nominal).</div>
+                        <div class="evidence-item">Source identity matches authenticated sensor registry.</div>
+                        <div class="evidence-item">No protocol ratio or byte spike detected.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 8px; font-size: 9.5px; color: var(--text-muted);">
+                Explainability derived from deterministic feature thresholds, Isolation Forest scores, and Random Forest split evidence.
+            </div>
+
+            <!-- Hidden compatibility tags -->
+            <div style="display:none;" id="explainabilityStatusBanner"></div>
+            <div style="display:none;" id="normalBar"></div>
+            <div style="display:none;" id="ddosBar"></div>
+            <div style="display:none;" id="normalProbability"></div>
+            <div style="display:none;" id="ddosProbabilityDetail"></div>
+            <div style="display:none;" id="securityActionDetail"></div>
+            <div style="display:none;" id="mitigationActionDetail"></div>
+            <div style="display:none;" id="mitigationReason"></div>
+        </div>
+
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- 6. IAM (ZERO TRUST) & IIoT PROTOCOL STACK -->
+    <!-- ===================================================== -->
+    <section class="two-col-grid" id="sec-iam">
+
+        <!-- Column 1: Zero-Trust IAM & Simulated MFA -->
+        <div class="panel" id="iam-context-section">
+            <div class="panel-header">
+                <div class="panel-title-group">
+                    <div class="panel-title">
+                        <span>ZERO-TRUST IAM &amp; SIMULATED MFA</span>
+                    </div>
+                    <div class="panel-subtitle">
+                        Zero-Trust policy: Authenticate → Authorize → Evaluate Trust (Score &ge; 40.0) → Continuously Re-evaluate
+                    </div>
+                </div>
+                <div class="panel-badge" id="iamIdentityState">GOVERNED</div>
+            </div>
+
+            <!-- Zero Trust Decision Flow Bar -->
+            <div class="zt-decision-flow-bar">
+                <span class="zt-step">IDENTITY</span>
+                <span class="zt-arrow">&rarr;</span>
+                <span class="zt-step">AUTHENTICATE</span>
+                <span class="zt-arrow">&rarr;</span>
+                <span class="zt-step">SIMULATED MFA</span>
+                <span class="zt-arrow">&rarr;</span>
+                <span class="zt-step">AUTHORIZE</span>
+                <span class="zt-arrow">&rarr;</span>
+                <span class="zt-step">EVALUATE TRUST</span>
+                <span class="zt-arrow">&rarr;</span>
+                <span class="zt-step zt-final">ENFORCE &amp; RE-EVALUATE</span>
+            </div>
+
+            <div class="zt-posture-chips">
+                <span class="zt-chip">Identity: <strong>VERIFIED</strong></span>
+                <span class="zt-chip">MFA: <strong>SIMULATED</strong></span>
+                <span class="zt-chip">Access: <strong>LEAST PRIVILEGE</strong></span>
+                <span class="zt-chip">Trust Policy: <strong>SCORE &ge; 40.0</strong></span>
+                <span class="zt-chip">Posture: <strong>CONTINUOUS</strong></span>
+            </div>
+
+            <div class="table-responsive" style="max-height: 220px; overflow-y: auto;">
+                <table class="iam-table-compact">
+                    <thead>
+                        <tr>
+                            <th>IDENTITY</th>
+                            <th>ROLE</th>
+                            <th>AUTH STATUS</th>
+                            <th>SIMULATED MFA</th>
+                            <th>ACCESS DECISION</th>
+                            <th>TRUST SCORE</th>
+                        </tr>
+                    </thead>
+                    <tbody id="iamDeviceList">
+                        <tr>
+                            <td><strong>SENSOR-01</strong></td>
+                            <td>Sensor</td>
+                            <td><span class="iam-badge iam-allow">VERIFIED</span></td>
+                            <td><span class="iam-badge iam-allow">NOT REQUIRED</span></td>
+                            <td><span class="iam-badge iam-allow">ALLOW</span></td>
+                            <td><strong style="color: var(--green);">100.0</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>SENSOR-GROUP-A</strong></td>
+                            <td>Cluster</td>
+                            <td><span class="iam-badge iam-allow">VERIFIED</span></td>
+                            <td><span class="iam-badge iam-allow">NOT REQUIRED</span></td>
+                            <td><span class="iam-badge iam-allow">ALLOW</span></td>
+                            <td><strong style="color: var(--green);">100.0</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>operator</strong></td>
+                            <td>Operator</td>
+                            <td><span class="iam-badge iam-allow">VERIFIED</span></td>
+                            <td><span class="iam-badge iam-allow">VERIFIED</span></td>
+                            <td><span class="iam-badge iam-allow">ALLOW</span></td>
+                            <td><strong style="color: var(--green);">100.0</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>ATK-01</strong></td>
+                            <td>Untrusted</td>
+                            <td><span class="iam-badge iam-deny">UNVERIFIED</span></td>
+                            <td><span class="iam-badge iam-deny">FAILED</span></td>
+                            <td><span class="iam-badge iam-deny">DENIED</span></td>
+                            <td><strong id="atkTrustScoreVal" style="color: var(--red);">35.0</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="margin-top: 8px; font-size: 9.5px; color: var(--text-muted); line-height: 1.4;">
+                <strong>Zero-Trust Architecture:</strong> AUTH reflects local device registry lookup. MFA is simulated per identity role. ACCESS reflects policy grant/deny. Dynamic trust reputation is continuously re-evaluated (-20 on attack, -15 auth failure, +3 on verified normal recovery; 0..100).
+            </div>
+
+            <!-- Hidden compatibility tags -->
+            <div style="display:none;" id="iamObservedSources"></div>
+            <div style="display:none;" id="iamKnownDevices"></div>
+            <div style="display:none;" id="iamUnknownDevices"></div>
+        </div>
+
+        <!-- Column 2: IIoT Protocol Stack (Corrected 5-Layer Hierarchy) -->
+        <div class="panel" id="sec-protocol-stack">
+            <div class="panel-header">
+                <div class="panel-title-group">
+                    <div class="panel-title">
+                        <span>IIoT PROTOCOL STACK</span>
+                    </div>
+                    <div class="panel-subtitle">
+                        Industry 4.0 / OT embedded communications context (RPL routing within Network layer)
+                    </div>
+                </div>
+                <div class="panel-badge">5-LAYER OT HIERARCHY</div>
+            </div>
+
+            <div class="stack-table">
+                <div class="stack-layer active-ot">
+                    <span class="stack-name">APPLICATION</span>
+                    <span class="stack-proto">CoAP / MQTT-SN / Modbus TCP</span>
+                    <span class="stack-rfc">RFC 7252 / 1883 / Modbus TCP</span>
+                </div>
+                <div class="stack-layer active-ot">
+                    <span class="stack-name">TRANSPORT</span>
+                    <span class="stack-proto">UDP / TCP Dual-Stack</span>
+                    <span class="stack-rfc">RFC 768 / 793</span>
+                </div>
+                <div class="stack-layer active-ot">
+                    <span class="stack-name">NETWORK</span>
+                    <span class="stack-proto">IPv6 / 6LoWPAN &bull; Routing: RPL</span>
+                    <span class="stack-rfc">RFC 6282 / RFC 6550</span>
+                </div>
+                <div class="stack-layer">
+                    <span class="stack-name">DATA LINK</span>
+                    <span class="stack-proto">IEEE 802.15.4 MAC (CSMA/CA)</span>
+                    <span class="stack-rfc">802.15.4e TSCH</span>
+                </div>
+                <div class="stack-layer">
+                    <span class="stack-name">PHYSICAL</span>
+                    <span class="stack-proto">IEEE 802.15.4 2.4 GHz Modelled PHY</span>
+                    <span class="stack-rfc">250 kbps DSSS</span>
+                </div>
+            </div>
+
+            <div style="margin-top: 8px; font-size: 9.5px; color: var(--text-muted);">
+                RPL distance-vector routing is formally embedded in the network layer for Low-Power and Lossy Networks (LLNs).
+            </div>
+        </div>
+
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- 7. INCIDENT LIFECYCLE & AUTONOMOUS RESPONSE -->
+    <!-- ===================================================== -->
+    <section class="panel" id="sec-lifecycle">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <div class="panel-title">
+                    <span>INCIDENT LIFECYCLE &amp; AUTONOMOUS RESPONSE</span>
+                </div>
+                <div class="panel-subtitle">
+                    Correlated campaign state machine: DETECTED → ANALYZING → RESPONDING → CONTAINED → RECOVERING → RESOLVED → CLOSED
+                </div>
+            </div>
+            <div class="panel-badge" id="lifecycleState">NORMAL</div>
+        </div>
+
+        <div class="lifecycle-meta-bar">
+            <div>
+                <span class="meta-label">ACTIVE INCIDENT:</span>
+                <strong id="activeIncId" style="font-family: var(--font-mono); color: var(--cyan); margin-left: 4px;">NONE (BASELINE)</strong>
+            </div>
+            <div>
+                <span class="meta-label">STAGE:</span>
+                <strong id="lifecycleStage" style="color: var(--text-primary); margin-left: 4px;">BASELINE OBSERVATION</strong>
+            </div>
+            <div>
+                <span class="meta-label">RECOVERY STATE:</span>
+                <span id="lifecycleRecovery" style="font-size: 10px; font-weight: 700; color: var(--green); margin-left: 4px;">MONITORING</span>
+            </div>
+        </div>
+
+        <!-- Horizontal 7-Step Stepper -->
+        <div class="lifecycle-stepper-wrap">
+            <div class="lifecycle-stepper">
+                <div class="step-node" id="stepNodeDetected">
+                    <div class="step-circle">1</div>
+                    <div class="step-label">Detected</div>
+                </div>
+                <div class="step-node" id="stepNodeAnalyzing">
+                    <div class="step-circle">2</div>
+                    <div class="step-label">Analyzing</div>
+                </div>
+                <div class="step-node" id="stepNodeResponding">
+                    <div class="step-circle">3</div>
+                    <div class="step-label">Responding</div>
+                </div>
+                <div class="step-node" id="stepNodeContained">
+                    <div class="step-circle">4</div>
+                    <div class="step-label">Contained</div>
+                </div>
+                <div class="step-node" id="stepNodeRecovering">
+                    <div class="step-circle">5</div>
+                    <div class="step-label">Recovering</div>
+                </div>
+                <div class="step-node" id="stepNodeResolved">
+                    <div class="step-circle">6</div>
+                    <div class="step-label">Resolved</div>
+                </div>
+                <div class="step-node" id="stepNodeClosed">
+                    <div class="step-circle">7</div>
+                    <div class="step-label">Closed</div>
+                </div>
+            </div>
+            <div id="lifecycleNormalBadge" class="lifecycle-normal-indicator active">
+                ● HEALTHY BASELINE • SYSTEM WITHIN NORMAL LIMITS • 0 OPEN INCIDENTS
+            </div>
+        </div>
+
+        <!-- Autonomous Pipeline Flow & Boundary Display -->
+        <div class="auto-pipeline-card">
+            <div class="pipeline-header-row">
+                <span class="pipeline-title">AUTONOMOUS MITIGATION PIPELINE &amp; OPERATIONAL BOUNDARIES</span>
+                <span class="pipeline-badge-mode" id="pipelineModeBadge">MODE: AUTO (DRY_RUN)</span>
+            </div>
+
+            <div class="pipeline-flow-steps">
+                <span class="flow-step auto-done">✓ Detection</span>
+                <span class="flow-arrow">&rarr;</span>
+                <span class="flow-step auto-done">✓ Policy Eval</span>
+                <span class="flow-arrow">&rarr;</span>
+                <span class="flow-step auto-done">✓ Response Decision</span>
+                <span class="flow-arrow">&rarr;</span>
+                <span class="flow-step auto-done">✓ Simulated Containment</span>
+                <span class="flow-arrow">&rarr;</span>
+                <span class="flow-step auto-done">✓ Recovery Verification</span>
+                <span class="flow-arrow">&rarr;</span>
+                <span class="flow-step auto-done">✓ Resolution Verification</span>
+                <span class="flow-arrow">&rarr;</span>
+                <span class="flow-step manual-req">○ Operator Audit Closure</span>
+            </div>
+
+            <div class="pipeline-boundary-checklist">
+                <span class="chk-item">✓ <strong>Detection:</strong> Automated AI hybrid inference (&lt; 38ms)</span>
+                <span class="chk-item">✓ <strong>Policy:</strong> Automated hybrid rule + anomaly response</span>
+                <span class="chk-item">✓ <strong>Mitigation:</strong> Automated in-process containment (DRY_RUN)</span>
+                <span class="chk-item">✓ <strong>Recovery:</strong> Automated streak verification (Streak &ge; 3)</span>
+                <span class="chk-item">✓ <strong>Resolution:</strong> Automated sustained recovery (Streak &ge; 5)</span>
+                <span class="chk-item manual">○ <strong>Closure:</strong> Manual operator signoff required for audit durability</span>
+            </div>
+        </div>
+
+        <!-- Response Status & Controls -->
+        <div class="response-controls-row">
+            <div class="response-status-card">
+                <div class="status-pill-grid">
+                    <div class="status-pill-item">
+                        <span>POLICY MODE:</span>
+                        <strong id="respPolicyMode">AUTO (DRY_RUN)</strong>
+                    </div>
+                    <div class="status-pill-item">
+                        <span>ACTIVE ACTION:</span>
+                        <strong id="respActiveAction">NONE</strong>
+                    </div>
+                    <div class="status-pill-item">
+                        <span>ACTION REASON:</span>
+                        <strong id="respActionReason" style="color: var(--text-secondary); font-weight: 500;">Baseline normal traffic envelope</strong>
+                    </div>
+                    <div class="status-pill-item">
+                        <span>CONFIDENCE / RISK:</span>
+                        <strong id="respActionConfidence">0.0% (NORMAL)</strong>
+                    </div>
+                    <div class="status-pill-item">
+                        <span>EXECUTION MODE:</span>
+                        <strong>IN-PROCESS SIMULATION</strong>
+                    </div>
+                    <div class="status-pill-item">
+                        <span>ENFORCEMENT:</span>
+                        <strong style="color: var(--cyan);">DRY_RUN / HOST FIREWALL UNTOUCHED</strong>
+                    </div>
+                    <div class="status-pill-item">
+                        <span>WHITELIST:</span>
+                        <strong>SENSOR-01, SENSOR-GROUP-A</strong>
+                    </div>
+                    <div class="status-pill-item">
+                        <span>QUARANTINE:</span>
+                        <strong id="respQuarantine">ATK-01 (10.42.0.250)</strong>
+                    </div>
+                </div>
+                <div class="safety-lock-note">
+                    🔒 <strong>Safety Guarantee:</strong> Zero host route changes, zero iptables/nftables modifications. All mitigation logic is executed entirely within Python runtime state.
+                </div>
+            </div>
+
+            <div class="operator-actions-box">
+                <div class="mode-toggle-group">
+                    <button id="btnResponseMode" class="btn-mode-toggle active" type="button" onclick="toggleResponseMode()">
+                        <span>POLICY MODE:</span>
+                        <strong id="btnResponseModeText">AUTO: ON</strong>
+                    </button>
+                    <div id="incidentActionControls"></div>
+                </div>
+                <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 6px;">Operator Manual Overrides (Dry-Run Simulation):</div>
+                <div class="sim-actions-grid">
+                    <button class="btn-sim-action" type="button" onclick="executeManualAction('BLOCK')">Block</button>
+                    <button class="btn-sim-action" type="button" onclick="executeManualAction('RATE_LIMIT')">Rate Limit</button>
+                    <button class="btn-sim-action" type="button" onclick="executeManualAction('ISOLATE')">Isolate</button>
+                    <button class="btn-sim-action btn-recover" type="button" onclick="executeManualAction('RECOVER')">Recover</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hidden compatibility tags -->
+        <div style="display:none;" id="lifecycleImplementation"></div>
+        <div style="display:none;" id="lifecycleEnforcement"></div>
+        <div style="display:none;" id="lifecycleWindowStart"></div>
+        <div style="display:none;" id="lifecycleStatusBanner"></div>
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- 8. DURABLE INCIDENT JOURNAL & AUDIT LOG -->
+    <!-- ===================================================== -->
+    <section class="panel" id="sec-incidents">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <div class="panel-title">
+                    <span>DURABLE INCIDENT JOURNAL &amp; AUDIT LOG</span>
+                </div>
+                <div class="panel-subtitle">
+                    Multi-window campaign correlation: Active Runtime vs Historical Audit Records • Simulated Provenance
+                </div>
+            </div>
+            <div class="panel-badge-group">
+                <span class="panel-badge threat-badge" id="badgeActiveIncidents">ACTIVE: <strong id="activeIncidentCount">0</strong></span>
+                <span class="panel-badge" id="badgeHistIncidents">HISTORICAL: <strong id="historicalIncidentCount">0</strong></span>
+                <span class="panel-badge">TOTAL: <strong id="incidentCount">0</strong></span>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="hmi-table">
+                <thead>
+                    <tr>
+                        <th>INCIDENT ID</th>
+                        <th>TIMESTAMP</th>
+                        <th>TARGET DEVICE</th>
+                        <th>ATTACK TYPE</th>
+                        <th>SEVERITY</th>
+                        <th>CONFIDENCE</th>
+                        <th>STATE / PROVENANCE</th>
+                        <th>RECOVERY</th>
+                        <th>ACTION</th>
+                        <th>OPERATOR</th>
+                    </tr>
+                </thead>
+                <tbody id="incidentsTable">
+                    <tr>
+                        <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 18px;">
+                            No active or historical incidents recorded in historian.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Export Toolbar -->
+        <div class="export-toolbar">
+            <div style="font-size: 10px; color: var(--text-muted);">
+                Evidence exports include cryptographic SHA-256 integrity metadata.
+            </div>
+            <div class="export-buttons-group">
+                <a href="/api/export/incidents.csv" download class="btn-export">📥 Export Incidents (CSV)</a>
+                <a href="/api/export/incidents.json" download class="btn-export">📥 Export Incidents (JSON)</a>
+                <a href="/api/export/actions.csv" download class="btn-export">📥 Export Actions (CSV)</a>
+            </div>
+        </div>
+
+        <!-- Sub-panel: Recent Security Threat Events -->
+        <div style="margin-top: 18px; border-top: 1px solid var(--border-subtle); padding-top: 14px;">
+            <div class="panel-header" style="margin-bottom: 8px;">
+                <div class="panel-title-group">
+                    <div class="panel-title" style="font-size: 11px;">
+                        <span>ANOMALY / ATTACK WINDOW EVENTS</span>
+                    </div>
+                    <div class="panel-subtitle">
+                        Classified high-rate telemetry windows recorded by gateway
+                    </div>
+                </div>
+                <div class="panel-badge">
+                    EVENTS: <span id="eventCount">0</span>
+                </div>
+            </div>
+
+            <div class="table-responsive" style="max-height: 220px; overflow-y: auto;">
+                <table class="hmi-table">
+                    <thead>
+                        <tr>
+                            <th>WINDOW START</th>
+                            <th>SOURCE IP</th>
+                            <th>DEST IP</th>
+                            <th>PACKETS/S</th>
+                            <th>PREDICTION</th>
+                            <th>DDoS PROB</th>
+                            <th>ACTION</th>
+                            <th>SEVERITY</th>
+                        </tr>
+                    </thead>
+                    <tbody id="eventsTable">
+                        <tr>
+                            <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 12px;">
+                                No threat events recorded yet.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- 9. NORMAL VS ATTACK ANALYTICAL COMPARISON -->
+    <!-- ===================================================== -->
+    <section class="panel" id="sec-analytics">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <div class="panel-title">
+                    <span>NORMAL VS ATTACK TRAFFIC COMPARATIVE ANALYTICS</span>
+                </div>
+                <div class="panel-subtitle">
+                    Comparative telemetry baseline versus observed attack exhaustion windows
+                </div>
+            </div>
+            <div class="panel-badge">ANALYTICAL BASELINE</div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="hmi-table">
+                <thead>
+                    <tr>
+                        <th>TELEMETRY METRIC</th>
+                        <th>NORMAL RHYTHM (BASELINE)</th>
+                        <th>ATTACK WINDOW (EXHAUSTION)</th>
+                        <th>OPERATIONAL SIGNIFICANCE</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Packet Rate</strong></td>
+                        <td style="color: var(--green);">14 – 20 pps</td>
+                        <td style="color: var(--red);">250 – 800+ pps</td>
+                        <td>Network exhaustion &amp; buffer starvation of edge nodes</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Byte Rate</strong></td>
+                        <td style="color: var(--green);">3.5 – 5.0 KB/s</td>
+                        <td style="color: var(--red);">40 – 120+ KB/s</td>
+                        <td>Radio / channel saturation on 802.15.4 250 kbps PHY</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Modelled Energy</strong></td>
+                        <td style="color: var(--green);">55.0 – 58.0 mW</td>
+                        <td style="color: var(--red);">160 – 350+ mW</td>
+                        <td>Concurrent transmitter dissipation and edge CPU load surge</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Unique Sources</strong></td>
+                        <td style="color: var(--green);">1 – 2 authorized nodes</td>
+                        <td style="color: var(--red);">6 – 16 spoofed sources</td>
+                        <td>Multi-source expansion footprint typical of distributed attack</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Identity Trust Score</strong></td>
+                        <td style="color: var(--green);">100.0 (Trusted)</td>
+                        <td style="color: var(--red);">0.0 – 15.0 (Distrusted)</td>
+                        <td>Automated trust decay triggers policy containment</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Incident State</strong></td>
+                        <td style="color: var(--green);">CLEAR (0 open)</td>
+                        <td style="color: var(--red);">CONTAINED (Quarantine)</td>
+                        <td>Automated correlation prevents alarm spam into SOC</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- 10. AI / ML MODEL ASSURANCE & CONFUSION MATRIX -->
+    <!-- ===================================================== -->
+    <section class="panel" id="sec-assurance">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <div class="panel-title">
+                    <span>AI / ML MODEL ASSURANCE &amp; EVALUATION EVIDENCE</span>
+                </div>
+                <div class="panel-subtitle">
+                    Stratified Campaign-Grouped Split (0% leakage) • Platt-Calibrated Probabilities • Scenario Held-Out Test
+                </div>
+            </div>
+            <div class="panel-badge" style="color: var(--cyan); border-color: rgba(56, 189, 248, 0.4);">
+                HELD-OUT SYNTHETIC LAB EVALUATION
+            </div>
+        </div>
+
+        <!-- Academically Defensible Evaluation Context Disclosure -->
+        <div class="eval-context-banner">
+            <span class="context-pill">HELD-OUT SYNTHETIC LAB EVALUATION</span>
+            <span>Scenario-separated synthetic evaluation dataset (<code>synthetic_lab_v2.csv</code>) — Not a real-world production accuracy claim. Demonstrates discrimination on controlled lab benchmarks only.</span>
+        </div>
+
+        <!-- 8 Metric Boxes -->
+        <div class="metrics-summary-grid">
+            <div class="metric-box">
+                <span>Model Architecture</span>
+                <strong id="metricModelName" style="font-size: 11.5px;">RF + Isolation Forest</strong>
+                <small>240 trees / 200 IF trees</small>
+            </div>
+            <div class="metric-box">
+                <span>Test F1-Score</span>
+                <strong id="metricF1">100.0%</strong>
+                <small style="color: var(--green);">Grouped Test Split</small>
+            </div>
+            <div class="metric-box">
+                <span>Precision</span>
+                <strong id="metricPrecision">100.0%</strong>
+                <small>Attack Class</small>
+            </div>
+            <div class="metric-box">
+                <span>Recall</span>
+                <strong id="metricRecall">100.0%</strong>
+                <small>Attack Class</small>
+            </div>
+            <div class="metric-box">
+                <span>False Positive Rate</span>
+                <strong id="metricFPR" style="color: var(--cyan);">0.0%</strong>
+                <small>0% on normal groups</small>
+            </div>
+            <div class="metric-box">
+                <span>ROC-AUC</span>
+                <strong id="metricAUC">1.000</strong>
+                <small>Discrimination</small>
+            </div>
+            <div class="metric-box">
+                <span>Platt Calibration Brier</span>
+                <strong id="metricBrier" style="color: var(--green);">0.00013</strong>
+                <small>Calibrated Reliability</small>
+            </div>
+            <div class="metric-box">
+                <span>Scenario Held-Out</span>
+                <strong id="metricHeldOut" style="color: var(--amber);">100.0% F1</strong>
+                <small>mixed_vector withheld</small>
+            </div>
+        </div>
+
+        <!-- 2x2 Confusion Matrix Visualization -->
+        <div class="confusion-matrix-section">
+            <div class="cm-header">
+                <span>CONFUSION MATRIX VISUALIZATION (TEST SPLIT: 320 WINDOWS)</span>
+                <small>Evaluated against held-out campaigns without data leakage</small>
+            </div>
+
+            <div class="cm-table-wrap">
+                <table class="cm-table">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" class="cm-corner">ACTUAL CLASS</th>
+                            <th colspan="2" class="cm-group-header">PREDICTED CLASS</th>
+                            <th rowspan="2" class="cm-corner">TOTAL</th>
+                        </tr>
+                        <tr>
+                            <th class="cm-col-head">PREDICTED NORMAL</th>
+                            <th class="cm-col-head">PREDICTED ATTACK</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <th class="cm-row-head">ACTUAL NORMAL</th>
+                            <td class="cm-cell cm-tn">
+                                <div class="cm-cell-title">TRUE NEGATIVE (TN)</div>
+                                <div class="cm-cell-value" id="cmTN">80</div>
+                                <div class="cm-cell-pct">100.0% Correct Normal</div>
+                            </td>
+                            <td class="cm-cell cm-fp">
+                                <div class="cm-cell-title">FALSE POSITIVE (FP)</div>
+                                <div class="cm-cell-value" id="cmFP">0</div>
+                                <div class="cm-cell-pct">0.0% False Alarm</div>
+                            </td>
+                            <td class="cm-cell-sum">80</td>
+                        </tr>
+                        <tr>
+                            <th class="cm-row-head">ACTUAL ATTACK</th>
+                            <td class="cm-cell cm-fn">
+                                <div class="cm-cell-title">FALSE NEGATIVE (FN)</div>
+                                <div class="cm-cell-value" id="cmFN">0</div>
+                                <div class="cm-cell-pct">0.0% Missed Attack</div>
+                            </td>
+                            <td class="cm-cell cm-tp">
+                                <div class="cm-cell-title">TRUE POSITIVE (TP)</div>
+                                <div class="cm-cell-value" id="cmTP">240</div>
+                                <div class="cm-cell-pct">100.0% Detection Rate</div>
+                            </td>
+                            <td class="cm-cell-sum">240</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="font-size: 9.5px; color: var(--text-muted); margin-top: 8px;">
+                Confusion Matrix Source: <code>reports/confusion_matrix.csv</code> via <code>GET /api/model-assurance</code>. Context: Controlled synthetic held-out test split (320 windows, 0% campaign leakage).
+            </div>
+        </div>
+
+        <div class="export-toolbar" style="margin-top: 14px;">
+            <div style="font-size: 10px; color: var(--text-muted);">
+                Evaluated on grouped NS-3 &amp; Cooja synthetic training artifacts without data leakage.
+            </div>
+            <div class="export-buttons-group">
+                <a href="/api/export/telemetry.csv" download class="btn-export">📥 Export Telemetry (CSV)</a>
+                <a href="/api/export/telemetry.json" download class="btn-export">📥 Export Telemetry (JSON)</a>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- 11. RAW SAMPLE FLOWS -->
+    <!-- ===================================================== -->
+    <section class="panel" id="sec-flows">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <div class="panel-title">
+                    <span>RAW SAMPLE FLOWS • INSPECTED PACKET WINDOWS</span>
+                </div>
+                <div class="panel-subtitle">
+                    Recent network window flows dynamically ingested by edge gateway runtime
+                </div>
+            </div>
+            <div class="panel-badge">PASSIVE MONITOR / LIVE STREAM</div>
+        </div>
+
+        <div class="table-responsive" style="max-height: 280px; overflow-y: auto;">
+            <table class="hmi-table">
+                <thead>
+                    <tr>
+                        <th>WINDOW TIME</th>
+                        <th>SRC IP</th>
+                        <th>DST IP</th>
+                        <th>PROTO</th>
+                        <th>RATE (PPS)</th>
+                        <th>AVG SIZE</th>
+                        <th>VERDICT</th>
+                        <th>PROBABILITY</th>
+                        <th>RESPONSE</th>
+                        <th>PROVENANCE</th>
+                    </tr>
+                </thead>
+                <tbody id="sampleFlowsTableBody">
+                    <tr>
+                        <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 14px;">
+                            Ingesting live telemetry stream...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+
+    <!-- ===================================================== -->
+    <!-- ADMINISTRATIVE SECURITY LAYER CONSOLE -->
+    <!-- ===================================================== -->
+
+    <!-- Section A: Administrative Security Overview -->
+    <section class="panel" id="sec-admin-overview">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <div class="panel-title">
+                    <span>ADMINISTRATIVE SECURITY OVERVIEW</span>
+                    <span class="tag" style="background: rgba(56,189,248,0.1); color: var(--cyan); border-color: rgba(56,189,248,0.4);">AICG SOC</span>
+                </div>
+                <div class="panel-subtitle">
+                    Integrated Administrative Layer • Identity, Role-Based Access Control &amp; Threat Governance
+                </div>
+            </div>
+            <div class="panel-badge-group">
+                <span class="panel-badge" style="border-color: rgba(56, 189, 248, 0.4); color: var(--cyan);">LOCAL LAB IDENTITY</span>
+                <span class="panel-badge" style="border-color: rgba(245, 158, 11, 0.4); color: var(--amber);">SIMULATED MFA</span>
+                <span class="panel-badge" style="border-color: rgba(16, 185, 129, 0.4); color: var(--green);">DRY_RUN NON-ENFORCING</span>
+            </div>
+        </div>
+
+        <!-- 4 Key Administrative Cards -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 14px;">
+            <!-- Card 1: Auth & Role -->
+            <div class="kpi-card" style="padding: 12px 14px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between;">
+                    <span>Session Identity</span>
+                    <span id="adminSessionStatusTag" class="tag" style="color: var(--green); border-color: rgba(16,185,129,0.3);">AUTHENTICATED</span>
+                </div>
+                <div style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px;">
+                    <span id="adminOverviewUser" style="font-size: 18px; font-weight: 700; font-family: var(--font-mono); color: var(--text-primary);">admin</span>
+                    <span id="adminOverviewRoleBadge" class="tag" style="background: rgba(56,189,248,0.15); color: var(--cyan); border-color: var(--cyan); font-weight: 700;">ADMIN</span>
+                </div>
+                <div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px; font-family: var(--font-mono);" id="adminOverviewLoginTime">
+                    MFA: SIMULATED VERIFIED
+                </div>
+            </div>
+
+            <!-- Card 2: Active Alerts -->
+            <div class="kpi-card" style="padding: 12px 14px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between;">
+                    <span>Security Alerts</span>
+                    <span id="adminOverviewUnackBadge" class="tag" style="color: var(--amber); border-color: rgba(245,158,11,0.3);">0 UNACK</span>
+                </div>
+                <div style="margin-top: 6px; display: flex; align-items: baseline; gap: 6px;">
+                    <span id="adminOverviewActiveAlerts" style="font-size: 22px; font-weight: 700; font-family: var(--font-mono); color: var(--text-primary);">0</span>
+                    <span style="font-size: 11px; color: var(--text-muted);">ACTIVE ALERTS</span>
+                </div>
+                <div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px;">
+                    Total logged alerts: <strong id="adminOverviewTotalAlerts">0</strong>
+                </div>
+            </div>
+
+            <!-- Card 3: Incidents & Campaign State -->
+            <div class="kpi-card" style="padding: 12px 14px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between;">
+                    <span>Active Incidents</span>
+                    <span id="adminOverviewCritBadge" class="tag" style="color: var(--red); border-color: rgba(244,63,94,0.3);">0 CRITICAL</span>
+                </div>
+                <div style="margin-top: 6px; display: flex; align-items: baseline; gap: 6px;">
+                    <span id="adminOverviewOpenIncidents" style="font-size: 22px; font-weight: 700; font-family: var(--font-mono); color: var(--text-primary);">0</span>
+                    <span style="font-size: 11px; color: var(--text-muted);">OPEN INCIDENTS</span>
+                </div>
+                <div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px;">
+                    Canonical detection pipeline linked
+                </div>
+            </div>
+
+            <!-- Card 4: Operating Posture -->
+            <div class="kpi-card" style="padding: 12px 14px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between;">
+                    <span>Enforcement Boundary</span>
+                    <span class="tag" style="color: var(--cyan); border-color: rgba(56,189,248,0.3);">DRY_RUN</span>
+                </div>
+                <div style="margin-top: 6px; font-size: 14px; font-weight: 700; font-family: var(--font-mono); color: var(--cyan);">
+                    NON-ENFORCING LAB
+                </div>
+                <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">
+                    Host firewall untouched • 0 pkts transmitted
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Audit Events Mini-Log -->
+        <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.5px;">Recent Administrative Audit Activity</span>
+                <a href="#sec-admin-audit" style="font-size: 11px; color: var(--cyan); text-decoration: none;">View Full Audit Log →</a>
+            </div>
+            <div class="table-responsive">
+                <table class="data-table" style="font-size: 11px;">
+                    <thead>
+                        <tr>
+                            <th>TIME (UTC)</th>
+                            <th>USER</th>
+                            <th>ROLE</th>
+                            <th>ACTION</th>
+                            <th>RESOURCE</th>
+                            <th>RESULT</th>
+                            <th>DETAILS</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminOverviewAuditTbody">
+                        <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 10px;">Loading audit logs...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Section B: Administrative Alert Center -->
+    <section class="panel" id="sec-admin-alerts">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <div class="panel-title">
+                    <span>ADMINISTRATIVE ALERT CENTER</span>
+                    <span class="tag" style="background: rgba(244,63,94,0.15); color: var(--red); border-color: rgba(244,63,94,0.4);">LIVE</span>
+                </div>
+                <div class="panel-subtitle">
+                    Automated Administrative Notifications Generated from Canonical Incident Pipeline • Deduplicated 1:1 Correlation
+                </div>
+            </div>
+            <div class="panel-badge-group">
+                <button type="button" class="btn-filter active" id="filterAlertsAll" onclick="filterAdminAlerts('ALL')">ALL (<span id="countAlertsAll">0</span>)</button>
+                <button type="button" class="btn-filter" id="filterAlertsUnack" onclick="filterAdminAlerts('UNACK')">UNACK (<span id="countAlertsUnack">0</span>)</button>
+                <button type="button" class="btn-filter" id="filterAlertsActive" onclick="filterAdminAlerts('ACTIVE')">ACTIVE (<span id="countAlertsActive">0</span>)</button>
+                <button type="button" class="btn-filter" id="filterAlertsResolved" onclick="filterAdminAlerts('RESOLVED')">RESOLVED (<span id="countAlertsResolved">0</span>)</button>
+                <a href="/api/export/alerts.csv" download="aegis-alerts.csv" class="btn-header-tool" id="btnExportAlertsCsv" title="Export Alerts as CSV" style="text-decoration:none;">📥 Export Alerts CSV</a>
+                <a href="/api/export/alerts.json" download="aegis-alerts.json" class="btn-header-tool" id="btnExportAlertsJson" title="Export Alerts as JSON" style="text-decoration:none;">📥 Export Alerts JSON</a>
+            </div>
+        </div>
+
+        <div class="table-responsive" style="margin-top: 6px;">
+            <table class="data-table" style="font-size: 11px;" id="adminAlertsTable">
+                <thead>
+                    <tr>
+                        <th>SEVERITY</th>
+                        <th>ALERT ID</th>
+                        <th>TIMESTAMP (UTC)</th>
+                        <th>ATTACK TYPE</th>
+                        <th>TARGET / DEVICE</th>
+                        <th>CONFIDENCE</th>
+                        <th>LIFECYCLE</th>
+                        <th>SIMULATED ACTION</th>
+                        <th>ACK STATUS</th>
+                        <th>OPERATIONS</th>
+                    </tr>
+                </thead>
+                <tbody id="adminAlertsTableBody">
+                    <tr>
+                        <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                            No active administrative alerts. Launch a scenario in the AICG Attack Simulator to generate alerts.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Section C: Users & Roles (Local Lab Identity Registry) -->
+    <section class="panel" id="sec-admin-users">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <div class="panel-title">
+                    <span>USERS &amp; ROLES • LOCAL LAB IDENTITY REGISTRY</span>
+                    <span class="tag" style="background: rgba(56,189,248,0.1); color: var(--cyan); border-color: rgba(56,189,248,0.4);">RBAC</span>
+                </div>
+                <div class="panel-subtitle">
+                    Server-Side Role-Based Access Control • Local Lab Operator &amp; Administrator Identities
+                </div>
+            </div>
+            <div class="panel-badge-group">
+                <button type="button" class="btn-header-tool" id="btnOpenAddUserModal" onclick="toggleAddUserForm()" style="color: var(--cyan); border-color: rgba(56,189,248,0.4);">
+                    + Add Lab User
+                </button>
+            </div>
+        </div>
+
+        <!-- Inline Add User Form (Admin Only, hidden by default) -->
+        <div id="addUserFormContainer" style="display: none; background: var(--bg-surface); border: 1px solid var(--border-medium); border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 12px;">
+            <div style="font-size: 11px; font-weight: 700; color: var(--cyan); text-transform: uppercase; margin-bottom: 10px;">
+                Create Local Laboratory User
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; align-items: end;">
+                <div>
+                    <label style="display: block; font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">USERNAME</label>
+                    <input type="text" id="newLabUsername" class="form-input" placeholder="e.g. auditor_01" style="padding: 6px 10px; font-size: 12px;">
+                </div>
+                <div>
+                    <label style="display: block; font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">PASSWORD</label>
+                    <input type="password" id="newLabPassword" class="form-input" placeholder="••••••••••••" style="padding: 6px 10px; font-size: 12px;">
+                </div>
+                <div>
+                    <label style="display: block; font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">ROLE</label>
+                    <select id="newLabRole" class="form-input" style="padding: 6px 10px; font-size: 12px;">
+                        <option value="OPERATOR">OPERATOR (Operational Access)</option>
+                        <option value="ADMIN">ADMIN (Full Console Privileges)</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn-sim-action btn-isolate" onclick="submitCreateUser()" style="padding: 6px 14px; font-size: 11px;">Save User</button>
+                    <button type="button" class="btn-sim-action" onclick="toggleAddUserForm()" style="padding: 6px 12px; font-size: 11px; background: var(--bg-card); color: var(--text-secondary); border-color: var(--border-subtle);">Cancel</button>
+                </div>
+            </div>
+            <div id="addUserMsg" style="font-size: 11px; margin-top: 8px; display: none;"></div>
+        </div>
+
+        <div id="operatorUserNotice" style="display: none; padding: 10px 14px; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 11px; color: #fef3c7;">
+            ℹ️ <strong>RBAC Policy Notice:</strong> You are authenticated as an <strong>OPERATOR</strong>. User management privileges (MANAGE_USERS) are restricted to <strong>ADMIN</strong>. Attempting modification calls will receive HTTP 403 Forbidden.
+        </div>
+
+        <div class="table-responsive">
+            <table class="data-table" style="font-size: 11px;">
+                <thead>
+                    <tr>
+                        <th>USER ID</th>
+                        <th>USERNAME</th>
+                        <th>ROLE</th>
+                        <th>ACCOUNT STATUS</th>
+                        <th>MFA POSTURE</th>
+                        <th>CREATED (UTC)</th>
+                        <th>LAST LOGIN (UTC)</th>
+                        <th>ACTIONS</th>
+                    </tr>
+                </thead>
+                <tbody id="adminUsersTableBody">
+                    <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 14px;">Loading user registry...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Section D: Administrative Audit Log -->
+    <section class="panel" id="sec-admin-audit">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <div class="panel-title">
+                    <span>ADMINISTRATIVE AUDIT LOG</span>
+                    <span class="tag" style="background: rgba(16,185,129,0.15); color: var(--green); border-color: rgba(16,185,129,0.4);">APPEND-ONLY</span>
+                </div>
+                <div class="panel-subtitle">
+                    Cryptographically Non-Rewriting Ledger of Privileged User, Alert &amp; Security State Actions • Passwords Redacted
+                </div>
+            </div>
+            <div class="panel-badge-group">
+                <span id="auditIntegrityBadge" class="tag" style="background: rgba(16,185,129,0.15); color: var(--green); border-color: rgba(16,185,129,0.4); font-size: 10px; font-family: var(--font-mono); display: inline-flex; align-items: center; gap: 4px;">LEDGER STATUS: VERIFYING...</span>
+                <input type="text" id="auditSearchInput" placeholder="Filter by action or user..." onkeyup="filterAuditTable()" style="background: var(--bg-input); border: 1px solid var(--border-subtle); color: var(--text-primary); border-radius: var(--radius-sm); padding: 4px 8px; font-size: 11px; font-family: var(--font-mono); width: 180px;">
+                <button type="button" class="btn-header-tool" onclick="refreshAuditLogs()" title="Refresh Audit Log">🔄 Refresh</button>
+                <a href="/api/export/audit.csv" download="aegis-audit.csv" class="btn-header-tool" id="btnExportAuditCsv" title="Export Audit Log as CSV" style="text-decoration:none;">📥 Export Audit CSV</a>
+                <a href="/api/export/audit.json" download="aegis-audit.json" class="btn-header-tool" id="btnExportAuditJson" title="Export Audit Log as JSON" style="text-decoration:none;">📥 Export Audit JSON</a>
+            </div>
+        </div>
+
+        <div id="operatorAuditNotice" style="display: none; padding: 10px 14px; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 11px; color: #fef3c7;">
+            ℹ️ <strong>RBAC Policy Notice:</strong> Full Administrative Audit Log viewing is restricted to <strong>ADMIN</strong>. Operator view is limited.
+        </div>
+
+        <div class="table-responsive">
+            <table class="data-table" style="font-size: 11px;">
+                <thead>
+                    <tr>
+                        <th>EVENT ID</th>
+                        <th>TIMESTAMP (UTC)</th>
+                        <th>OPERATOR</th>
+                        <th>ROLE</th>
+                        <th>ACTION</th>
+                        <th>RESOURCE</th>
+                        <th>RESULT</th>
+                        <th>DETAILS / CONTEXT</th>
+                    </tr>
+                </thead>
+                <tbody id="adminAuditTableBody">
+                    <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 14px;">Loading administrative audit records...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Section E: Security & Zero Trust Posture -->
+    <section class="panel" id="sec-admin-posture">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <div class="panel-title">
+                    <span>SECURITY &amp; ZERO-TRUST POSTURE</span>
+                    <span class="tag" style="background: rgba(99,102,241,0.15); color: var(--purple); border-color: rgba(99,102,241,0.4);">POLICY CORE</span>
+                </div>
+                <div class="panel-subtitle">
+                    End-to-End Zero-Trust Decision Chain: Identity → Authentication → MFA → Authorization → Dynamic Trust → Access Decision
+                </div>
+            </div>
+            <div class="panel-badge-group">
+                <span class="panel-badge" style="border-color: var(--cyan); color: var(--cyan);">BOUNDED REPUTATION: 0..100</span>
+                <span class="panel-badge" style="border-color: var(--amber); color: var(--amber);">SIMULATED MFA</span>
+            </div>
+        </div>
+
+        <!-- 6-Stage Zero-Trust Decision Chain -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 16px;">
+            <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px;">
+                <div style="font-size: 9px; color: var(--cyan); font-family: var(--font-mono); font-weight: 700;">STEP 1</div>
+                <div style="font-size: 11px; font-weight: 700; margin: 4px 0 2px;">IDENTITY</div>
+                <div style="font-size: 10px; color: var(--text-muted);">Local Lab Registry</div>
+                <div style="margin-top: 6px;"><span class="tag" style="font-size: 9px; color: var(--green); border-color: rgba(16,185,129,0.3);">KNOWN</span></div>
+            </div>
+
+            <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px;">
+                <div style="font-size: 9px; color: var(--cyan); font-family: var(--font-mono); font-weight: 700;">STEP 2</div>
+                <div style="font-size: 11px; font-weight: 700; margin: 4px 0 2px;">AUTHENTICATION</div>
+                <div style="font-size: 10px; color: var(--text-muted);">PBKDF2/scrypt salted</div>
+                <div style="margin-top: 6px;"><span class="tag" style="font-size: 9px; color: var(--green); border-color: rgba(16,185,129,0.3);">VERIFIED</span></div>
+            </div>
+
+            <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px;">
+                <div style="font-size: 9px; color: var(--amber); font-family: var(--font-mono); font-weight: 700;">STEP 3</div>
+                <div style="font-size: 11px; font-weight: 700; margin: 4px 0 2px;">SIMULATED MFA</div>
+                <div style="font-size: 10px; color: var(--text-muted);">Lab Demonstration Token</div>
+                <div style="margin-top: 6px;"><span class="tag" style="font-size: 9px; color: var(--amber); border-color: rgba(245,158,11,0.4);">SIMULATED</span></div>
+            </div>
+
+            <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px;">
+                <div style="font-size: 9px; color: var(--cyan); font-family: var(--font-mono); font-weight: 700;">STEP 4</div>
+                <div style="font-size: 11px; font-weight: 700; margin: 4px 0 2px;">AUTHORIZATION</div>
+                <div style="font-size: 10px; color: var(--text-muted);">Server-side RBAC matrix</div>
+                <div style="margin-top: 6px;"><span class="tag" style="font-size: 9px; color: var(--cyan); border-color: rgba(56,189,248,0.3);">ENFORCED</span></div>
+            </div>
+
+            <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px;">
+                <div style="font-size: 9px; color: var(--cyan); font-family: var(--font-mono); font-weight: 700;">STEP 5</div>
+                <div style="font-size: 11px; font-weight: 700; margin: 4px 0 2px;">TRUST REPUTATION</div>
+                <div style="font-size: 10px; color: var(--text-muted);">Dynamic score (0..100)</div>
+                <div style="margin-top: 6px;"><span class="tag" style="font-size: 9px; color: var(--green); border-color: rgba(16,185,129,0.3);">BOUNDED</span></div>
+            </div>
+
+            <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px;">
+                <div style="font-size: 9px; color: var(--cyan); font-family: var(--font-mono); font-weight: 700;">STEP 6</div>
+                <div style="font-size: 11px; font-weight: 700; margin: 4px 0 2px;">ACCESS DECISION</div>
+                <div style="font-size: 10px; color: var(--text-muted);">DRY_RUN response</div>
+                <div style="margin-top: 6px;"><span class="tag" style="font-size: 9px; color: var(--cyan); border-color: rgba(56,189,248,0.3);">DRY_RUN</span></div>
+            </div>
+        </div>
+
+        <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div style="font-size: 11px; color: var(--text-secondary); max-width: 680px;">
+                <strong style="color: var(--text-primary);">Policy Enforcement Claim Boundary:</strong> All response decisions (BLOCK, RATE_LIMIT, ISOLATE) operate strictly in DRY_RUN software simulation mode. No host routing, NIC, iptables, nftables, or tc rules are touched.
+            </div>
+            <div style="display: flex; gap: 6px; flex-shrink: 0;">
+                <span class="tag" style="color: var(--green); border-color: rgba(16,185,129,0.3);">HOST FIREWALL UNTOUCHED</span>
+                <span class="tag" style="color: var(--cyan); border-color: rgba(56,189,248,0.3);">ZERO PACKET TRANSMISSION</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================================================== -->
+    <!-- 12. AICG ATTACK SIMULATOR (CONTROLLED IN-PROCESS) -->
+    <!-- ===================================================== -->
+    <section class="panel" id="sec-controls">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <div class="panel-title">
+                    <span>AICG ATTACK SIMULATOR • CONTROLLED SCENARIO CONSOLE</span>
+                </div>
+                <div class="panel-subtitle">
+                    Safe in-process traffic profiles • 10 Attack Profiles + Benign Operational Baseline = 11 Profiles
+                </div>
+            </div>
+            <div class="panel-badge" style="color: var(--red);">SAFE LAB (IN-PROCESS)</div>
+        </div>
+
+        <!-- Run Controlled Demo Bar -->
+        <div class="demo-run-bar">
+            <button id="run-demo-btn" class="btn-primary-demo" type="button" onclick="runControlledDemo()">
+                <span>⚡ RUN CONTROLLED DEMO</span>
+            </button>
+
+            <a href="/attacker" target="_blank" class="btn-open-remote">
+                <span>📱 Open Remote Attacker Console →</span>
+            </a>
+        </div>
+
+        <!-- 11-Profile Scenario Grid -->
+        <div style="font-size: 10px; color: var(--text-muted); margin-top: 6px;">Scenario Profile Catalogue (100% In-Process Generators):</div>
+        <div class="catalogue-grid-11">
+            <button class="btn-catalogue cat-normal" type="button" onclick="triggerScenario('normal', 1, 15)">Normal Rhythm</button>
+            <button class="btn-catalogue cat-attack" type="button" onclick="triggerScenario('udp_flood', 3, 10)">UDP Flood</button>
+            <button class="btn-catalogue cat-attack" type="button" onclick="triggerScenario('syn_flood', 3, 10)">SYN Flood</button>
+            <button class="btn-catalogue cat-attack" type="button" onclick="triggerScenario('icmp_flood', 3, 10)">ICMP Storm</button>
+            <button class="btn-catalogue cat-attack" type="button" onclick="triggerScenario('burst_exhaustion', 4, 10)">Burst Spike</button>
+            <button class="btn-catalogue cat-attack" type="button" onclick="triggerScenario('slow_rate', 2, 12)">Slow-Rate</button>
+            <button class="btn-catalogue cat-attack" type="button" onclick="triggerScenario('coap_anomaly', 3, 10)">CoAP Anomaly</button>
+            <button class="btn-catalogue cat-attack" type="button" onclick="triggerScenario('mqtt_anomaly', 3, 10)">MQTT Anomaly</button>
+            <button class="btn-catalogue cat-attack" type="button" onclick="triggerScenario('rpl_anomaly', 3, 10)">RPL Storm</button>
+            <button class="btn-catalogue cat-attack" type="button" onclick="triggerScenario('modbus_anomaly', 3, 10)">Modbus Style</button>
+            <button class="btn-catalogue cat-attack" type="button" onclick="triggerScenario('mixed_vector', 4, 10)">Mixed Vector</button>
+            <button class="btn-catalogue cat-stop" type="button" onclick="stopCurrentSimulation()">■ Stop Profile</button>
+        </div>
+
+        <!-- Dynamic Status / Demo Results Container -->
+        <div id="demo-results" style="margin-top: 10px;">
+            <div style="background: var(--bg-surface); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="font-size: 9px; color: var(--text-muted); text-transform: uppercase;">Engine Status:</span>
+                    <strong id="simStatusBanner" style="font-size: 11px; color: var(--green); margin-left: 6px;">READY</strong>
+                </div>
+                <small id="simStatusDetail" style="font-size: 10px; color: var(--text-muted);">
+                    Click RUN CONTROLLED DEMO or any profile above.
+                </small>
+            </div>
+        </div>
+    </section>
+
+    </main><!-- /#hmiMainArea -->
+    </div><!-- /#hmiBodyLayout -->
+
+    <!-- ===================================================== -->
+    <!-- FOOTER & SAFETY DISCLAIMER -->
+    <!-- ===================================================== -->
+    <footer class="hmi-footer">
+        <div>
+            <strong>AI-BASED CYBER SECURITY GATEWAY FOR INDUSTRY 4.0</strong> • SOC Operations HMI V2.0
+        </div>
+        <div class="footer-safety-tags">
+            <span class="safety-tag">CONTROLLED LAB</span>
+            <span class="safety-tag">OFFLINE / IN-PROCESS SIMULATION</span>
+            <span class="safety-tag">NO EXTERNAL ATTACK TRAFFIC</span>
+            <span class="safety-tag">DRY-RUN MITIGATION</span>
+            <span class="safety-tag">HOST FIREWALL UNTOUCHED</span>
+        </div>
+    </footer>
+
+</div><!-- /.hmi-shell -->
+
+<!-- Application Script (Zero External CDN Dependency) -->
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+
+</body>
+</html>
