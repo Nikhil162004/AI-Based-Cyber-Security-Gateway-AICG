@@ -1748,6 +1748,18 @@ body {
     overflow-x: auto;
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
+    scrollbar-width: thin;
+    scrollbar-color: #2a2a2e var(--bg-sidebar);
+}
+
+/* Fixed-height scrollable log panels (matching Raw Sample Flows reference pattern) */
+.table-scroll-panel,
+#sec-incidents > .table-responsive,
+#sec-admin-alerts .table-responsive,
+#sec-admin-audit .table-responsive {
+    max-height: 280px;
+    overflow-y: auto;
+    overflow-x: auto;
 }
 
 .hmi-table,
@@ -1771,6 +1783,12 @@ table.data-table th {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg-surface);
+    background-clip: padding-box;
+    box-shadow: inset 0 -1px 0 var(--border-medium);
 }
 .hmi-table td {
     padding: 7px 10px;
