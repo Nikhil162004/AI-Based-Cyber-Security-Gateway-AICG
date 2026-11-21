@@ -5,442 +5,255 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AICG ATTACK SIMULATOR • Controlled In-Process Threat Simulator</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
-    <style>
-        body {
-            background-color: var(--bg-base);
-            color: var(--text-secondary);
-            font-family: var(--font-ui);
-            margin: 0;
-            padding: 24px 16px;
-            display: flex;
-            justify-content: center;
-            min-height: 100vh;
-            box-sizing: border-box;
-        }
-        .console-container {
-            width: 100%;
-            max-width: 760px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-        .console-header {
-            background: var(--bg-surface);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-lg);
-            padding: 20px 24px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            position: relative;
-        }
-        .console-header::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, var(--red), var(--amber), var(--cyan));
-            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-        }
-        .console-title-group h1 {
-            font-size: 1.25rem;
-            margin: 0 0 4px 0;
-            letter-spacing: 1px;
-            color: var(--text-primary);
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .console-title-group .subtitle {
-            font-size: 0.78rem;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            font-family: var(--font-mono);
-        }
-        .threat-pill {
-            font-size: 0.72rem;
-            font-family: var(--font-mono);
-            font-weight: 700;
-            padding: 3px 10px;
-            border-radius: 999px;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-        }
-        .threat-pill-normal {
-            background: var(--green-dim);
-            color: var(--green);
-            border: 1px solid rgba(16, 185, 129, 0.4);
-        }
-        .threat-pill-critical {
-            background: var(--red-dim);
-            color: var(--red);
-            border: 1px solid rgba(244, 63, 94, 0.4);
-            box-shadow: var(--red-glow);
-        }
-        .back-nav a {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: var(--bg-card);
-            border: 1px solid var(--border-subtle);
-            color: var(--cyan);
-            text-decoration: none;
-            padding: 8px 14px;
-            border-radius: var(--radius-md);
-            font-size: 0.8rem;
-            font-family: var(--font-mono);
-            font-weight: 600;
-            transition: all 0.2s;
-        }
-        .back-nav a:hover {
-            border-color: var(--cyan);
-            background: var(--bg-panel-elevated);
-            box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
-        }
-        .banner-safety-console {
-            background: var(--amber-dim);
-            border: 1px solid rgba(245, 158, 11, 0.35);
-            color: var(--amber);
-            padding: 12px 16px;
-            border-radius: var(--radius-md);
-            font-size: 0.78rem;
-            line-height: 1.5;
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-        }
-        .banner-safety-console .warn-icon {
-            font-size: 1.1rem;
-            line-height: 1;
-        }
-        .console-card {
-            background: var(--bg-surface);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-lg);
-            padding: 20px 24px;
-        }
-        .console-card-title {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 1.2px;
-            color: var(--cyan);
-            margin-bottom: 16px;
-            font-weight: 700;
-            font-family: var(--font-mono);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .form-group {
-            margin-bottom: 18px;
-        }
-        label {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.6px;
-            font-family: var(--font-mono);
-        }
-        label span.val-highlight {
-            color: var(--cyan);
-            font-weight: bold;
-        }
-        select, input[type="range"] {
-            width: 100%;
-            box-sizing: border-box;
-            background: var(--bg-input);
-            border: 1px solid var(--border-subtle);
-            color: var(--text-primary);
-            padding: 11px 14px;
-            border-radius: var(--radius-md);
-            font-size: 0.88rem;
-            font-family: var(--font-ui);
-            outline: none;
-            transition: border-color 0.2s;
-        }
-        select:focus {
-            border-color: var(--cyan);
-        }
-        .slider-scale-labels {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.72rem;
-            color: var(--text-muted);
-            font-family: var(--font-mono);
-            margin-top: 6px;
-        }
-        .quick-presets {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 16px;
-        }
-        .preset-chip {
-            background: var(--bg-card);
-            border: 1px solid var(--border-subtle);
-            color: var(--text-secondary);
-            padding: 6px 12px;
-            border-radius: var(--radius-sm);
-            font-size: 0.75rem;
-            font-family: var(--font-mono);
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-        .preset-chip:hover {
-            border-color: var(--cyan);
-            color: var(--text-primary);
-            background: var(--bg-panel-elevated);
-        }
-        .preset-chip.active {
-            border-color: var(--red);
-            color: var(--red);
-            background: var(--red-dim);
-        }
-        .btn-console-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-top: 20px;
-        }
-        .btn-console-grid button {
-            padding: 13px 18px;
-            border-radius: var(--radius-md);
-            font-weight: 700;
-            font-size: 0.82rem;
-            letter-spacing: 0.8px;
-            cursor: pointer;
-            border: 1px solid transparent;
-            text-transform: uppercase;
-            font-family: var(--font-mono);
-            transition: all 0.2s;
-        }
-        .btn-launch-attack {
-            background: linear-gradient(135deg, #dc2626, #b91c1c);
-            color: #ffffff;
-            box-shadow: 0 2px 10px rgba(220, 38, 38, 0.25);
-        }
-        .btn-launch-attack:hover {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            box-shadow: var(--red-glow);
-        }
-        .btn-stop-attack {
-            background: var(--bg-card);
-            color: var(--text-primary);
-            border-color: var(--border-medium);
-        }
-        .btn-stop-attack:hover {
-            background: var(--bg-panel-elevated);
-            border-color: var(--cyan);
-        }
-        .btn-reset-normal {
-            grid-column: span 2;
-            background: var(--green-dim);
-            color: var(--green);
-            border: 1px solid rgba(16, 185, 129, 0.35);
-        }
-        .btn-reset-normal:hover {
-            background: rgba(16, 185, 129, 0.22);
-            border-color: var(--green);
-            box-shadow: var(--green-glow);
-        }
-        .status-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.8rem;
-            font-family: var(--font-mono);
-        }
-        .status-table tr {
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        }
-        .status-table tr:last-child {
-            border-bottom: none;
-        }
-        .status-table td {
-            padding: 9px 4px;
-        }
-        .status-table td.label-col {
-            color: var(--text-muted);
-            width: 40%;
-        }
-        .status-table td.value-col {
-            color: var(--text-primary);
-            text-align: right;
-            font-weight: 600;
-        }
-        .val-badge-active {
-            color: var(--red);
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .val-badge-active::before {
-            content: '';
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: var(--red);
-            box-shadow: 0 0 8px var(--red);
-            animation: pulse-red 1.5s infinite;
-        }
-        .val-badge-idle {
-            color: var(--green);
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .val-badge-idle::before {
-            content: '';
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: var(--green);
-        }
-        @keyframes pulse-red {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
-        }
-    </style>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f87171'%3E%3Cpath d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/%3E%3C/svg%3E">
 </head>
-<body>
-    <div class="console-container">
-        <!-- Header -->
-        <header class="console-header">
-            <div class="console-title-group">
-                <h1>
-                    <span>AICG ATTACK SIMULATOR</span>
-                    <span class="threat-pill threat-pill-normal" id="headerSimBadge">LAB READY</span>
-                    <span class="tag" style="display: none;" aria-hidden="true">AEGIS-OT ATTACK SIMULATOR</span>
-                </h1>
-                <div class="subtitle">Controlled In-Process Threat Simulator • 11 Scenario Safe Lab Suite</div>
+<body class="cockpit-viewport">
+
+    <div class="cockpit-container console-container">
+        <!-- Cockpit Header -->
+        <header class="cockpit-header console-header">
+            <div class="cockpit-header-left">
+                <div class="cockpit-header-icon" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                    </svg>
+                </div>
+                <div class="cockpit-title-group console-title-group">
+                    <h1>
+                        <span>AICG Attack Simulator</span>
+                        <span class="threat-pill threat-pill-normal" id="headerSimBadge">LAB READY</span>
+                        <span class="tag" style="display: none;" aria-hidden="true">AEGIS-OT ATTACK SIMULATOR</span>
+                    </h1>
+                    <div class="subtitle">Controlled In-Process Threat Simulator • 11 Scenario Safe Lab Suite</div>
+                </div>
             </div>
-            <div class="back-nav">
-                <a href="/">← Return to Main HMI</a>
+            <div class="cockpit-header-right back-nav">
+                <a href="/" class="cockpit-back-link">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <line x1="19" y1="12" x2="5" y2="12"></line>
+                        <polyline points="12 19 5 12 12 5"></polyline>
+                    </svg>
+                    <span>Return to Main HMI</span>
+                </a>
             </div>
         </header>
 
-        <!-- Safety Banner -->
-        <div class="banner-safety-console">
-            <span class="warn-icon">⚠</span>
-            <div>
-                <strong>STRICT LAB SAFETY BOUNDARY:</strong>
-                All 11 scenarios execute via in-process generator pipelines. Zero packets are emitted onto external networks, no production PLCs are disrupted, and operating system firewall / iptables rules remain untouched.
-            </div>
-        </div>
+        <!-- Cockpit Dual-Pane Grid -->
+        <main class="cockpit-grid">
+            
+            <!-- LEFT PANE: Scenario Configuration & Execution -->
+            <section class="cockpit-pane" aria-labelledby="configPaneTitle">
+                <div class="cockpit-card console-card">
+                    <div class="cockpit-card-header console-card-title">
+                        <span id="configPaneTitle" class="cockpit-card-title">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                            </svg>
+                            Threat Scenario Configuration
+                        </span>
+                        <span class="cockpit-card-tag">ADAPTER: IN-PROCESS</span>
+                    </div>
 
-        <!-- Operator View-Only Mode Banner -->
-        <div id="operatorViewOnlyBanner" style="display: none; background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.4); border-radius: var(--radius-md); padding: 12px 16px; color: #fef3c7; font-size: 0.8rem; line-height: 1.5;">
-            <strong>OPERATOR VIEW-ONLY MODE:</strong> You are authenticated with role <strong>OPERATOR</strong>. Threat simulation injection and mutation controls are disabled under RBAC policy. Live telemetry and boundary monitoring remain active.
-        </div>
+                    <!-- Category Selector Tabs -->
+                    <div class="cockpit-field">
+                        <label class="cockpit-field-label">
+                            <span>Threat Vector Category</span>
+                        </label>
+                        <div class="cockpit-category-tabs" role="tablist">
+                            <button type="button" class="category-tab active" onclick="filterCategory('all', this)">All Profiles (11)</button>
+                            <button type="button" class="category-tab" onclick="filterCategory('flood', this)">Protocol Floods</button>
+                            <button type="button" class="category-tab" onclick="filterCategory('exhaustion', this)">State Exhaustion</button>
+                            <button type="button" class="category-tab" onclick="filterCategory('anomaly', this)">Industrial Anomalies</button>
+                            <button type="button" class="category-tab" onclick="filterCategory('baseline', this)">OT Baseline</button>
+                        </div>
+                    </div>
 
-        <!-- Simulation Configuration Card -->
-        <div class="console-card">
-            <div class="console-card-title">
-                <span>Threat Scenario Configuration</span>
-                <span style="color: var(--text-dim); font-size: 0.7rem;">ADAPTER: IN-PROCESS</span>
-            </div>
+                    <!-- Quick Scenario Presets -->
+                    <div class="cockpit-field">
+                        <div class="cockpit-presets-label">
+                            <span>Quick Scenario Presets</span>
+                            <span>Click to Stage</span>
+                        </div>
+                        <div class="quick-presets">
+                            <div class="preset-chip active" data-cat="flood" onclick="selectPreset('udp_flood')">UDP Flood (CoAP)</div>
+                            <div class="preset-chip" data-cat="flood" onclick="selectPreset('syn_flood')">TCP SYN Flood</div>
+                            <div class="preset-chip" data-cat="flood" onclick="selectPreset('icmp_flood')">ICMP Ping Storm</div>
+                            <div class="preset-chip" data-cat="exhaustion" onclick="selectPreset('burst_exhaustion')">Burst Load Spike</div>
+                            <div class="preset-chip" data-cat="exhaustion" onclick="selectPreset('slow_rate')">Slow-Rate Exhaustion</div>
+                            <div class="preset-chip" data-cat="anomaly" onclick="selectPreset('coap_anomaly')">CoAP Port 5683</div>
+                            <div class="preset-chip" data-cat="anomaly" onclick="selectPreset('mqtt_anomaly')">MQTT-SN Port 1883</div>
+                            <div class="preset-chip" data-cat="anomaly" onclick="selectPreset('rpl_anomaly')">RPL / 6LoWPAN</div>
+                            <div class="preset-chip" data-cat="anomaly" onclick="selectPreset('modbus_anomaly')">Modbus Port 502</div>
+                            <div class="preset-chip" data-cat="anomaly" onclick="selectPreset('mixed_vector')">Mixed Multi-Vector</div>
+                            <div class="preset-chip" data-cat="baseline" onclick="selectPreset('normal')">Normal Baseline</div>
+                        </div>
+                    </div>
 
-            <!-- Quick Scenario Presets -->
-            <div class="quick-presets">
-                <div class="preset-chip active" onclick="selectPreset('udp_flood')">UDP Flood (CoAP)</div>
-                <div class="preset-chip" onclick="selectPreset('syn_flood')">TCP SYN Flood</div>
-                <div class="preset-chip" onclick="selectPreset('burst_exhaustion')">Burst Load</div>
-                <div class="preset-chip" onclick="selectPreset('slow_rate')">Slow-Rate Exhaustion</div>
-                <div class="preset-chip" onclick="selectPreset('modbus_anomaly')">Modbus Anomaly</div>
-                <div class="preset-chip" onclick="selectPreset('mixed_vector')">Mixed Multi-Vector</div>
-            </div>
+                    <!-- Scenario Profile Dropdown -->
+                    <div class="cockpit-field form-group">
+                        <label for="scenarioSelect" class="cockpit-field-label">
+                            <span>Attack Scenario Profile (11 Profiles)</span>
+                        </label>
+                        <select id="scenarioSelect" class="cockpit-select" onchange="updatePresetChips()">
+                            <option value="udp_flood">UDP Flood — CoAP / High-Rate Ingestion Surge</option>
+                            <option value="syn_flood">TCP SYN Flood — Connection Starvation Vector</option>
+                            <option value="icmp_flood">ICMP Flood — Ping / RPL Storm Stress</option>
+                            <option value="burst_exhaustion">Burst Traffic Exhaustion — Sharp Load Spikes</option>
+                            <option value="slow_rate">Slow-Rate Exhaustion — Persistent Connections</option>
+                            <option value="coap_anomaly">CoAP Anomaly — Port 5683 Resource Abuse</option>
+                            <option value="mqtt_anomaly">MQTT-SN Anomaly — Port 1883 Publish Burst</option>
+                            <option value="rpl_anomaly">RPL / 6LoWPAN Anomaly — Control Plane Anomaly</option>
+                            <option value="modbus_anomaly">Modbus-Style Anomaly — Port 502 Industrial Flow</option>
+                            <option value="mixed_vector">Mixed Multi-Vector — UDP + TCP + ICMP Compound</option>
+                            <option value="normal">Normal IIoT Rhythm — Baseline Production Telemetry</option>
+                        </select>
+                    </div>
 
-            <div class="form-group">
-                <label for="scenarioSelect">
-                    <span>Attack Scenario Profile (11 Profiles)</span>
-                </label>
-                <select id="scenarioSelect" onchange="updatePresetChips()">
-                    <option value="udp_flood">UDP Flood — CoAP / High-Rate Ingestion Surge</option>
-                    <option value="syn_flood">TCP SYN Flood — Connection Starvation Vector</option>
-                    <option value="icmp_flood">ICMP Flood — Ping / RPL Storm Stress</option>
-                    <option value="burst_exhaustion">Burst Traffic Exhaustion — Sharp Load Spikes</option>
-                    <option value="slow_rate">Slow-Rate Exhaustion — Persistent Connections</option>
-                    <option value="coap_anomaly">CoAP Anomaly — Port 5683 Resource Abuse</option>
-                    <option value="mqtt_anomaly">MQTT-SN Anomaly — Port 1883 Publish Burst</option>
-                    <option value="rpl_anomaly">RPL / 6LoWPAN Anomaly — Control Plane Anomaly</option>
-                    <option value="modbus_anomaly">Modbus-Style Anomaly — Port 502 Industrial Flow</option>
-                    <option value="mixed_vector">Mixed Multi-Vector — UDP + TCP + ICMP Compound</option>
-                    <option value="normal">Normal IIoT Rhythm — Baseline Production Telemetry</option>
-                </select>
-            </div>
+                    <!-- Intensity Level Slider -->
+                    <div class="cockpit-field form-group">
+                        <label for="intensityRange" class="cockpit-field-label">
+                            <span>Intensity Level</span>
+                            <span class="val-highlight" id="intensityVal">3 (Standard Lab)</span>
+                        </label>
+                        <div class="cockpit-range-wrapper">
+                            <input type="range" id="intensityRange" class="cockpit-range" min="1" max="6" value="3" oninput="onIntensityChange(this.value)">
+                            <div class="slider-scale-labels">
+                                <span>1: Subtle / Stealth</span>
+                                <span>3: Standard Lab</span>
+                                <span>6: Maximum Saturation</span>
+                            </div>
+                        </div>
+                    </div>
 
-            <div class="form-group">
-                <label for="intensityRange">
-                    <span>Intensity Level</span>
-                    <span class="val-highlight" id="intensityVal">3 (Standard Lab)</span>
-                </label>
-                <input type="range" id="intensityRange" min="1" max="6" value="3" oninput="onIntensityChange(this.value)">
-                <div class="slider-scale-labels">
-                    <span>1: Subtle / Stealth</span>
-                    <span>3: Standard Lab</span>
-                    <span>6: Maximum Saturation</span>
+                    <!-- Injection Duration Slider -->
+                    <div class="cockpit-field form-group">
+                        <label for="durationRange" class="cockpit-field-label">
+                            <span>Injection Duration</span>
+                            <span class="val-highlight" id="durationVal">10s</span>
+                        </label>
+                        <div class="cockpit-range-wrapper">
+                            <input type="range" id="durationRange" class="cockpit-range" min="3" max="30" value="10" oninput="onDurationChange(this.value)">
+                            <div class="slider-scale-labels">
+                                <span>3 sec (Rapid Test)</span>
+                                <span>10 sec (Standard)</span>
+                                <span>30 sec (Extended Soak)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Execution Control Buttons -->
+                    <div class="btn-console-grid">
+                        <button type="button" class="btn-launch-attack" id="btnLaunch" onclick="launchSimulation()">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                            </svg>
+                            <span>Launch Threat Profile</span>
+                        </button>
+                        <button type="button" class="btn-stop-attack" id="btnStop" onclick="stopSimulation()">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                            </svg>
+                            <span>Terminate Simulation</span>
+                        </button>
+                        <button type="button" class="btn-reset-normal" id="btnResetNormal" onclick="setNormalBaseline()">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                                <path d="M3 3v5h5"></path>
+                                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path>
+                                <path d="M16 21h5v-5"></path>
+                            </svg>
+                            <span>Restore Normal OT Baseline Rhythm</span>
+                        </button>
+                    </div>
                 </div>
-            </div>
+            </section>
 
-            <div class="form-group">
-                <label for="durationRange">
-                    <span>Injection Duration</span>
-                    <span class="val-highlight" id="durationVal">10s</span>
-                </label>
-                <input type="range" id="durationRange" min="3" max="30" value="10" oninput="document.getElementById('durationVal').innerText=this.value + 's'">
-                <div class="slider-scale-labels">
-                    <span>3 sec (Rapid Test)</span>
-                    <span>10 sec (Recommended)</span>
-                    <span>30 sec (Extended Soak)</span>
+            <!-- RIGHT PANE: Telemetry & Safety Boundary Checks -->
+            <aside class="cockpit-pane" aria-labelledby="telemetryPaneTitle">
+                
+                <!-- Operator View-Only Mode Banner -->
+                <div id="operatorViewOnlyBanner" style="display: none;" role="status">
+                    <strong>OPERATOR VIEW-ONLY MODE:</strong> You are authenticated with role <strong>OPERATOR</strong>. Threat simulation injection and mutation controls are disabled under RBAC policy. Live telemetry and boundary monitoring remain active.
                 </div>
-            </div>
 
-            <div class="btn-console-grid">
-                <button class="btn-launch-attack" id="btnLaunch" onclick="launchSimulation()">⚡ Launch Threat Profile</button>
-                <button class="btn-stop-attack" id="btnStop" onclick="stopSimulation()">⏹ Terminate Simulation</button>
-                <button class="btn-reset-normal" id="btnResetNormal" onclick="setNormalBaseline()">↺ Restore Normal OT Baseline Rhythm</button>
-            </div>
-        </div>
+                <!-- Safety Invariant Banner -->
+                <div class="banner-safety-console" role="note">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
+                        <line x1="12" y1="9" x2="12" y2="13"></line>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                    <div>
+                        <strong>STRICT LAB SAFETY BOUNDARY:</strong>
+                        All 11 scenarios execute via in-process generator pipelines. Zero packets are emitted onto external networks, no production PLCs are disrupted, and operating system firewall / iptables rules remain untouched.
+                    </div>
+                </div>
 
-        <!-- Live Status Card -->
-        <div class="console-card">
-            <div class="console-card-title">
-                <span>Live Simulator Status & Boundary Checks</span>
-                <span id="liveStatusBadge" class="val-badge-idle">IDLE</span>
-            </div>
-            <table class="status-table">
-                <tr>
-                    <td class="label-col">Generator Engine</td>
-                    <td class="value-col" id="simEngineStatus">IDLE / NORMAL</td>
-                </tr>
-                <tr>
-                    <td class="label-col">Active Scenario Profile</td>
-                    <td class="value-col" id="simActiveScenario">None</td>
-                </tr>
-                <tr>
-                    <td class="label-col">Injection Interface</td>
-                    <td class="value-col" style="color: var(--cyan);">GATEWAY-01 (In-Process Adapter)</td>
-                </tr>
-                <tr>
-                    <td class="label-col">Physical Network Egress</td>
-                    <td class="value-col" style="color: var(--green);">DISABLED (Safe In-Process Model)</td>
-                </tr>
-                <tr>
-                    <td class="label-col">Host OS Firewall Mutability</td>
-                    <td class="value-col" style="color: var(--text-muted);">LOCKED / ZERO MODIFICATION</td>
-                </tr>
-                <tr>
-                    <td class="label-col">Endpoint Contract</td>
-                    <td class="value-col" style="color: var(--cyan); font-size: 0.75rem;">POST /api/simulations/start</td>
-                </tr>
-            </table>
-        </div>
+                <!-- Live Simulator Status Card -->
+                <div class="cockpit-card console-card">
+                    <div class="cockpit-card-header console-card-title">
+                        <span id="telemetryPaneTitle" class="cockpit-card-title">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                            </svg>
+                            Live Simulator Status &amp; Boundary Checks
+                        </span>
+                        <span id="liveStatusBadge" class="val-badge-idle">IDLE</span>
+                    </div>
+
+                    <table class="status-table">
+                        <tbody>
+                            <tr>
+                                <td class="label-col">Generator Engine</td>
+                                <td class="value-col" id="simEngineStatus">IDLE / NORMAL</td>
+                            </tr>
+                            <tr>
+                                <td class="label-col">Active Scenario Profile</td>
+                                <td class="value-col" id="simActiveScenario">None</td>
+                            </tr>
+                            <tr>
+                                <td class="label-col">Injection Interface</td>
+                                <td class="value-col" style="color: var(--cyan);">GATEWAY-01 (In-Process Adapter)</td>
+                            </tr>
+                            <tr>
+                                <td class="label-col">Physical Network Egress</td>
+                                <td class="value-col" style="color: var(--green);">DISABLED (Safe In-Process Model)</td>
+                            </tr>
+                            <tr>
+                                <td class="label-col">Host OS Firewall Mutability</td>
+                                <td class="value-col" style="color: var(--text-muted);">LOCKED / ZERO MODIFICATION</td>
+                            </tr>
+                            <tr>
+                                <td class="label-col">Endpoint Contract</td>
+                                <td class="value-col" style="color: var(--cyan); font-size: 11px;">POST /api/simulations/start</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <!-- Real-Time Telemetry Metrics Grid -->
+                    <div class="cockpit-telemetry-grid">
+                        <div class="telemetry-mini-card">
+                            <div class="telemetry-mini-label">Traffic Ingestion Rate</div>
+                            <div class="telemetry-mini-val" id="telemetryRateVal">-- pps</div>
+                        </div>
+                        <div class="telemetry-mini-card">
+                            <div class="telemetry-mini-label">Anomaly Classification</div>
+                            <div class="telemetry-mini-val" id="telemetryClassVal">NORMAL</div>
+                        </div>
+                        <div class="telemetry-mini-card">
+                            <div class="telemetry-mini-label">Model Confidence</div>
+                            <div class="telemetry-mini-val" id="telemetryConfVal">--%</div>
+                        </div>
+                        <div class="telemetry-mini-card">
+                            <div class="telemetry-mini-label">Boundary Safety Check</div>
+                            <div class="telemetry-mini-val" style="color: var(--green);">PASS (Zero Egress)</div>
+                        </div>
+                    </div>
+                </div>
+
+            </aside>
+        </main>
     </div>
 
     <script>
@@ -456,15 +269,36 @@
             document.getElementById("intensityVal").innerText = labels[val] || val;
         }
 
+        function onDurationChange(val) {
+            document.getElementById("durationVal").innerText = val + "s";
+        }
+
         function selectPreset(scenarioId) {
-            document.getElementById("scenarioSelect").value = scenarioId;
-            updatePresetChips();
+            const selectEl = document.getElementById("scenarioSelect");
+            if (selectEl) {
+                selectEl.value = scenarioId;
+                updatePresetChips();
+            }
+        }
+
+        function filterCategory(cat, tabEl) {
+            document.querySelectorAll(".category-tab").forEach(tab => tab.classList.remove("active"));
+            if (tabEl) tabEl.classList.add("active");
+
+            const chips = document.querySelectorAll(".preset-chip");
+            chips.forEach(chip => {
+                if (cat === "all" || chip.getAttribute("data-cat") === cat) {
+                    chip.style.display = "inline-block";
+                } else {
+                    chip.style.display = "none";
+                }
+            });
         }
 
         function updatePresetChips() {
             const current = document.getElementById("scenarioSelect").value;
             document.querySelectorAll(".preset-chip").forEach(chip => {
-                if (chip.textContent.toLowerCase().includes(current.replace("_", " "))) {
+                if (chip.getAttribute("onclick") && chip.getAttribute("onclick").includes(`'${current}'`)) {
                     chip.classList.add("active");
                 } else {
                     chip.classList.remove("active");
@@ -488,24 +322,18 @@
                     const btnLaunch = document.getElementById("btnLaunch");
                     if (btnLaunch) {
                         btnLaunch.disabled = true;
-                        btnLaunch.style.opacity = "0.5";
-                        btnLaunch.style.cursor = "not-allowed";
                         btnLaunch.title = "Simulation mutation restricted to ADMIN role";
                     }
 
                     const btnStop = document.getElementById("btnStop");
                     if (btnStop) {
                         btnStop.disabled = true;
-                        btnStop.style.opacity = "0.5";
-                        btnStop.style.cursor = "not-allowed";
                         btnStop.title = "Simulation mutation restricted to ADMIN role";
                     }
 
                     const btnResetNormal = document.getElementById("btnResetNormal");
                     if (btnResetNormal) {
                         btnResetNormal.disabled = true;
-                        btnResetNormal.style.opacity = "0.5";
-                        btnResetNormal.style.cursor = "not-allowed";
                         btnResetNormal.title = "Simulation mutation restricted to ADMIN role";
                     }
 
@@ -520,7 +348,12 @@
 
                     document.querySelectorAll(".preset-chip").forEach(chip => {
                         chip.style.pointerEvents = "none";
-                        chip.style.opacity = "0.6";
+                        chip.style.opacity = "0.5";
+                    });
+
+                    document.querySelectorAll(".category-tab").forEach(tab => {
+                        tab.style.pointerEvents = "none";
+                        tab.style.opacity = "0.5";
                     });
                 }
             } catch (e) {
@@ -626,6 +459,23 @@
                 const scenarioEl = document.getElementById("simActiveScenario");
                 const liveBadge = document.getElementById("liveStatusBadge");
                 const headerBadge = document.getElementById("headerSimBadge");
+                const rateEl = document.getElementById("telemetryRateVal");
+                const classEl = document.getElementById("telemetryClassVal");
+                const confEl = document.getElementById("telemetryConfVal");
+
+                // Update live telemetry metrics if present
+                if (data.latest) {
+                    if (rateEl && data.latest.packet_rate !== undefined) {
+                        rateEl.textContent = `${Math.round(data.latest.packet_rate)} pps`;
+                    }
+                    if (classEl && data.latest.label) {
+                        classEl.textContent = data.latest.label;
+                        classEl.style.color = data.latest.label === "ATTACK" ? "var(--red)" : "var(--green)";
+                    }
+                    if (confEl && data.latest.confidence !== undefined) {
+                        confEl.textContent = `${(data.latest.confidence * 100).toFixed(1)}%`;
+                    }
+                }
 
                 if (active.length > 0) {
                     const sim = active[0];

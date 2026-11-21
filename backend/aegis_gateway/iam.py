@@ -217,6 +217,12 @@ class IAMService:
             "SENSOR-03": Identity("SENSOR-03", "sensor", authenticated=True, trust_score=100.0, mfa_status="NOT_REQUIRED", status="ENROLLED"),
             "SENSOR-GROUP-A": Identity("SENSOR-GROUP-A", "sensor", authenticated=True, trust_score=100.0, mfa_status="NOT_REQUIRED", status="ENROLLED"),
             "ATK-01": Identity("ATK-01", "untrusted", authenticated=False, trust_score=35.0, mfa_status="FAILED", status="REVOKED"),
+            "ATTACKER-01": Identity("ATTACKER-01", "untrusted", authenticated=False, trust_score=35.0, mfa_status="FAILED", status="REVOKED"),
+            "ATTACKER-02": Identity("ATTACKER-02", "untrusted", authenticated=False, trust_score=35.0, mfa_status="FAILED", status="REVOKED"),
+            "ATTACKER-03": Identity("ATTACKER-03", "untrusted", authenticated=False, trust_score=35.0, mfa_status="FAILED", status="REVOKED"),
+            "ATTACKER-04": Identity("ATTACKER-04", "untrusted", authenticated=False, trust_score=35.0, mfa_status="FAILED", status="REVOKED"),
+            "ATTACKER-05": Identity("ATTACKER-05", "untrusted", authenticated=False, trust_score=35.0, mfa_status="FAILED", status="REVOKED"),
+            "ATTACKER-06": Identity("ATTACKER-06", "untrusted", authenticated=False, trust_score=35.0, mfa_status="FAILED", status="REVOKED"),
             "operator": Identity("operator", "operator", authenticated=True, trust_score=100.0, mfa_status="VERIFIED", status="ENROLLED"),
         }
 
@@ -388,7 +394,7 @@ class IAMService:
             if name.startswith("SENSOR-") or name == "operator":
                 ident.trust_score = 100.0
                 ident.failures = 0
-            elif name.startswith("ATK"):
+            elif name.startswith("ATK") or name.startswith("ATTACKER"):
                 ident.trust_score = 35.0
                 ident.failures = 0
         if self.replay_cache:

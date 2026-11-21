@@ -6,6 +6,8 @@ import csv
 import hashlib
 import json
 import sqlite3
+import threading
+import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from io import StringIO
@@ -23,6 +25,7 @@ class GatewayStore:
         self.path = path
         self.master_key = master_key
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._audit_lock = threading.RLock()
         self.initialize()
 
     @contextmanager
@@ -37,6 +40,12 @@ class GatewayStore:
         try:
             yield con
             con.commit()
+        except Exception:
+            try:
+                con.rollback()
+            except Exception:
+                pass
+            raise
         finally:
             con.close()
 
@@ -190,6 +199,12 @@ class GatewayStore:
             ("SENSOR-03", "sensor", "ENROLLED", 100.0, 0, "NOT_REQUIRED"),
             ("SENSOR-GROUP-A", "sensor", "ENROLLED", 100.0, 0, "NOT_REQUIRED"),
             ("ATK-01", "untrusted", "REVOKED", 35.0, 0, "FAILED"),
+            ("ATTACKER-01", "untrusted", "REVOKED", 35.0, 0, "FAILED"),
+            ("ATTACKER-02", "untrusted", "REVOKED", 35.0, 0, "FAILED"),
+            ("ATTACKER-03", "untrusted", "REVOKED", 35.0, 0, "FAILED"),
+            ("ATTACKER-04", "untrusted", "REVOKED", 35.0, 0, "FAILED"),
+            ("ATTACKER-05", "untrusted", "REVOKED", 35.0, 0, "FAILED"),
+            ("ATTACKER-06", "untrusted", "REVOKED", 35.0, 0, "FAILED"),
             ("operator", "operator", "ENROLLED", 100.0, 0, "VERIFIED"),
         ]
         eff_key = getattr(self, "master_key", None) or DEFAULT_MASTER_KEY
@@ -786,29 +801,41 @@ class GatewayStore:
             "source_ip": source_ip or "127.0.0.1",
             "details": safe_details,
         }
-        with self.connection() as con:
-            last_row = con.execute("SELECT record_hash FROM admin_audit_log ORDER BY rowid DESC LIMIT 1").fetchone()
-            prev_hash = str(last_row["record_hash"]) if (last_row and last_row["record_hash"]) else GENESIS_HASH
-            record_hash = self._compute_audit_hash(
-                prev_hash=prev_hash,
-                event_id=event_id,
-                timestamp=now,
-                username=username or "system",
-                role=(role or "UNKNOWN").upper(),
-                action=action.upper(),
-                resource=resource,
-                resource_id=resource_id,
-                result=result.upper(),
-                source_ip=source_ip or "127.0.0.1",
-                details=safe_details,
-            )
-            item["prev_hash"] = prev_hash
-            item["record_hash"] = record_hash
-            con.execute(
-                "INSERT INTO admin_audit_log (event_id, timestamp, username, role, action, resource, resource_id, result, source_ip, details, prev_hash, record_hash) "
-                "VALUES (:event_id, :timestamp, :username, :role, :action, :resource, :resource_id, :result, :source_ip, :details, :prev_hash, :record_hash)",
-                item
-            )
+        max_retries = 5
+        base_backoff = 0.05
+        with self._audit_lock:
+            for attempt in range(max_retries):
+                try:
+                    with self.connection() as con:
+                        con.execute("BEGIN IMMEDIATE")
+                        last_row = con.execute("SELECT record_hash FROM admin_audit_log ORDER BY rowid DESC LIMIT 1").fetchone()
+                        prev_hash = str(last_row["record_hash"]) if (last_row and last_row["record_hash"]) else GENESIS_HASH
+                        record_hash = self._compute_audit_hash(
+                            prev_hash=prev_hash,
+                            event_id=event_id,
+                            timestamp=now,
+                            username=username or "system",
+                            role=(role or "UNKNOWN").upper(),
+                            action=action.upper(),
+                            resource=resource,
+                            resource_id=resource_id,
+                            result=result.upper(),
+                            source_ip=source_ip or "127.0.0.1",
+                            details=safe_details,
+                        )
+                        item["prev_hash"] = prev_hash
+                        item["record_hash"] = record_hash
+                        con.execute(
+                            "INSERT INTO admin_audit_log (event_id, timestamp, username, role, action, resource, resource_id, result, source_ip, details, prev_hash, record_hash) "
+                            "VALUES (:event_id, :timestamp, :username, :role, :action, :resource, :resource_id, :result, :source_ip, :details, :prev_hash, :record_hash)",
+                            item
+                        )
+                    break
+                except sqlite3.OperationalError as exc:
+                    if "locked" in str(exc).lower() and attempt < max_retries - 1:
+                        time.sleep(base_backoff * (2 ** attempt))
+                        continue
+                    raise
         return item
 
     def _compute_audit_hash(

@@ -1,9 +1,9 @@
-# Revised UI/UX Unslopping Implementation Plan: AI-Edge-DDoS-Gateway Industrial SOC HMI
+# Approved UI/UX Unslopping Implementation Plan: AI-Edge-DDoS-Gateway Industrial Operations Console
 
 ## Goal Description
 Perform a disciplined, incremental craft unslopping pass on the primary operator Human-Machine Interface (HMI) for the **AI-Based Cyber Security Gateway for Industry 4.0** ([`frontend/templates/index.html`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/templates/index.html), [`frontend/static/css/dashboard.css`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/css/dashboard.css), and UI-only styling hooks in [`frontend/static/js/dashboard.js`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/js/dashboard.js)).
 
-The goal is to eliminate vibecoded artifacts (raw emoji decoration, neon glow drop-shadows, all-caps shouting headings, and overcrowded center badge stacks) while elevating the interface into an authoritative, professional **Industrial Cybersecurity Operations Center (SOC)** console.
+The objective is to eliminate "vibecoded" aesthetic flaws (emoji clutter, neon glow drop-shadows, all-caps shouting headings, floating badge stacks, and colored chrome) and transition the interface into the clean, professional **Charcoal / Matte Graphite Design System** demonstrated in the canonical reference (`./dashboard-design-reference.png`).
 
 ---
 
@@ -20,15 +20,54 @@ The goal is to eliminate vibecoded artifacts (raw emoji decoration, neon glow dr
 
 ---
 
-## 2. Unslopping Direction (The 5 Lines)
+## 2. Unslopping Direction: Charcoal / Matte Graphite
+
+Following the visual reference (`./dashboard-design-reference.png`) and the UNSLOP principles:
 
 - **Product:** An edge cybersecurity gateway that detects and safely mitigates DDoS attacks in real time for Industry 4.0 automation networks.
-- **Character:** `vigilant, industrial, calibrated` (unwavering, authoritative, and physically grounded in edge instrumentation).
-- **World:** An air-gapped industrial plant control room, ruggedized DIN-rail edge gateways, low-power 6LoWPAN field meshes, SCADA control networks, and mission-critical OT night shifts.
+- **Character:** `calm, exact, technical` (authoritative, understated, and mathematically disciplined).
+- **World:** Industrial instrument panels, night-shift server consoles, DIN-rail edge hardware, and dark graphite telemetry.
 - **Moments:** 
   1. The **Live Plant Mimic Topology**, where subtle packet flow telemetry maps sensor-to-gateway health across the factory floor.
   2. The **Calibrated Dual-Channel Historian**, where continuous network ingress is physically correlated against modeled edge power dissipation (mW).
 - **Signature:** A unified **Instrument Status Bar** coupling the live SSE heartbeat with crisp, tabular monospace claim boundary chips (`[MODELLED]`, `[DRY_RUN]`, `[SIMULATED]`).
+
+### Charcoal / Matte Graphite Color Tokens
+
+```css
+/* Surface & Background Hierarchy (Graphite Ramp from Reference) */
+--bg-base: #111113;             /* Root viewport backdrop */
+--bg-sidebar: #0c0c0e;          /* Sunken sidebar & deep wells */
+--bg-surface: #141416;          /* First raised layout layer */
+--bg-panel: #17171a;            /* Primary panels & containers */
+--bg-panel-elevated: #1d1d21;   /* Hovered / elevated containers */
+--bg-card: #19191d;             /* Cards, widgets & modal bodies */
+--bg-input: #1f1f24;            /* Inset search & input troughs */
+
+/* Hairline Borders & Dividers (Zero Neon) */
+--border-subtle: rgba(255, 255, 255, 0.06);   /* Quiet hairline dividers */
+--border-medium: rgba(255, 255, 255, 0.10);   /* Structural container outlines */
+--border-strong: rgba(255, 255, 255, 0.16);   /* Active boundaries & focus rings */
+--border-active: #ffffff;                     /* Primary selection marker */
+
+/* Typography Roles */
+--text-primary: #ededed;        /* High-contrast crisp primary text */
+--text-secondary: #a1a1a6;      /* Slate/neutral secondary text */
+--text-muted: #6e6e73;          /* Captions, units & metadata */
+--text-dim: #48484a;            /* Disabled & subtle markers */
+
+/* Quiet Semantic Accents (Strictly Reserved for Data, Not Surfaces) */
+--accent-cyan: #38bdf8;         /* Live ingress traffic line */
+--accent-green: #4cc38a;        /* Normal baseline & positive deltas */
+--accent-amber: #f59e0b;        /* Warning states & throttles */
+--accent-red: #f43f5e;          /* Attack surge & critical alerts */
+--accent-purple: #818cf8;       /* Gateway identity & protocol mix */
+
+/* Shadows: Zero Colored Halos */
+--shadow-panel: 0 4px 20px -2px rgba(0, 0, 0, 0.65), 0 0 0 1px var(--border-subtle);
+--shadow-card: 0 2px 8px rgba(0, 0, 0, 0.45);
+--highlight-top: inset 0 1px 0 rgba(255, 255, 255, 0.08); /* Physical top edge reflection */
+```
 
 ---
 
@@ -66,31 +105,31 @@ All 21 sidebar navigation targets across the 8 functional categories will be pre
 ## 4. Header & Instrument Status Bar Architecture
 
 ### Streamlined Single-Tier Sticky Header (56px–60px Height)
-The current 84px header stacks 4 badges awkwardly in 3 rows in the center, crowding the title and causing vertical clipping on compact monitors. The revised layout unifies this into a precision 3-column instrument bar:
+The current 84px header stacks 4 badges awkwardly in 3 rows in the center, crowding the title and causing vertical clipping on compact monitors. The revised layout unifies this into a precision 3-column instrument bar in matte graphite:
 
 ```
 +----------------------------------------------------------------------------------------------------------------------------------+
-| [NAV] [SHIELD] AI EDGE SECURITY GATEWAY [AICG] [OT CELL] | [PLANT: ONLINE] [GW: AICG-GW-01] [HYBRID] [DRY_RUN] | 08:42:17 UTC [SECURE] [ADMIN] [CSV] [ATTACKER] |
+| [NAV] [SHIELD] AI Edge Security Gateway [AICG] [OT Cell] | [PLANT: ONLINE] [GW: AICG-GW-01] [HYBRID] [DRY_RUN] | 08:42:17 UTC [SECURE] [ADMIN] [CSV] [ATTACKER] |
 +----------------------------------------------------------------------------------------------------------------------------------+
 ```
 
 1. **Left (Brand & Scope)**:
    - Expandable sidebar toggle (`[NAV]`) with clean SVG line icon.
-   - SVG Shield brand mark.
-   - Product title: `AI Edge Security Gateway` with subtle secondary subtitle: `Plant • OT Cell (6LoWPAN / CoAP / MQTT) • Zero-Trust Defense`.
-   - Small quiet tags: `AICG` and `OT CELL`.
+   - SVG Shield brand mark (flat stroke, no glowing gradient).
+   - Product title: `AI Edge Security Gateway` (Sentence Case, font-weight 500) with subtle secondary subtitle: `Plant • OT Cell (6LoWPAN / CoAP / MQTT) • Zero-Trust Defense`.
+   - Small quiet tags: `AICG` and `OT Cell`.
 
 2. **Center (Calibrated Instrument Status Bar)**:
    - A single horizontal row of four cohesive, tabular instrument chips:
-     - `● PLANT: ONLINE` (emerald pulse dot, live SSE status).
-     - `GATEWAY: AICG-GW-01` (muted industrial hardware ID).
-     - `RUNTIME: HYBRID FUSION` (calibrated model state).
-     - `MODE: DRY_RUN (SIMULATED)` (cyan border, strict claim indicator).
+     - `● Plant: Online` (quiet green status dot, live SSE status).
+     - `Gateway: AICG-GW-01` (muted industrial hardware ID).
+     - `Runtime: Hybrid Fusion` (calibrated model state).
+     - `Mode: DRY_RUN (Simulated)` (restrained border, strict claim indicator).
 
 3. **Right (Session, Clock & Tools)**:
-   - High-contrast tabular monospace UTC clock & session uptime: `08:42:17 UTC • UPTIME: 00h 00m 02s`.
-   - Dynamic Threat State Pill (`SYSTEM SECURE` / `ATTACK ACTIVE` / `RECOVERING`).
-   - User identity tag with RBAC badge: `admin [ADMIN]`.
+   - High-contrast tabular monospace UTC clock & session uptime: `08:42:17 UTC • Uptime: 00h 00m 02s`.
+   - Dynamic Threat State Pill (`System Secure` / `Attack Active` / `Recovering`).
+   - User identity tag with RBAC badge: `admin [Admin]`.
    - Quiet tool buttons: `[Logout]`, `[Export CSV]`, `[Attacker Console →]`.
 
 ### Viewport Responsiveness Verification
@@ -106,7 +145,7 @@ The current 84px header stacks 4 badges awkwardly in 3 rows in the center, crowd
 
 ```mermaid
 flowchart LR
-    P1["Pass 1: Spacing & Grid"] --> P2["Pass 2: Surfaces & Color"]
+    P1["Pass 1: Spacing & Grid"] --> P2["Pass 2: Charcoal Surfaces"]
     P2 --> P3["Pass 3: SVG Icon System"]
     P3 --> P4["Pass 4: Copy & Case"]
     P4 --> P5["Pass 5: Typography"]
@@ -116,26 +155,30 @@ flowchart LR
     P8 --> P9["Pass 9: Motion & Redline"]
 ```
 
-### Pass 1: Spacing & Rhythm
+### Pass 1: Spacing & 4px Rhythm
 - **Files Modified**: [`frontend/static/css/dashboard.css`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/css/dashboard.css)
 - **Changes**: Normalize layout paddings and margins to the 4px scale (`4, 8, 12, 16, 20, 24, 32px`). Set card padding to uniform 16px/20px, section margins to 24px, and table row heights to 36px.
 - **Preservation Check**: Verify no content is clipped; verify smooth scrolling anchor offsets.
 
-### Pass 2: Surfaces & Color Restraint
+### Pass 2: Charcoal / Graphite Surfaces & Zero-Glow Restraint
 - **Files Modified**: [`frontend/static/css/dashboard.css`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/css/dashboard.css)
 - **Changes**: 
-  - Remove all artificial colored drop-shadow glows (`--green-glow`, `--red-glow`, `--amber-glow`, glowing pulse rings).
-  - Tame neon borders (`--border-bright: rgba(56,189,248,0.6)`) to quiet 8-10% opacity hairlines.
-  - Refine dark surface steps: Base `#060a12` -> Surface `#0a101d` -> Card `#0e172a` -> Elevated `#13203c`.
-  - Tame the bright pink/red gradient on the simulator run button (`linear-gradient(...)`) into an authoritative industrial control button (`#e11d48` solid with 1px top highlight).
-- **Preservation Check**: Ensure contrast ratios exceed 4.5:1 on all text; confirm Dark SOC identity is preserved.
+  - Apply the Graphite token ramp: Base `#111113`, Sidebar `#0c0c0e`, Panel `#17171a`, Card `#19191d`, Input `#1f1f24`.
+  - Replace glowing drop-shadows with hairlines (`rgba(255, 255, 255, 0.07)`) and subtle neutral shadows.
+  - Tame the bright pink/red gradient on the simulator run button into an authoritative industrial control button (`#e11d48` solid with top highlight `inset 0 1px 0 rgba(255,255,255,0.15)`).
+- **Preservation Check**: Ensure contrast ratios exceed 4.5:1 on all text; confirm neutral charcoal aesthetics match reference.
 
-### Pass 3: Embedded SVG Icon System
+### Pass 3: Embedded SVG Icon System & Sidebar Navigation Refinement
 - **Files Modified**: [`frontend/templates/index.html`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/templates/index.html) & [`frontend/static/css/dashboard.css`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/css/dashboard.css)
 - **Changes**:
-  - Replace all 25+ raw emoji icons (in sidebar, KPI headers, buttons, banners, and modals) with clean, lightweight embedded SVG line glyphs (16px/18px, 1.5 stroke).
-  - Style icons via CSS: inherit `--text-secondary` color; active states take `--text-primary` or semantic accent.
-- **Preservation Check**: Confirm all 21 sidebar links, quick CSV exports, attacker console links, and modal triggers maintain their exact DOM IDs and `onclick` handlers.
+  - **Embedded SVG Line Icon System**: Replace all 25+ raw emoji icons across sidebar navigation, header action buttons (`Logout`, `Export CSV`, `Attacker`), KPI cards, banners, and modals with lightweight, locally embedded SVG line glyphs (16px x 16px, 1.5 stroke, `stroke="currentColor"`, `fill="none"`). Zero external icon fonts, CDNs, or remote network dependencies.
+  - **NAV Toggle Redesign**: Redesign `#sidebarToggle` as a clean, minimal menu/collapse control with an embedded SVG line glyph matching the matte graphite instrument header styling.
+  - **Sidebar Visual Harmonization**:
+    - Refine compact 58px rail and expanded 230px flyout drawer in neutral graphite surfaces (`--bg-sidebar: #0c0c0e`, elevated drawer `rgba(23, 23, 26, 0.98)` with hairline borders).
+    - Refine link states (`.hmi-sidebar-link`): resting (`--text-secondary`), hover (`background: var(--bg-surface); color: var(--text-primary)`), and active (`background: var(--bg-panel-elevated); color: #fff; border-left: 2px solid var(--text-primary); box-shadow: var(--highlight-top)`).
+    - Perfect icon alignment, sizing, and spacing: optical centering of 16px glyphs in 34px-height link blocks on a 4px grid rhythm.
+    - Notification badge refinement: style `#sidebarAlertCounter` with crisp tabular numerals and clean border while strictly preserving semantic red/crimson alert indicators.
+- **Preservation Check**: Confirm all 21 sidebar navigation links, DOM IDs (`nav-admin-overview`, `nav-admin-alerts`, `nav-admin-users`, `nav-admin-audit`, `nav-admin-posture`), `data-target` attributes, `onclick` handlers (`toggleSidebar()`, `collapseSidebar()`), and expanded/collapsed drawer behavior remain 100% functional and intact.
 
 ### Pass 4: Copy, Case & Claim Discipline
 - **Files Modified**: [`frontend/templates/index.html`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/templates/index.html) & [`frontend/static/js/dashboard.js`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/js/dashboard.js) (DOM string updates)
@@ -145,45 +188,60 @@ flowchart LR
   - Ensure all provenance tags (`[MODELLED]`, `[SIMULATED]`, `[DRY_RUN]`, `[DERIVED]`) are displayed with distinct visual badges.
 - **Preservation Check**: Ensure zero academic claims or security boundaries are altered.
 
-### Pass 5: Typography & Tabular Numerals
+### Pass 5: Typography & Tabular Numerals [COMPLETED]
 - **Files Modified**: [`frontend/static/css/dashboard.css`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/css/dashboard.css)
 - **Changes**:
-  - Enforce `font-variant-numeric: tabular-nums` across all counters, packet rates, energy figures, timestamps, and IP addresses.
-  - Set headings to weight 500-600 (eliminating 800/900 bloat).
-  - Use `--font-mono` (`JetBrains Mono`) for all system metadata and IDs.
-- **Preservation Check**: Verify table columns and KPI numbers do not jitter or jump during live SSE updates.
+  - Enforce `font-variant-numeric: tabular-nums lining-nums` across all counters, packet rates, energy figures, timestamps, durations, and IP addresses.
+  - Set headings to weight 500-600 (completely eliminating 800/900 font-weight bloat).
+  - Standardized heading sizes, line heights, and letter spacing across all panels and subpanels.
+  - Removed unnecessary uppercase transformations from headings and labels (`.kpi-header`, `.panel-title`, `.panel-badge`, `.donut-center-sub`, `.energy-stat span`, `.evidence-list-title`, `.iam-table-compact th`, `.meta-label`, `.step-label`, `.pipeline-title`, `.btn-mode-toggle`, `.btn-sim-action`, `.hmi-table th`, `.metric-box span`, `.cm-cell-title`, `.btn-catalogue`).
+  - Applied `--font-mono` (`JetBrains Mono`) for all system metadata, timestamps, hashes, and IDs.
+- **Verification**:
+  - All 236 backend and security tests passed.
+  - Headless browser acceptance suite passed across all 5 industrial viewports.
+  - Screenshots captured and verified: `docs/pass5_top_preview.png`, `docs/pass5_middle_preview.png`, `docs/pass5_lower_preview.png`, `docs/pass5_admin_preview.png`. No numeric jitter during updates.
 
-### Pass 6: Header Streamlining & Sidebar Rail
-- **Files Modified**: [`frontend/templates/index.html`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/templates/index.html) & [`frontend/static/css/dashboard.css`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/css/dashboard.css)
+### Pass 6: Visual Consistency & Polish [COMPLETED]
+- **Files Modified**: [`frontend/static/css/dashboard.css`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/css/dashboard.css) & [`frontend/templates/index.html`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/templates/index.html)
 - **Changes**:
-  - Re-engineer the top header into the 56px Instrument Status Bar.
-  - Refine the sidebar rail: 56px compact width, icons aligned in a single column, sleek tooltips on hover, zero vertical scrollbar at 1000px height.
-  - Retain full drawer expansion when `[NAV]` toggle is clicked.
-- **Preservation Check**: Test across 1600x1000, 1280x900, 1024x800, and 768x1024 viewports.
+  - **Header Layout Streamlining**: Tightened the top sticky header from 84px to 56px (`--hmi-header-height: 56px`, `min-height: 56px`, `padding: 6px 18px`). Reclaimed 28px of vertical screen real estate across all displays while preserving all gateway details, live status badges, threat state pill, and session tools.
+  - **Brand Geometry & Element Tightening**: Brand shield scaled to 32px with 17px embedded SVG; badge items, threat state pill, user session, and tool buttons unified to 24px-25px compact heights with 6px indicator dots.
+  - **WCAG AA Contrast Upgrades**: Enhanced neutral text contrast tokens against `#17171a` panel backgrounds (`--text-secondary: #b4b4bc` at ~8.4:1 contrast, `--text-muted: #909098` at ~5.5:1 contrast, `--text-dim: #5c5c64`). Updated table column headings, secondary labels, metadata, energy stats, and audit search labels to accessible neutral slate tones.
+  - **Attack Simulator CTA Refinement**: Replaced the oversized full-width pink/crimson CTA banner with a restrained, industrial danger action control (`min-width: 190px`, `height: 32px`, `padding: 7px 16px`, deep crimson `#991b1b` with border `rgba(248, 113, 113, 0.4)` and physical top-edge reflection). Harmonized with adjacent 32px `.btn-open-remote`.
+  - **Table Density & Heading Alignment**: Standardized `.hmi-table th`, `table.data-table th`, and `.iam-table-compact th` to `padding: 7px 12px`, weight 600, letter-spacing 0.2px, and border hairlines. Data cells standardized to `padding: 7px 12px` with full tabular numerals.
+  - **Component Spacing & Admin Console Harmonization**: Added universal `.panel-badge-group` and `.tag` base rules. Standardized filter buttons to 25px height. Cleaned leftover inline `text-transform: uppercase` from admin security overview cards, user modal, and audit log controls.
+- **Verification**:
+  - Full backend and security test suite: 236 passed in 64.04s (`pytest backend/tests/`).
+  - Headless browser acceptance suite: passed all 8 steps across 5 industrial viewports (1600x1000, 1280x900, 1024x800, 900x768, 768x1024).
+  - Screenshots captured and verified: `docs/pass6_top_preview.png`, `docs/pass6_middle_preview.png`, `docs/pass6_lower_preview.png`, `docs/pass6_admin_preview.png`.
 
-### Pass 7: Details, Gauges & Pipeline Stepper
-- **Files Modified**: [`frontend/templates/index.html`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/templates/index.html), [`frontend/static/css/dashboard.css`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/css/dashboard.css), and gauge styling in [`frontend/static/js/dashboard.js`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/js/dashboard.js)
-- **Changes**:
-  - Refine circular SVG gauges: eliminate glowing shadows, use crisp 4px stroke tracks, clean centered tabular percentages.
-  - Refine 7-step Incident Lifecycle stepper: precision connecting tracks, clear active step indicators, and verified recovery streak counters.
-  - Polish Confusion Matrix table into a clean correlation matrix with subtle tinted cells.
-- **Preservation Check**: Verify SVG gauge animations still calculate correct dash offsets when SSE events arrive.
-
-### Pass 8: Canvas Visualizations & Plant Mimic
-- **Files Modified**: [`frontend/static/js/dashboard.js`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/js/dashboard.js) (Canvas styling only) & [`frontend/static/css/dashboard.css`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/css/dashboard.css)
-- **Changes**:
-  - Ensure razor-sharp canvas rendering: align gridlines to pixel boundaries, render crisp 11px JetBrains Mono axis labels.
-  - Quiet legend styling: subtle neutral line indicators without clunky dashed boxes.
-  - Plant Mimic SVG: style nodes as crisp industrial gateway and sensor icons with subtle packet-flow animation.
-- **Preservation Check**: Confirm canvas charts continuously stream live data from `/api/telemetry/stream` without stuttering or memory leaks.
-
-### Pass 9: Motion Restraint & Redline Check
-- **Files Modified**: [`frontend/static/css/dashboard.css`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/css/dashboard.css)
-- **Changes**:
-  - Standardize all transitions to `cubic-bezier(0.22, 1, 0.36, 1)` with 150ms-200ms durations.
-  - Remove all non-essential looping animations.
-  - Run full audit checklist against `references/signs.md` to ensure zero slop signs remain.
-- **Preservation Check**: Full visual and functional inspection.
+### Pass 7: Final Responsive & Functional Quality Assurance [COMPLETED]
+- **Files Modified**: [`frontend/static/css/dashboard.css`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/css/dashboard.css), [`frontend/static/js/dashboard.js`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/js/dashboard.js), [`frontend/templates/index.html`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/templates/index.html), & [`frontend/templates/login.html`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/templates/login.html)
+- **Defects Verified & Fixed**:
+  - **Sticky Header Responsive Alignment (Zero Content Obscuring)**:
+    - Fixed exact height correspondence across all 5 industrial viewports:
+      - `1600x1000` (Workstation): exactly `56.0px` (body width 1594px <= 1600px).
+      - `1280x900` (Compact Console): exactly `56.0px` (body width 1274px <= 1280px; reduced from 130px wrap).
+      - `1024x800` (Ruggedized Panel): exactly `56.0px` (body width 1018px <= 1024px; reduced from 105px wrap).
+      - `900x768` (Split Screen): exactly `120.0px` (body width 894px <= 900px; perfectly matches `--hmi-header-height: 120px;`).
+      - `768x1024` (Vertical Tablet): exactly `120.0px` (body width 762px <= 768px; perfectly matches `--hmi-header-height: 120px;`).
+    - Added `@media (max-width: 1400px)` rules to hide secondary informational badges (`Gateway: AICG-GW-01` and `Runtime: Canonical Hybrid`) while preserving vital indicators (`Plant: ONLINE` and `Mode: DRY_RUN`), preventing any header wrap at 1280px.
+    - Corrected class selector in `@media (max-width: 1100px)` from `.header-badges` to `.header-center-badges` and collapsed header action button labels into compact icons (`padding: 3px 6px; min-width: 25px;`), eliminating header wrap at 1024px.
+    - Standardized `.clock-widget` to `min-width: 95px; white-space: nowrap;` to prevent text splitting across all desktop viewports.
+    - Verified `scroll-margin-top: calc(var(--hmi-header-height) + 16px)` guarantees sticky header never obscures jump-target content or panel headers.
+  - **Embedded SVG Favicon (Zero Console Errors)**:
+    - Added self-contained SVG data URI shield favicon to both [`index.html`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/templates/index.html) and [`login.html`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/templates/login.html), completely eliminating the browser 404 favicon error and achieving **0 console errors**.
+  - **Keyboard Navigation & Visible Focus Rings (WCAG 2.4.7 Focus Visible)**:
+    - Added global `:focus-visible` styles with a crisp, accessible cyan outline (`outline: 2px solid rgba(56, 189, 248, 0.75); outline-offset: 2px;`) across all buttons, inputs, links, scenario catalogue controls, sidebar navigation links, and administrative actions.
+  - **Chart Rendering & Resize Optimization**:
+    - Added a 120ms debounce to the window resize listener in [`dashboard.js`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/js/dashboard.js) to eliminate redundant network fetches and canvas re-draw stuttering during window dragging.
+  - **Audit Log Usability**:
+    - Updated `renderAuditTable` to differentiate empty ledger state from search filter misses ("No administrative audit records match your filter criteria").
+- **Verification**:
+  - Full backend and security test suite: **236 passed** in 62.47s (`pytest backend/tests/`).
+  - Headless browser acceptance suite: **All 8 steps passed** across all 5 industrial viewports (1600x1000, 1280x900, 1024x800, 900x768, 768x1024).
+  - Browser console logs: **0 errors** observed.
+  - Final screenshots captured and verified: `docs/pass7_final_top.png`, `docs/pass7_final_middle.png`, `docs/pass7_final_lower.png`, `docs/pass7_final_admin.png`.
 
 ---
 
@@ -216,9 +274,43 @@ The repository is on branch `ui/unslop-refinement` with a clean working tree:
 ```bash
 git status  # Verified clean
 ```
-- A Git tag checkpoint (`git tag checkpoint-pre-unslop`) will be created before touching any files.
+- A Git tag checkpoint (`checkpoint-pre-unslop`) is already established.
 - If any pass introduces regressions or breaks existing tests, instant rollback is guaranteed:
 ```bash
-git checkout -- frontend/
+git checkout checkpoint-pre-unslop -- frontend/
 ```
 - No changes will be committed until all 9 passes are complete, verified by tests, and reviewed by the user.
+
+---
+
+## 8. Cross-Interface Extension: Login, Attack Simulator & Unified Typography
+
+### Phase 1: Login Page Modernization [COMPLETED]
+- Replaced glowing gradients with industrial Graphite visual language (`#111113` base, `#17171a` panel, hairline borders).
+- Implemented integrated progressive-disclosure simulated MFA drawer (`#mfaContainer` starts hidden; dynamically reveals upon valid primary credentials requiring step-up).
+- Streamlined persona switcher with compact administrative tiles (`admin`, `operator`).
+- Preserved compliance disclosures (`LOCAL LAB IDENTITY`, `SIMULATED MFA`, `DRY_RUN`).
+
+### Phase 2: AICG Attack Simulator Dual-Pane Cockpit [COMPLETED]
+- Replaced cramped single-column layout with a 50/50 balanced industrial cockpit.
+- Left Pane (Configuration & Execution): Profile selectors, attack categories (`Volumetric`, `Protocol`, `Application`), real-time intensity/duration sliders with live numeric badges, restrained danger CTA button, and quick-load presets.
+- Right Pane (Telemetry & Safety Boundary): In-process engine status, active attack vector, physical egress containment (`ZERO PACKET TRANSMISSION`), host firewall state (`HOST FIREWALL UNTOUCHED`), and execution results.
+- Operator RBAC mode: View-only cockpit with disabled execution controls and disclaimer banner.
+
+### Pass 5: Cross-Interface Typography & Tabular Numerals [COMPLETED]
+- **Files Modified**: [`frontend/static/css/dashboard.css`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/css/dashboard.css), [`frontend/static/js/dashboard.js`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/static/js/dashboard.js), [`frontend/templates/index.html`](file:///home/kali/AI-Edge-DDoS-Gateway/frontend/templates/index.html).
+- **Typography Audit & Normalization**:
+  - Enforced strict separation between UI typography (`--font-ui`: Inter / system sans-serif) and technical data typography (`--font-mono`: JetBrains Mono).
+  - Standardized control typography: category filter tabs, field labels, navigation links, and button labels standardized to `--font-ui` (font weights 500-600).
+  - Replaced hardcoded `monospace` strings in `dashboard.js` with `var(--font-mono)`.
+- **Tabular Numeral Enforcement (`font-variant-numeric: tabular-nums lining-nums`)**:
+  - Main Dashboard: Live clock, KPI counters (packet rate, throughput, anomaly probability), gauge readouts, energy rates, topology device counts, protocol breakdown pills, XAI anomaly scores, model assurance metrics (F1, Precision, Recall, FPR, AUC, Brier), confusion matrix cells, admin overview counters, alert filter buttons, and dynamic table rows (`incidentsTable`, `eventsTable`, `sampleFlowsTable`, `adminAuditTableBody`).
+  - Login Page: Persona tile credentials, MFA input code, simulated MFA hint token, and authentication scope indicators.
+  - Attack Simulator Cockpit: Intensity highlight values, slider scale tick labels, duration readouts, status table value columns, telemetry mini rate badges, and preset parameter cards. Dynamic slider scrubbing confirmed zero layout jitter.
+- **Mobile Responsive Hardening**:
+  - Constrained CSS grid expansion (`minmax(0, 1fr)`), enabled `.zt-decision-flow-bar` wrapping, allowed `.panel-header` wrapping, and wrapped safety claim tags to eliminate horizontal overflow at 375px mobile viewport while strictly preserving `position: sticky` on the navigation sidebar.
+- **Automated Verification**:
+  - Pass 5 Selenium automated cross-interface test: **100% passed** across Desktop (1600x1000), Tablet (1024x768), and Mobile (375x812) with **0 console errors** and **0 horizontal overflow**.
+  - Backend Security & API Test Suite: **64 passed** (`pytest backend/tests/`).
+  - Headless Browser Acceptance Suite: **All 8 steps passed** across all 5 industrial viewports.
+

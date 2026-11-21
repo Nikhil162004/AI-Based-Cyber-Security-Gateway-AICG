@@ -1334,35 +1334,71 @@ def create_app(runtime: GatewayRuntime) -> Flask:
     @app.get("/api/topology")
     @login_required
     def topology():
+        attack_nodes = runtime.get_topology_attacker_states()
         sensors = [
-            {"name": "SENSOR-01", "id": "SENSOR-01", "ip": "10.42.0.11", "role": "IIoT Sensor", "authorization": "AUTHORIZED", "trust": runtime.iam.get("SENSOR-01").trust_score},
-            {"name": "SENSOR-02", "id": "SENSOR-02", "ip": "10.42.0.12", "role": "Sensor Cluster", "authorization": "AUTHORIZED", "trust": runtime.iam.get("SENSOR-GROUP-A").trust_score},
+            {"name": "SENSOR-01", "id": "SENSOR-01", "ip": "10.42.0.11", "role": "IIoT Sensor", "authorization": "AUTHORIZED", "trust": runtime.iam.get("SENSOR-01").trust_score, "status": "ONLINE", "traffic_indicator": "NORMAL (15.0 pps)"},
+            {"name": "SENSOR-02", "id": "SENSOR-02", "ip": "10.42.0.12", "role": "Sensor Cluster", "authorization": "AUTHORIZED", "trust": runtime.iam.get("SENSOR-GROUP-A").trust_score, "status": "ONLINE", "traffic_indicator": "NORMAL (18.0 pps)"},
         ]
-        gateway = {"name": "GATEWAY-01", "id": "GATEWAY-01", "ip": "10.42.0.1", "role": "Security Gateway", "authorization": "AUTHORIZED", "trust": 100}
-        ot_servers = [{"name": "PLC-SINK", "id": "PLC-SINK", "ip": "10.42.0.10", "role": "OT PLC Sink", "authorization": "AUTHORIZED", "trust": 100}]
-        attack_nodes = [{"name": "ATK-01", "id": "ATK-01", "ip": "10.42.0.250", "role": "Controlled Lab Attacker", "authorization": "DENIED", "trust": runtime.iam.get("ATK-01").trust_score, "simulation_only": True}]
+        gateway_status = "SHIELD_ACTIVE" if any(a.get("mitigated") for a in attack_nodes) else ("ALERT" if any(a.get("active") for a in attack_nodes) else "ONLINE")
+        gateway = {"name": "EDGE-GW-01", "id": "EDGE-GW-01", "alias": "GATEWAY-01", "ip": "10.42.0.1", "role": "Security Gateway", "authorization": "AUTHORIZED", "trust": 100, "status": gateway_status}
+        ot_servers = [{"name": "PLC-SINK", "id": "PLC-SINK", "ip": "10.42.0.10", "role": "OT PLC Sink", "authorization": "AUTHORIZED", "trust": 100, "status": "ONLINE"}]
+
         links = [
-            {"source": "SENSOR-01", "target": "GATEWAY-01"},
-            {"source": "SENSOR-02", "target": "GATEWAY-01"},
-            {"source": "ATK-01", "target": "GATEWAY-01"},
-            {"source": "GATEWAY-01", "target": "PLC-SINK"}
+            {"source": "SENSOR-01", "target": "EDGE-GW-01", "type": "legitimate", "status": "ACTIVE"},
+            {"source": "SENSOR-02", "target": "EDGE-GW-01", "type": "legitimate", "status": "ACTIVE"},
+            {"source": "EDGE-GW-01", "target": "PLC-SINK", "type": "ot", "status": "ACTIVE"},
         ]
+        for a in attack_nodes:
+            links.append({
+                "source": a["id"],
+                "target": "EDGE-GW-01",
+                "type": "attack",
+                "status": a["status"],
+                "active": a["active"],
+                "mitigated": a["mitigated"],
+            })
+
+        nodes = [
+            {"id": "SENSOR-01", "name": "SENSOR-01", "type": "sensor", "ip": "10.42.0.11", "trust": runtime.iam.get("SENSOR-01").trust_score, "status": "ONLINE"},
+            {"id": "SENSOR-02", "name": "SENSOR-02", "type": "sensor", "ip": "10.42.0.12", "trust": runtime.iam.get("SENSOR-GROUP-A").trust_score, "status": "ONLINE"},
+            {"id": "EDGE-GW-01", "name": "EDGE-GW-01", "type": "gateway", "ip": "10.42.0.1", "trust": 100, "status": gateway_status},
+            {"id": "PLC-SINK", "name": "PLC-SINK", "type": "plc", "ip": "10.42.0.10", "trust": 100, "status": "ONLINE"},
+        ]
+        for a in attack_nodes:
+            nodes.append({
+                "id": a["id"],
+                "name": a["name"],
+                "type": "attacker",
+                "ip": a["ip"],
+                "role": a["role"],
+                "trust": a["trust"],
+                "status": a["status"],
+                "active": a["active"],
+                "mitigated": a["mitigated"],
+            })
+
+        ot_count = len(sensors) + 1 + len(ot_servers)
+        ddos_count = len(attack_nodes)
+        total_nodes = len(nodes)
+        total_links = len(links)
+
         return jsonify({
             "status": "ONLINE",
             "environment": "CONTROLLED_SIMULATION",
             "provenance": "SIMULATED",
             "discovery": False,
+            "counts": {
+                "ot_nodes": ot_count,
+                "ddos_sources": ddos_count,
+                "total_nodes": total_nodes,
+                "links": total_links,
+            },
             "sensors": sensors,
             "gateway": gateway,
             "ot_servers": ot_servers,
             "attack_nodes": attack_nodes,
             "links": links,
-            "nodes": [
-                {"id": "SENSOR-01", "type": "sensor", "trust": runtime.iam.get("SENSOR-01").trust_score},
-                {"id": "GATEWAY-01", "type": "gateway", "trust": 100},
-                {"id": "PLC-SINK", "type": "plc", "trust": 100},
-                {"id": "ATK-01", "type": "authorized-test-source", "trust": runtime.iam.get("ATK-01").trust_score},
-            ]
+            "nodes": nodes,
         })
 
     @app.get("/api/metrics")

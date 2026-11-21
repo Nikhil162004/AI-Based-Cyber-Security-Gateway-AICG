@@ -445,7 +445,13 @@ class GatewayRuntime:
             started = time.monotonic()
             try:
                 while not stop.is_set() and (duration is None or time.monotonic() - started < duration):
-                    result = self.ingest(generate_window(scenario_id, intensity, sequence, device_id=device_id))
+                    if device_id in {"ALL", "DDOS_CLUSTER"}:
+                        active_count = max(1, min(6, intensity))
+                        active_devs = [f"ATTACKER-0{k+1}" for k in range(active_count)]
+                        cur_dev = active_devs[sequence % len(active_devs)]
+                        result = self.ingest(generate_window(scenario_id, intensity, sequence, device_id=cur_dev))
+                    else:
+                        result = self.ingest(generate_window(scenario_id, intensity, sequence, device_id=device_id))
                     state_ref[0].windows += 1
                     sequence += 1
                     stop.wait(self.settings.demo_tick_seconds)
@@ -521,6 +527,112 @@ class GatewayRuntime:
             )
             res = self.ingest(event)
             results.append(res)
+        return results
+
+    def get_topology_attacker_states(self) -> list[dict[str, Any]]:
+        """Return dynamic simulation, traffic indicator, and enforcement state for six DDoS attacker sources."""
+        sims = getattr(self, "_simulations", {})
+        active_sim = next((s for s in sims.values() if s.scenario_id != "normal" and not s.stop.is_set()), None)
+
+        enforcer = getattr(self.response, "enforcer", None)
+        active_isolates = getattr(enforcer, "active_isolates", {}) if enforcer else {}
+
+        active_inc = self.store.find_active_incident()
+        inc_state = active_inc.get("lifecycle_state") if active_inc else None
+        inc_dev = active_inc.get("device_id") if active_inc else None
+
+        # Threat is mitigated/contained if enforcer has isolates or incident is contained/recovering
+        is_contained = inc_state in {"CONTAINED", "RECOVERING"} or len(active_isolates) > 0
+        is_attack_running = active_sim is not None
+
+        sim_scenario = active_sim.scenario_id if active_sim else (active_inc.get("attack_type") if active_inc else "udp_flood")
+        sim_intensity = active_sim.intensity if active_sim else 3
+        sim_target_dev = active_sim.device_id if active_sim else inc_dev
+
+        attacker_defs = [
+            {"id": "ATTACKER-01", "name": "ATTACKER-01", "ip": "10.42.0.250", "role": "UDP Flood Bot", "vector": "udp_flood", "alias": "ATK-01"},
+            {"id": "ATTACKER-02", "name": "ATTACKER-02", "ip": "10.42.0.251", "role": "TCP SYN Bot", "vector": "syn_flood", "alias": None},
+            {"id": "ATTACKER-03", "name": "ATTACKER-03", "ip": "10.42.0.252", "role": "ICMP Echo Bot", "vector": "icmp_flood", "alias": None},
+            {"id": "ATTACKER-04", "name": "ATTACKER-04", "ip": "10.42.0.253", "role": "CoAP Anomaly Bot", "vector": "coap_anomaly", "alias": None},
+            {"id": "ATTACKER-05", "name": "ATTACKER-05", "ip": "10.42.0.254", "role": "Slowloris Bot", "vector": "slow_rate", "alias": None},
+            {"id": "ATTACKER-06", "name": "ATTACKER-06", "ip": "10.42.0.249", "role": "Modbus Exploit Bot", "vector": "modbus_anomaly", "alias": None},
+        ]
+
+        active_count = max(1, min(6, sim_intensity))
+
+        results = []
+        for i, a in enumerate(attacker_defs):
+            node_id = a["id"]
+            alias = a.get("alias")
+
+            node_isolated = (node_id in active_isolates or (bool(alias) and alias in active_isolates))
+
+            # Is this node participating in the configured attack?
+            if sim_target_dev and sim_target_dev not in {None, "ATK-01", "ALL", "DDOS_CLUSTER"}:
+                is_participating = (sim_target_dev in {node_id, alias})
+            else:
+                # Distributed multi-source DDoS attack:
+                # Active bot sources scale 1:1 with simulation intensity (1 through 6)
+                is_participating = (i < active_count)
+
+            # Determine mitigation state:
+            # 1. Device is directly isolated in the policy enforcer
+            # 2. Or, the attack campaign this node is participating in has been contained/mitigated
+            if node_isolated:
+                is_mitigated = True
+            elif is_contained and is_participating and (active_sim or inc_state in {"CONTAINED", "RECOVERING"}):
+                # When specific device is isolated but no live multi-source simulation is active, isolate only targeted
+                if (len(active_isolates) > 0 and not active_sim and not node_isolated):
+                    is_mitigated = False
+                else:
+                    is_mitigated = True
+            else:
+                is_mitigated = False
+
+            # Active attack flow: only when simulation is actively running AND node is not mitigated
+            is_active = is_attack_running and is_participating and not is_mitigated
+
+            # Trust score from IAM
+            ident = self.iam.get(node_id)
+            trust_score = ident.trust_score if ident else 35.0
+            if alias:
+                alias_ident = self.iam.get(alias)
+                if alias_ident and alias_ident.trust_score < trust_score:
+                    trust_score = alias_ident.trust_score
+
+            if is_mitigated:
+                status = "CONTAINED"
+                flow_active = False
+                packet_rate = 0.0
+                traffic_ind = "BLOCKED (0.0 pps)"
+            elif is_active:
+                status = "ATTACKING"
+                flow_active = True
+                pps = round(max(15.0, 30.0 * (sim_intensity ** 1.3) / 3.0 + (i % 3) * 2.5), 1)
+                packet_rate = pps
+                traffic_ind = f"ACTIVE ({pps} pps)"
+            else:
+                status = "IDLE"
+                flow_active = False
+                packet_rate = 0.0
+                traffic_ind = "IDLE (0.0 pps)"
+
+            results.append({
+                "id": node_id,
+                "name": a["name"],
+                "ip": a["ip"],
+                "role": a["role"],
+                "vector": a["vector"],
+                "alias": alias,
+                "status": status,
+                "active": flow_active,
+                "mitigated": is_mitigated,
+                "packet_rate": packet_rate,
+                "traffic_indicator": traffic_ind,
+                "authorization": "DENIED",
+                "trust": trust_score,
+                "simulation_only": True,
+            })
         return results
 
     def manual_action(self, incident_id: str, action: str, actor: str = "operator") -> dict[str, Any]:

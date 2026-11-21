@@ -22,7 +22,7 @@ function updateClockAndUptime() {
     const hrs = String(Math.floor(elapsedSec / 3600)).padStart(2, "0");
     const mins = String(Math.floor((elapsedSec % 3600) / 60)).padStart(2, "0");
     const secs = String(elapsedSec % 60).padStart(2, "0");
-    if (uptimeEl) uptimeEl.textContent = `UPTIME: ${hrs}h ${mins}m ${secs}s`;
+    if (uptimeEl) uptimeEl.textContent = `Uptime: ${hrs}h ${mins}m ${secs}s`;
 }
 setInterval(updateClockAndUptime, 1000);
 updateClockAndUptime();
@@ -85,7 +85,8 @@ function updateSummary(summary, fullStatus) {
     }
     if (headerThreatPill) {
         headerThreatPill.className = `threat-state-pill ${isAttack ? "attack" : (hasActiveIncident ? "recovering" : "clear")}`;
-        headerThreatPill.textContent = isAttack ? "ATTACK ACTIVE" : (hasActiveIncident ? `THREAT ${activeState}` : "SYSTEM SECURE");
+        const pillText = isAttack ? "Attack Active" : (hasActiveIncident ? `Threat ${activeState}` : "System Secure");
+        headerThreatPill.innerHTML = `<span style="font-size: 8px;">●</span> <span id="threatStatus">${pillText}</span>`;
     }
 
     // Card 3: Plant State
@@ -139,9 +140,9 @@ function updateStatusBanner(prediction, ddosProb, summary) {
 
     if (isAttack) {
         banner.className = "security-status-banner banner-threat";
-        if (badge) badge.textContent = "⚠️";
+        if (badge) badge.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
         const atkType = summary.attack_type || (summary.latest && summary.latest.attack_type) || "UDP_FLOOD";
-        headline.textContent = `IDENTIFIED • ${String(atkType).toUpperCase()} • ATTACK SOURCE 10.42.0.250 → GATEWAY`;
+        headline.textContent = `Anomaly Identified • ${String(atkType).replace(/_/g, " ")} • Source 10.42.0.250 → Gateway-01`;
         if (detail) detail.textContent = "Abnormal packet exhaustion surge detected. Software containment active in dry-run mode.";
         if (target) target.textContent = "GATEWAY-01 (10.42.0.1:5683)";
         if (severity) {
@@ -150,8 +151,8 @@ function updateStatusBanner(prediction, ddosProb, summary) {
         }
     } else if (isRecovering) {
         banner.className = "security-status-banner banner-recovering";
-        if (badge) badge.textContent = "🔄";
-        headline.textContent = "RECOVERING • TRAFFIC RETURNING TO BASELINE • VERIFYING STREAK";
+        if (badge) badge.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
+        headline.textContent = "Recovering • Traffic Returning to Baseline • Verifying Streak";
         if (detail) detail.textContent = "Telemetry within normal bounds. Awaiting consecutive normal verification windows.";
         if (target) target.textContent = (activeInc && activeInc.incident_id) || "GATEWAY-01";
         if (severity) {
@@ -160,8 +161,8 @@ function updateStatusBanner(prediction, ddosProb, summary) {
         }
     } else if (hasActiveIncident) {
         banner.className = "security-status-banner banner-recovering";
-        if (badge) badge.textContent = "🛡️";
-        headline.textContent = `CONTAINED • ${activeState} • OBSERVING BASELINE TELEMETRY`;
+        if (badge) badge.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
+        headline.textContent = `Contained • ${activeState} • Observing Baseline Telemetry`;
         if (detail) detail.textContent = "Simulated software mitigation active. Observing device baseline for qualification.";
         if (target) target.textContent = (activeInc && activeInc.incident_id) || "GATEWAY-01";
         if (severity) {
@@ -170,8 +171,8 @@ function updateStatusBanner(prediction, ddosProb, summary) {
         }
     } else {
         banner.className = "security-status-banner";
-        if (badge) badge.textContent = "✓";
-        headline.textContent = "CLEAR • NO ACTIVE DDOS ANOMALY • PLANT WITHIN BASELINE";
+        if (badge) badge.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
+        headline.textContent = "Normal Baseline • No DDoS Anomaly Observed";
         if (detail) detail.textContent = "Baseline sensor telemetry active across 6LoWPAN mesh. In-process defense pipeline armed.";
         if (target) target.textContent = "GATEWAY (10.42.0.1)";
         if (severity) {
@@ -692,14 +693,27 @@ function renderThreatChart(canvas, rows) {
 }
 
 /**
- * Supporting Non-Time-Series: Protocol Mix Doughnut
+ * Supporting Non-Time-Series: Protocol Mix Segmented Donut
+ * Enterprise SOC analytics visualization with tactile depth, clean segment separation,
+ * interactive hover telemetry inspection, and smooth cubic-eased distribution transitions.
  */
-function renderProtocolDonut(canvas, protocolsData) {
-    const setup = setupCanvas(canvas);
-    if (!setup) return;
-    const { ctx, width, height } = setup;
+const protocolChartState = {
+    canvas: null,
+    listenersAttached: false,
+    categories: [],
+    slices: [], // { key, label, count, pct, color, deepColor, currentStart, currentEnd, fromStart, fromEnd, targetStart, targetEnd }
+    dominant: null,
+    totalCount: 0,
+    hoveredKey: null,
+    animating: false,
+    startTime: 0,
+    duration: 320,
+    animFrameId: null
+};
 
-    ctx.clearRect(0, 0, width, height);
+function renderProtocolDonut(canvas, protocolsData) {
+    if (!canvas) return;
+    protocolChartState.canvas = canvas;
 
     const mix = (protocolsData && protocolsData.mix) ? protocolsData.mix : { "UDP": 212, "TCP": 20, "ICMP": 9 };
 
@@ -718,18 +732,20 @@ function renderProtocolDonut(canvas, protocolsData) {
     }
 
     const categories = [
-        { key: "UDP", label: "UDP", count: udpCount, elId: "protoCountUDP", color: "#38bdf8" },
-        { key: "TCP", label: "TCP", count: tcpCount, elId: "protoCountTCP", color: "#818cf8" },
-        { key: "ICMP", label: "ICMP", count: icmpCount, elId: "protoCountICMP", color: "#f43f5e" },
-        { key: "MQTT", label: "MQTT", count: mqttCount, elId: "protoCountMQTT", color: "#10b981" }
+        { key: "UDP", label: "UDP", desc: "CoAP / Floods", count: udpCount, elId: "protoCountUDP", pktsId: "protoPktsUDP", rowId: "protoRowUDP", color: "#38bdf8", deepColor: "#0284c7" },
+        { key: "TCP", label: "TCP", desc: "SYN / Modbus", count: tcpCount, elId: "protoCountTCP", pktsId: "protoPktsTCP", rowId: "protoRowTCP", color: "#818cf8", deepColor: "#4f46e5" },
+        { key: "ICMP", label: "ICMP", desc: "ICMPv6 / RPL", count: icmpCount, elId: "protoCountICMP", pktsId: "protoPktsICMP", rowId: "protoRowICMP", color: "#f43f5e", deepColor: "#be123c" },
+        { key: "MQTT", label: "MQTT", desc: "Field Telemetry", count: mqttCount, elId: "protoCountMQTT", pktsId: "protoPktsMQTT", rowId: "protoRowMQTT", color: "#10b981", deepColor: "#047857" }
     ];
     if (otherCount > 0) {
-        categories.push({ key: "OTHER", label: "OTHER", count: otherCount, elId: null, color: "#f59e0b" });
+        categories.push({ key: "OTHER", label: "OTHER", desc: "Other Traffic", count: otherCount, elId: null, pktsId: null, rowId: null, color: "#f59e0b", deepColor: "#b45309" });
     }
 
     const totalCount = categories.reduce((sum, c) => sum + c.count, 0);
+    protocolChartState.totalCount = totalCount;
+    protocolChartState.categories = categories;
 
-    // Compute normalized integer percentages that sum to 100% using Largest Remainder Method (Hamilton-Hare)
+    // Compute normalized integer percentages summing to 100% using Largest Remainder Method (Hamilton-Hare)
     let normPcts = categories.map(() => 0);
     if (totalCount > 0) {
         const rawPcts = categories.map(c => (c.count / totalCount) * 100);
@@ -746,14 +762,16 @@ function renderProtocolDonut(canvas, protocolsData) {
         }
     }
 
-    // Update Pills and legend with identical normalized values
+    // Update Pills and legend with aligned percentages and packet counts
     categories.forEach((cat, idx) => {
         cat.pct = normPcts[idx];
         if (cat.elId) {
             const el = document.getElementById(cat.elId);
-            if (el) {
-                el.textContent = `${cat.pct}% (${cat.count})`;
-            }
+            if (el) el.textContent = `${cat.pct}%`;
+        }
+        if (cat.pktsId) {
+            const pktsEl = document.getElementById(cat.pktsId);
+            if (pktsEl) pktsEl.textContent = `${cat.count.toLocaleString()} pkts`;
         }
     });
 
@@ -764,100 +782,625 @@ function renderProtocolDonut(canvas, protocolsData) {
             dominant = c;
         }
     }
-    const centerVal = document.getElementById("donutPrimaryProto");
-    const centerPct = document.getElementById("donutPrimaryPct");
-    if (centerVal) centerVal.textContent = totalCount > 0 ? dominant.label : "IDLE";
-    if (centerPct) centerPct.textContent = totalCount > 0 ? `${dominant.pct}%` : "0%";
+    protocolChartState.dominant = dominant;
 
-    // Draw Crisp Doughnut Slices using identical normalized slices
+    // Determine dynamic protocol distribution classification badge
+    const badgeEl = document.getElementById("protocolMixBadge");
+    if (badgeEl) {
+        if (totalCount <= 0) {
+            badgeEl.textContent = "Standby";
+            badgeEl.style.color = "#64748b";
+            badgeEl.style.borderColor = "var(--border-subtle)";
+            badgeEl.style.background = "var(--bg-panel-elevated)";
+        } else {
+            // Sort categories by percentage descending
+            const sortedPcts = categories.map(c => c.pct).sort((a, b) => b - a);
+            const topPct = sortedPcts[0] || 0;
+            const secondPct = sortedPcts[1] || 0;
+            const activeCatsCount = categories.filter(c => c.count > 0 && c.pct >= 5).length;
+
+            if (topPct >= 70) {
+                // Highly concentrated single protocol (e.g. UDP-Dominant, TCP-Dominant)
+                badgeEl.textContent = `${dominant.label}-Dominant`;
+                badgeEl.style.color = dominant.color;
+                badgeEl.style.borderColor = `${dominant.color}40`;
+                badgeEl.style.background = `${dominant.color}14`;
+            } else if (topPct <= 45 && (activeCatsCount >= 3 || (topPct - secondPct) <= 12)) {
+                // Well-balanced across multiple protocols without a runaway leader
+                badgeEl.textContent = "Balanced";
+                badgeEl.style.color = "#10b981";
+                badgeEl.style.borderColor = "rgba(16, 185, 129, 0.3)";
+                badgeEl.style.background = "rgba(16, 185, 129, 0.08)";
+            } else {
+                // Multiple protocols with meaningful distribution
+                badgeEl.textContent = "Diversified";
+                badgeEl.style.color = "#818cf8";
+                badgeEl.style.borderColor = "rgba(129, 140, 248, 0.3)";
+                badgeEl.style.background = "rgba(129, 140, 248, 0.08)";
+            }
+        }
+    }
+
+    // Calculate target angles for each category (starting at -PI/2, 12 o'clock)
+    let angleCursor = -Math.PI / 2;
+    const targetSlices = categories.map(cat => {
+        const span = totalCount > 0 ? (cat.count / totalCount) * (Math.PI * 2) : 0;
+        const targetStart = angleCursor;
+        const targetEnd = angleCursor + span;
+        angleCursor = targetEnd;
+        return {
+            key: cat.key,
+            label: cat.label,
+            count: cat.count,
+            pct: cat.pct,
+            color: cat.color,
+            deepColor: cat.deepColor,
+            targetStart,
+            targetEnd
+        };
+    });
+
+    // Check if smooth transition interpolation is needed
+    if (!protocolChartState.slices || protocolChartState.slices.length === 0) {
+        // Initial setup
+        protocolChartState.slices = targetSlices.map(s => ({
+            ...s,
+            currentStart: s.targetStart,
+            currentEnd: s.targetEnd,
+            fromStart: s.targetStart,
+            fromEnd: s.targetEnd
+        }));
+        drawSegmentedDonut(canvas);
+        updateProtocolCenterHUD();
+    } else {
+        // Check if slice angles have changed significantly
+        let hasChanged = false;
+        const updatedSlices = targetSlices.map(target => {
+            const existing = protocolChartState.slices.find(s => s.key === target.key);
+            const curStart = existing ? existing.currentStart : target.targetStart;
+            const curEnd = existing ? existing.currentEnd : target.targetEnd;
+            if (Math.abs(curStart - target.targetStart) > 0.005 || Math.abs(curEnd - target.targetEnd) > 0.005) {
+                hasChanged = true;
+            }
+            return {
+                ...target,
+                currentStart: curStart,
+                currentEnd: curEnd,
+                fromStart: curStart,
+                fromEnd: curEnd
+            };
+        });
+
+        protocolChartState.slices = updatedSlices;
+
+        if (hasChanged && !protocolChartState.animating) {
+            protocolChartState.animating = true;
+            protocolChartState.startTime = performance.now();
+            if (protocolChartState.animFrameId) {
+                cancelAnimationFrame(protocolChartState.animFrameId);
+            }
+
+            function animateStep(now) {
+                const elapsed = now - protocolChartState.startTime;
+                const progress = Math.min(1, elapsed / protocolChartState.duration);
+                // Cubic ease-out: 1 - (1 - t)^3
+                const ease = 1 - Math.pow(1 - progress, 3);
+
+                protocolChartState.slices.forEach(s => {
+                    s.currentStart = s.fromStart + (s.targetStart - s.fromStart) * ease;
+                    s.currentEnd = s.fromEnd + (s.targetEnd - s.fromEnd) * ease;
+                });
+
+                drawSegmentedDonut(canvas);
+                updateProtocolCenterHUD();
+
+                if (progress < 1) {
+                    protocolChartState.animFrameId = requestAnimationFrame(animateStep);
+                } else {
+                    protocolChartState.slices.forEach(s => {
+                        s.currentStart = s.targetStart;
+                        s.currentEnd = s.targetEnd;
+                    });
+                    drawSegmentedDonut(canvas);
+                    updateProtocolCenterHUD();
+                    protocolChartState.animating = false;
+                    protocolChartState.animFrameId = null;
+                }
+            }
+
+            protocolChartState.animFrameId = requestAnimationFrame(animateStep);
+        } else {
+            drawSegmentedDonut(canvas);
+            updateProtocolCenterHUD();
+        }
+    }
+
+    // Attach interactive event listeners on canvas and legend pills once
+    attachProtocolListeners(canvas);
+}
+
+/**
+ * Draw modern segmented donut with micro-scale ticks, recessed groove track,
+ * clean segment angular separation, subtle depth radial gradients, and interactive elevation.
+ */
+function drawSegmentedDonut(canvas) {
+    const setup = setupCanvas(canvas);
+    if (!setup) return;
+    const { ctx, width, height } = setup;
+
+    ctx.clearRect(0, 0, width, height);
+
     const centerX = width / 2;
     const centerY = height / 2;
-    const outerRadius = Math.min(centerX, centerY) - 8;
-    const innerRadius = outerRadius * 0.72;
+    const outerRadius = Math.min(centerX, centerY) - 12;
+    const innerRadius = outerRadius * 0.67;
 
-    if (totalCount > 0) {
-        let startAngle = -Math.PI / 2;
-        categories.forEach((cat) => {
-            if (cat.count <= 0) return;
-            const sliceAngle = (cat.count / totalCount) * (Math.PI * 2);
-            const endAngle = startAngle + sliceAngle;
+    // 1. Precision Micro-Scale Outer Dial Ring
+    const tickRadius = outerRadius + 8;
+    ctx.save();
+    for (let i = 0; i < 36; i++) {
+        const angle = (i * Math.PI * 2) / 36 - Math.PI / 2;
+        const isCardinal = (i % 9 === 0);
+        const innerT = isCardinal ? tickRadius - 5 : tickRadius - 3;
+        const outerT = tickRadius;
+        const x1 = centerX + Math.cos(angle) * innerT;
+        const y1 = centerY + Math.sin(angle) * innerT;
+        const x2 = centerX + Math.cos(angle) * outerT;
+        const y2 = centerY + Math.sin(angle) * outerT;
+
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = isCardinal ? "rgba(148, 163, 184, 0.35)" : "rgba(148, 163, 184, 0.12)";
+        ctx.lineWidth = isCardinal ? 1.75 : 1.2;
+        ctx.stroke();
+    }
+    ctx.restore();
+
+    // 2. Recessed Background Instrument Groove Track
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
+    ctx.arc(centerX, centerY, innerRadius, Math.PI * 2, 0, true);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(15, 23, 42, 0.7)";
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(51, 65, 85, 0.35)";
+    ctx.stroke();
+    ctx.restore();
+
+    const slices = protocolChartState.slices || [];
+    const activeSlices = slices.filter(s => s.count > 0 && (s.currentEnd - s.currentStart) > 0.01);
+
+    // 3. Segmented Arcs with Clean Angular Gap & Subtle Depth
+    if (activeSlices.length > 0) {
+        // Gap angle: ~2.5 degrees when multiple segments exist
+        const gap = activeSlices.length >= 2 ? Math.min(0.048, 0.36 / activeSlices.length) : 0;
+
+        slices.forEach(slice => {
+            if (slice.count <= 0) return;
+            const span = slice.currentEnd - slice.currentStart;
+            if (span <= 0.005) return;
+
+            let aStart = slice.currentStart;
+            let aEnd = slice.currentEnd;
+
+            if (activeSlices.length >= 2 && span > gap) {
+                aStart += gap / 2;
+                aEnd -= gap / 2;
+            }
+
+            const isHovered = (protocolChartState.hoveredKey === slice.key);
+            const anyHovered = Boolean(protocolChartState.hoveredKey);
+
+            // Subtle interactive elevation: hovered slice expands radially
+            const rOut = isHovered ? outerRadius + 5 : outerRadius;
+            const rIn = isHovered ? innerRadius - 2 : innerRadius;
+            const alpha = isHovered ? 1.0 : (anyHovered ? 0.32 : 0.95);
+
+            ctx.save();
+            ctx.globalAlpha = alpha;
+
+            // Radial gradient providing subtle tactile depth
+            const grad = ctx.createRadialGradient(centerX, centerY, rIn, centerX, centerY, rOut);
+            grad.addColorStop(0, slice.deepColor);
+            grad.addColorStop(1, slice.color);
 
             ctx.beginPath();
-            ctx.arc(centerX, centerY, outerRadius, startAngle, endAngle);
-            ctx.arc(centerX, centerY, innerRadius, endAngle, startAngle, true);
+            ctx.arc(centerX, centerY, rOut, aStart, aEnd, false);
+            ctx.arc(centerX, centerY, rIn, aEnd, aStart, true);
             ctx.closePath();
-            ctx.fillStyle = cat.color;
+
+            ctx.fillStyle = grad;
             ctx.fill();
 
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = "#0d1627";
+            // Segment boundary separation stroke
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = "rgba(10, 15, 29, 0.95)";
             ctx.stroke();
 
-            startAngle = endAngle;
+            // Crisp accent highlight on hovered slice outer perimeter
+            if (isHovered) {
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, rOut, aStart, aEnd, false);
+                ctx.lineWidth = 2.5;
+                ctx.strokeStyle = slice.color;
+                ctx.stroke();
+            }
+
+            ctx.restore();
         });
-    } else {
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
-        ctx.arc(centerX, centerY, innerRadius, Math.PI * 2, 0, true);
-        ctx.closePath();
-        ctx.fillStyle = "rgba(70, 100, 140, 0.2)";
-        ctx.fill();
     }
+
+    // 4. Center Recessed Lens / Hub
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, innerRadius - 2, 0, Math.PI * 2);
+    ctx.fillStyle = "#0a0f1d";
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.12)";
+    ctx.stroke();
+    ctx.restore();
+}
+
+/**
+ * Update Center HUD Display based on active hover or dominant protocol.
+ */
+function updateProtocolCenterHUD() {
+    const captionEl = document.getElementById("donutCenterCaption");
+    const valEl = document.getElementById("donutPrimaryProto");
+    const pctEl = document.getElementById("donutPrimaryPct");
+    const pktsEl = document.getElementById("donutPrimaryPkts");
+    const displayWrap = document.getElementById("donutCenterDisplay");
+
+    const hovered = protocolChartState.hoveredKey
+        ? protocolChartState.slices.find(s => s.key === protocolChartState.hoveredKey)
+        : null;
+
+    if (hovered) {
+        if (captionEl) {
+            captionEl.textContent = "INSPECTING";
+            captionEl.style.color = hovered.color;
+        }
+        if (valEl) {
+            valEl.textContent = hovered.label;
+            valEl.style.color = hovered.color;
+        }
+        if (pctEl) {
+            pctEl.textContent = `${hovered.pct}%`;
+            pctEl.style.color = hovered.color;
+        }
+        if (pktsEl) {
+            pktsEl.textContent = `${hovered.count.toLocaleString()} pkts`;
+            pktsEl.style.color = "#cbd5e1";
+        }
+        if (displayWrap) {
+            displayWrap.style.boxShadow = `inset 0 0 14px rgba(0, 0, 0, 0.7), 0 0 0 1px ${hovered.color}40`;
+        }
+    } else {
+        const dom = protocolChartState.dominant;
+        const total = protocolChartState.totalCount;
+        if (captionEl) {
+            captionEl.textContent = "DOMINANT";
+            captionEl.style.color = "#64748b";
+        }
+        if (valEl) {
+            valEl.textContent = total > 0 && dom ? dom.label : "IDLE";
+            valEl.style.color = dom ? dom.color : "#f8fafc";
+        }
+        if (pctEl) {
+            pctEl.textContent = total > 0 && dom ? `${dom.pct}%` : "0%";
+            pctEl.style.color = dom ? dom.color : "#38bdf8";
+        }
+        if (pktsEl) {
+            pktsEl.textContent = total > 0 && dom ? `${dom.count.toLocaleString()} pkts` : "0 pkts";
+            pktsEl.style.color = "#64748b";
+        }
+        if (displayWrap) {
+            displayWrap.style.boxShadow = "inset 0 0 12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(148, 163, 184, 0.12)";
+        }
+    }
+}
+
+/**
+ * Synchronize Legend Highlight state with active hover inspection.
+ */
+function updateProtocolLegendHighlights() {
+    const keys = ["UDP", "TCP", "ICMP", "MQTT"];
+    keys.forEach(k => {
+        const row = document.getElementById(`protoRow${k}`);
+        if (row) {
+            const isHovered = (protocolChartState.hoveredKey === k);
+            row.classList.toggle("is-active-hover", isHovered);
+        }
+    });
+}
+
+/**
+ * Attach bidirectional hover interactions between canvas segments and legend pills.
+ */
+function attachProtocolListeners(canvas) {
+    if (!canvas || protocolChartState.listenersAttached) return;
+    protocolChartState.listenersAttached = true;
+
+    // Canvas mouse interactions
+    canvas.addEventListener("mousemove", (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left);
+        const y = (e.clientY - rect.top);
+
+        const width = rect.width;
+        const height = rect.height;
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const outerRadius = Math.min(centerX, centerY) - 12;
+        const innerRadius = outerRadius * 0.67;
+
+        const dx = x - centerX;
+        const dy = y - centerY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        let matchKey = null;
+        if (dist >= innerRadius - 4 && dist <= outerRadius + 8) {
+            // Angle clockwise from -PI/2 (12 o'clock)
+            let angle = Math.atan2(dy, dx);
+            if (angle < -Math.PI / 2) {
+                angle += Math.PI * 2;
+            }
+
+            for (const s of protocolChartState.slices) {
+                if (s.count <= 0) continue;
+                if (angle >= s.currentStart && angle <= s.currentEnd) {
+                    matchKey = s.key;
+                    break;
+                }
+            }
+        }
+
+        if (matchKey !== protocolChartState.hoveredKey) {
+            protocolChartState.hoveredKey = matchKey;
+            canvas.style.cursor = matchKey ? "pointer" : "default";
+            drawSegmentedDonut(canvas);
+            updateProtocolCenterHUD();
+            updateProtocolLegendHighlights();
+        }
+    });
+
+    canvas.addEventListener("mouseleave", () => {
+        if (protocolChartState.hoveredKey !== null) {
+            protocolChartState.hoveredKey = null;
+            canvas.style.cursor = "default";
+            drawSegmentedDonut(canvas);
+            updateProtocolCenterHUD();
+            updateProtocolLegendHighlights();
+        }
+    });
+
+    // Legend pills bidirectional mouse interactions
+    const rows = document.querySelectorAll(".proto-pill[data-proto]");
+    rows.forEach(row => {
+        const protoKey = row.dataset.proto;
+        row.addEventListener("mouseenter", () => {
+            protocolChartState.hoveredKey = protoKey;
+            drawSegmentedDonut(protocolChartState.canvas || canvas);
+            updateProtocolCenterHUD();
+            updateProtocolLegendHighlights();
+        });
+        row.addEventListener("mouseleave", () => {
+            protocolChartState.hoveredKey = null;
+            drawSegmentedDonut(protocolChartState.canvas || canvas);
+            updateProtocolCenterHUD();
+            updateProtocolLegendHighlights();
+        });
+    });
 }
 
 
 /* ==========================================================================
-   4. PLANT MIMIC TOPOLOGY VISUALIZER
+   4. PLANT MIMIC TOPOLOGY VISUALIZER (6 DDoS ATTACKER SOURCES + 4 OT NODES)
    ========================================================================== */
+const ATTACKER_CONFIG = [
+    { index: 1, id: "ATTACKER-01", ip: "10.42.0.250", role: "UDP Flood Bot", vector: "udp_flood" },
+    { index: 2, id: "ATTACKER-02", ip: "10.42.0.251", role: "TCP SYN Bot", vector: "syn_flood" },
+    { index: 3, id: "ATTACKER-03", ip: "10.42.0.252", role: "ICMP Echo Bot", vector: "icmp_flood" },
+    { index: 4, id: "ATTACKER-04", ip: "10.42.0.253", role: "CoAP Anomaly Bot", vector: "coap_anomaly" },
+    { index: 5, id: "ATTACKER-05", ip: "10.42.0.254", role: "Slowloris Bot", vector: "slow_rate" },
+    { index: 6, id: "ATTACKER-06", ip: "10.42.0.249", role: "Modbus Exploit Bot", vector: "modbus_anomaly" },
+];
+
+let cachedTopologyContext = null;
+let lastKnownAttackState = false;
+let lastKnownAttackVector = "udp_flood";
+
 function updateTopology(topologyContext) {
     if (!topologyContext) return;
+    cachedTopologyContext = topologyContext;
 
+    const otNodeCountEl = document.getElementById("topologyOtNodeCount");
+    const ddosCountEl = document.getElementById("topologyDdosSourceCount");
     const deviceCountEl = document.getElementById("topologyDeviceCount");
     const linkCountEl = document.getElementById("topologyLinkCount");
     const statusEl = document.getElementById("topologyStatus");
     const envEl = document.getElementById("topologyEnvironment");
 
-    if (deviceCountEl) deviceCountEl.textContent = (topologyContext.nodes || []).length || 5;
-    if (linkCountEl) linkCountEl.textContent = (topologyContext.links || []).length || 4;
+    // Dynamic counts calculated from the topology data structure
+    const counts = topologyContext.counts || {};
+    const otNodes = counts.ot_nodes ?? (
+        (topologyContext.sensors || []).length +
+        (topologyContext.gateway ? 1 : 0) +
+        (topologyContext.ot_servers || []).length
+    );
+    const ddosSources = counts.ddos_sources ?? (topologyContext.attack_nodes || []).length;
+    const totalNodes = counts.total_nodes ?? (topologyContext.nodes || []).length;
+    const linkCount = counts.links ?? (topologyContext.links || []).length;
+
+    if (otNodeCountEl) otNodeCountEl.textContent = otNodes || 4;
+    if (ddosCountEl) ddosCountEl.textContent = ddosSources || 6;
+    if (deviceCountEl) deviceCountEl.textContent = totalNodes || 10;
+    if (linkCountEl) linkCountEl.textContent = linkCount || 9;
     if (statusEl) statusEl.textContent = topologyContext.status || "ONLINE";
     if (envEl) envEl.textContent = (topologyContext.environment || "CONTROLLED SIMULATION").replace(/_/g, " ");
+
+    // Update sensor trust scores if returned
+    if (Array.isArray(topologyContext.sensors)) {
+        const s1 = topologyContext.sensors.find(s => s.id === "SENSOR-01");
+        const s2 = topologyContext.sensors.find(s => s.id === "SENSOR-02");
+        const t1El = document.getElementById("trustSensor1");
+        const t2El = document.getElementById("trustSensor2");
+        if (s1 && t1El) t1El.textContent = `TRUST: ${Math.round(s1.trust ?? 100)}`;
+        if (s2 && t2El) t2El.textContent = `TRUST: ${Math.round(s2.trust ?? 100)}`;
+    }
+
+    // Refresh visuals with latest topology
+    updatePlantMimicVisuals(lastKnownAttackState, lastKnownAttackVector);
 }
 
 function updatePlantMimicVisuals(isAttack, attackVector) {
-    const linkAttack = document.getElementById("linkAttack");
-    const linkAttackBack = document.getElementById("linkAttackBack");
-    const atkCircle = document.getElementById("atkCircle");
-    const atkStatusText = document.getElementById("atkStatusText");
-    const gatewayRing = document.getElementById("gatewayPulseRing");
+    if (typeof isAttack === "boolean") lastKnownAttackState = isAttack;
+    if (attackVector) lastKnownAttackVector = attackVector;
 
-    if (isAttack) {
-        if (linkAttack) linkAttack.style.display = "block";
-        if (linkAttackBack) linkAttackBack.style.stroke = "rgba(244, 63, 94, 0.6)";
-        if (atkCircle) {
-            atkCircle.setAttribute("stroke", "var(--red)");
-            atkCircle.setAttribute("fill", "rgba(244, 63, 94, 0.25)");
+    const effAttack = typeof isAttack === "boolean" ? isAttack : lastKnownAttackState;
+    const effVector = attackVector || lastKnownAttackVector || "udp_flood";
+
+    const gatewayRing = document.getElementById("gatewayPulseRing");
+    const gatewayCircle = document.getElementById("gatewayCircle");
+    const gatewaySubtext = document.getElementById("gatewaySubtext");
+
+    const attackNodesData = (cachedTopologyContext && Array.isArray(cachedTopologyContext.attack_nodes))
+        ? cachedTopologyContext.attack_nodes
+        : [];
+
+    // Global mitigation state checks
+    const activeMitigation = attackNodesData.some(n => n.mitigated);
+    const anyActiveAttacker = attackNodesData.some(n => n.active) || (effAttack && !activeMitigation);
+
+    // Dynamic data-driven iteration over all six simulated attacker sources
+    ATTACKER_CONFIG.forEach(cfg => {
+        const idx = cfg.index;
+        const linkActive = document.getElementById(`linkAttack${idx}`);
+        const linkBack = document.getElementById(`linkAttackBack${idx}`);
+        const circle = document.getElementById(`atkCircle${idx}`);
+        const titleEl = document.getElementById(`atkTitle${idx}`);
+        const ipEl = document.getElementById(`atkIp${idx}`);
+        const statusText = document.getElementById(`atkStatusText${idx}`);
+        const vectorEl = document.getElementById(`atkVector${idx}`);
+
+        // Match with backend telemetry/topology state
+        const liveData = attackNodesData.find(n => n.id === cfg.id);
+        const isNodeMitigated = liveData ? Boolean(liveData.mitigated) : activeMitigation;
+        const isNodeActive = liveData ? Boolean(liveData.active) : (effAttack && !isNodeMitigated);
+
+        const roleLabel = (liveData && liveData.vector) ? liveData.vector.replace(/_/g, " ").toUpperCase() : cfg.vector.replace(/_/g, " ").toUpperCase();
+        if (vectorEl) vectorEl.textContent = roleLabel;
+
+        if (isNodeMitigated) {
+            // STATE 3: MITIGATION ACTIVE (Blocked/Isolated/Interrupted state)
+            if (linkActive) {
+                linkActive.style.display = "block";
+                linkActive.setAttribute("stroke", "#f59e0b");
+                linkActive.setAttribute("stroke-dasharray", "3,8");
+                linkActive.setAttribute("marker-end", "url(#arrowAttackMitigated)");
+                linkActive.classList.remove("flow-packet-anim");
+                linkActive.style.animation = "none";
+            }
+            if (linkBack) linkBack.setAttribute("stroke", "rgba(245, 158, 11, 0.25)");
+            if (circle) {
+                circle.setAttribute("stroke", "#f59e0b");
+                circle.setAttribute("fill", "rgba(245, 158, 11, 0.2)");
+            }
+            if (titleEl) titleEl.setAttribute("fill", "#f59e0b");
+            if (ipEl) ipEl.setAttribute("fill", "#fef3c7");
+            if (vectorEl) vectorEl.setAttribute("fill", "#fde68a");
+            if (statusText) {
+                statusText.textContent = "CONTAINED";
+                statusText.setAttribute("fill", "#f59e0b");
+            }
+        } else if (isNodeActive) {
+            // STATE 2: DDOS ATTACK DETECTED (Active attack state)
+            if (linkActive) {
+                linkActive.style.display = "block";
+                linkActive.setAttribute("stroke", "#f43f5e");
+                linkActive.setAttribute("stroke-dasharray", "5,5");
+                linkActive.setAttribute("marker-end", "url(#arrowAttack)");
+                linkActive.classList.add("flow-packet-anim");
+                linkActive.style.animation = "";
+            }
+            if (linkBack) linkBack.setAttribute("stroke", "rgba(244, 63, 94, 0.4)");
+            if (circle) {
+                circle.setAttribute("stroke", "var(--red)");
+                circle.setAttribute("fill", "rgba(244, 63, 94, 0.28)");
+            }
+            if (titleEl) titleEl.setAttribute("fill", "var(--red)");
+            if (ipEl) ipEl.setAttribute("fill", "#fecdd3");
+            if (vectorEl) vectorEl.setAttribute("fill", "#fda4af");
+            if (statusText) {
+                statusText.textContent = "ATTACKING";
+                statusText.setAttribute("fill", "var(--red)");
+            }
+        } else {
+            // STATE 1: NORMAL (Dimmed/Inactive state)
+            if (linkActive) {
+                linkActive.style.display = "none";
+                linkActive.classList.remove("flow-packet-anim");
+                linkActive.style.animation = "none";
+            }
+            if (linkBack) linkBack.setAttribute("stroke", "rgba(244, 63, 94, 0.12)");
+            if (circle) {
+                circle.setAttribute("stroke", "#475569");
+                circle.setAttribute("fill", "#141824");
+            }
+            if (titleEl) titleEl.setAttribute("fill", "#94a3b8");
+            if (ipEl) ipEl.setAttribute("fill", "#cbd5e1");
+            if (vectorEl) vectorEl.setAttribute("fill", "#94a3b8");
+            if (statusText) {
+                statusText.textContent = "IDLE (LAB)";
+                statusText.setAttribute("fill", "#64748b");
+            }
         }
-        if (atkStatusText) {
-            atkStatusText.textContent = `ATTACK: ${String(attackVector || "FLOOD").toUpperCase()}`;
-            atkStatusText.setAttribute("fill", "var(--red)");
+    });
+
+    // Gateway Central Node State: Normal Purple, Alert Red, or Mitigating Shield Green
+    if (activeMitigation) {
+        if (gatewayRing) gatewayRing.setAttribute("stroke", "#10b981");
+        if (gatewayCircle) gatewayCircle.setAttribute("stroke", "#10b981");
+        if (gatewaySubtext) {
+            gatewaySubtext.textContent = "MITIGATING (SHIELD)";
+            gatewaySubtext.setAttribute("fill", "#10b981");
         }
-        if (gatewayRing) {
-            gatewayRing.setAttribute("stroke", "var(--red)");
+    } else if (anyActiveAttacker) {
+        if (gatewayRing) gatewayRing.setAttribute("stroke", "var(--red)");
+        if (gatewayCircle) gatewayCircle.setAttribute("stroke", "var(--red)");
+        if (gatewaySubtext) {
+            gatewaySubtext.textContent = "UNDER ATTACK (ALERT)";
+            gatewaySubtext.setAttribute("fill", "var(--red)");
         }
     } else {
-        if (linkAttack) linkAttack.style.display = "none";
-        if (linkAttackBack) linkAttackBack.style.stroke = "rgba(244, 63, 94, 0.15)";
-        if (atkCircle) {
-            atkCircle.setAttribute("stroke", "#64748b");
-            atkCircle.setAttribute("fill", "#200d14");
+        if (gatewayRing) gatewayRing.setAttribute("stroke", "#6366f1");
+        if (gatewayCircle) gatewayCircle.setAttribute("stroke", "#818cf8");
+        if (gatewaySubtext) {
+            gatewaySubtext.textContent = "ONLINE (ENFORCING)";
+            gatewaySubtext.setAttribute("fill", "#38bdf8");
         }
-        if (atkStatusText) {
-            atkStatusText.textContent = "IDLE (LAB)";
-            atkStatusText.setAttribute("fill", "#64748b");
-        }
-        if (gatewayRing) {
-            gatewayRing.setAttribute("stroke", "#6366f1");
-        }
+    }
+
+    // Maintain backward-compatible handles for any single-node queries
+    const legacyLink = document.getElementById("linkAttack");
+    const legacyBack = document.getElementById("linkAttackBack");
+    const legacyCircle = document.getElementById("atkCircle");
+    const legacyText = document.getElementById("atkStatusText");
+    const atk1Active = attackNodesData.length ? attackNodesData[0].active : effAttack;
+    const atk1Mit = attackNodesData.length ? attackNodesData[0].mitigated : activeMitigation;
+    if (legacyLink) legacyLink.style.display = (atk1Active || atk1Mit) ? "block" : "none";
+    if (legacyBack) legacyBack.setAttribute("stroke", atk1Active ? "rgba(244,63,94,0.4)" : "rgba(244,63,94,0.12)");
+    if (legacyCircle) {
+        legacyCircle.setAttribute("stroke", atk1Mit ? "#f59e0b" : (atk1Active ? "var(--red)" : "#64748b"));
+        legacyCircle.setAttribute("fill", atk1Mit ? "rgba(245,158,11,0.2)" : (atk1Active ? "rgba(244,63,94,0.28)" : "#161b26"));
+    }
+    if (legacyText) {
+        legacyText.textContent = atk1Mit ? "CONTAINED" : (atk1Active ? `ATTACK: ${effVector.toUpperCase()}` : "IDLE (LAB)");
+        legacyText.setAttribute("fill", atk1Mit ? "#f59e0b" : (atk1Active ? "var(--red)" : "#64748b"));
     }
 }
 
@@ -1240,7 +1783,7 @@ function renderLifecycleStage(rawState, inc, summary, telemetryContext) {
                 if (idx === 6) { // Step 7: Operator Audit Closure
                     if (pipeIdx >= 7) {
                         s.classList.add("auto-done");
-                        s.textContent = "✓ Operator Audit Closed";
+                        s.textContent = "Operator Audit Closed";
                     } else if (pipeIdx === 6) {
                         s.classList.add("manual-req", "active");
                         s.textContent = "● Operator Closure Required";
@@ -1394,12 +1937,12 @@ function updateIncidents(incidents) {
 
         return `
             <tr class="${isActive ? 'active-incident-row' : ''}">
-                <td style="font-family: monospace; color: var(--cyan);">${escapeHtml(inc.incident_id)}</td>
+                <td style="font-family: var(--font-mono); color: var(--cyan);">${escapeHtml(inc.incident_id)}</td>
                 <td style="font-size: 10px; color: var(--text-muted);">${dt}</td>
                 <td><strong>${escapeHtml(inc.device_id || "10.42.0.250")}</strong></td>
                 <td>${escapeHtml(inc.attack_type || "udp_flood")}</td>
                 <td><strong style="${sevClass}">${sev}</strong></td>
-                <td style="font-family: monospace;">${inc.confidence ? (inc.confidence * 100).toFixed(0) + "%" : "—"}</td>
+                <td style="font-family: var(--font-mono);">${inc.confidence ? (inc.confidence * 100).toFixed(0) + "%" : "—"}</td>
                 <td>
                     <div style="display: flex; align-items: center; gap: 4px;">
                         ${stateBadge}
@@ -1428,12 +1971,12 @@ function updateEvents(events) {
         const dt = (ev.timestamp || "").replace("T", " ").split(".")[0];
         return `
             <tr>
-                <td style="font-family: monospace; font-size: 10px; color: var(--text-muted);">${dt}</td>
-                <td style="font-family: monospace;">${escapeHtml(ev.src_ip || "10.42.0.250")}</td>
-                <td style="font-family: monospace;">${escapeHtml(ev.dst_ip || "10.42.0.1")}</td>
-                <td style="font-family: monospace; color: var(--red);">${(ev.packet_rate || ev.packets_per_second || 0).toFixed(1)}</td>
+                <td style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">${dt}</td>
+                <td style="font-family: var(--font-mono);">${escapeHtml(ev.src_ip || "10.42.0.250")}</td>
+                <td style="font-family: var(--font-mono);">${escapeHtml(ev.dst_ip || "10.42.0.1")}</td>
+                <td style="font-family: var(--font-mono); color: var(--red);">${(ev.packet_rate || ev.packets_per_second || 0).toFixed(1)}</td>
                 <td><span class="iam-badge iam-deny">${escapeHtml(ev.prediction || "ATTACK")}</span></td>
-                <td style="font-family: monospace;">${((ev.ddos_probability || 0.99) * 100).toFixed(0)}%</td>
+                <td style="font-family: var(--font-mono);">${((ev.ddos_probability || 0.99) * 100).toFixed(0)}%</td>
                 <td style="color: var(--cyan);">${escapeHtml(ev.security_action || "ISOLATE")}</td>
                 <td><strong style="color: var(--red);">${escapeHtml(ev.severity || "HIGH")}</strong></td>
             </tr>
@@ -1515,19 +2058,24 @@ function updateSampleFlows(rows) {
         const proto = r.protocol || "UDP";
         const port = proto === "UDP" ? 5683 : (proto === "TCP" ? 1883 : 0);
         const prob = ((r.ddos_probability || 0) * 100).toFixed(0);
+        const prov = String(r.provenance || "SIMULATED").toUpperCase();
+        let provBadgeClass = "tag-provenance-simulated";
+        if (prov.includes("LIVE")) provBadgeClass = "tag-provenance-live";
+        else if (prov.includes("MODEL")) provBadgeClass = "tag-provenance-modelled";
+        else if (prov.includes("DRY")) provBadgeClass = "tag-provenance-dryrun";
 
         return `
             <tr>
-                <td style="font-family: monospace; font-size: 10px; color: var(--text-muted);">${dt}</td>
-                <td style="font-family: monospace;">${escapeHtml(r.src_ip || "10.42.0.11")}</td>
-                <td style="font-family: monospace;">${escapeHtml(r.dst_ip || "10.42.0.1")}</td>
+                <td style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">${dt}</td>
+                <td style="font-family: var(--font-mono);">${escapeHtml(r.src_ip || "10.42.0.11")}</td>
+                <td style="font-family: var(--font-mono);">${escapeHtml(r.dst_ip || "10.42.0.1")}</td>
                 <td>${escapeHtml(proto)}</td>
-                <td style="font-family: monospace; color: ${isAtk ? 'var(--red)' : 'var(--green)'};">${(r.packets_per_second || 0).toFixed(1)}</td>
-                <td style="font-family: monospace;">${(r.average_packet_size || 64).toFixed(0)} B</td>
+                <td style="font-family: var(--font-mono); color: ${isAtk ? 'var(--red)' : 'var(--green)'};">${(r.packets_per_second || 0).toFixed(1)}</td>
+                <td style="font-family: var(--font-mono);">${(r.average_packet_size || 64).toFixed(0)} B</td>
                 <td><span class="iam-badge ${isAtk ? 'iam-deny' : 'iam-allow'}">${isAtk ? 'ATTACK' : 'NORMAL'}</span></td>
-                <td style="font-family: monospace;">${prob}%</td>
+                <td style="font-family: var(--font-mono);">${prob}%</td>
                 <td style="color: ${isAtk ? 'var(--red)' : 'var(--green)'};">${escapeHtml(r.security_action || 'PASS')}</td>
-                <td style="font-size: 9.5px; color: var(--text-muted);">${escapeHtml(r.provenance || 'SIMULATED')}</td>
+                <td style="font-size: 9.5px;"><span class="tag ${provBadgeClass}">${escapeHtml(prov)}</span></td>
             </tr>
         `;
     }).join("");
@@ -1612,7 +2160,7 @@ async function runControlledDemo() {
     } finally {
         if (button) {
             button.disabled = false;
-            button.textContent = "⚡ RUN CONTROLLED DEMO";
+            button.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> <span>Run Controlled Demo</span>';
         }
     }
 }
@@ -2158,23 +2706,27 @@ function initSSE() {
     }
 }
 
-// Window resize handler to re-draw canvas charts sharply
+// Window resize handler to re-draw canvas charts sharply (debounced)
+let resizeDebounceTimer = null;
 window.addEventListener("resize", () => {
-    const liveRes = fetch("/api/telemetry", { cache: "no-store" })
-        .then(r => r.json())
-        .then(d => {
-            if (d && d.rows) {
-                renderHistorianChart(document.getElementById("trafficChart"), d.rows);
-                renderEnergyChart(document.getElementById("energyChart"), d.rows);
-                const threatCanvas = document.getElementById("threatChart");
-                if (threatCanvas) renderThreatChart(threatCanvas, d.rows);
-            }
-        }).catch(() => {});
+    clearTimeout(resizeDebounceTimer);
+    resizeDebounceTimer = setTimeout(() => {
+        fetch("/api/telemetry", { cache: "no-store" })
+            .then(r => r.json())
+            .then(d => {
+                if (d && d.rows) {
+                    renderHistorianChart(document.getElementById("trafficChart"), d.rows);
+                    renderEnergyChart(document.getElementById("energyChart"), d.rows);
+                    const threatCanvas = document.getElementById("threatChart");
+                    if (threatCanvas) renderThreatChart(threatCanvas, d.rows);
+                }
+            }).catch(() => {});
 
-    fetch("/api/protocols", { cache: "no-store" })
-        .then(r => r.json())
-        .then(d => renderProtocolDonut(document.getElementById("protocolDonutChart"), d))
-        .catch(() => {});
+        fetch("/api/protocols", { cache: "no-store" })
+            .then(r => r.json())
+            .then(d => renderProtocolDonut(document.getElementById("protocolDonutChart"), d))
+            .catch(() => {});
+    }, 120);
 });
 
 /* ==========================================================================
@@ -2227,7 +2779,7 @@ function renderAuthBadge(authData) {
         }
         if (dot) dot.className = "indicator-dot green";
         if (logoutBtn) {
-            logoutBtn.innerHTML = '🚪 <span>Logout</span>';
+            logoutBtn.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> <span>Logout</span>';
             logoutBtn.title = "Terminate Administrative Session";
             const form = document.getElementById("headerLogoutForm");
             if (form) {
@@ -2256,7 +2808,7 @@ function renderAuthBadge(authData) {
         }
         if (dot) dot.className = "indicator-dot amber";
         if (logoutBtn) {
-            logoutBtn.innerHTML = '🔒 <span>Login</span>';
+            logoutBtn.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> <span>Login</span>';
             logoutBtn.title = "Authenticate Session";
             const form = document.getElementById("headerLogoutForm");
             if (form) {
@@ -2442,8 +2994,8 @@ function renderFilteredAlerts() {
         const confPercent = (Number(a.confidence || 0.95) * 100).toFixed(1) + "%";
 
         const ackButton = isUnack ?
-            `<button type="button" class="btn-sim-action btn-ack" data-alert-id="${escapeHtml(a.alert_id)}" onclick="acknowledgeAlert('${a.alert_id}')" style="padding: 3px 8px; font-size: 10px; background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.5); color: var(--amber); border-radius: 3px; cursor: pointer;">ACKNOWLEDGE</button>` :
-            `<span style="font-size: 10px; color: var(--green);">✓ ACKNOWLEDGED</span>`;
+            `<button type="button" class="btn-sim-action btn-ack" data-alert-id="${escapeHtml(a.alert_id)}" onclick="acknowledgeAlert('${a.alert_id}')" style="padding: 3px 8px; font-size: 10px; background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.5); color: var(--amber); border-radius: 3px; cursor: pointer;">Acknowledge</button>` :
+            `<span class="tag tag-ack-confirmed" style="font-size: 10px;">Acknowledged</span>`;
 
         return `<tr>
             <td><span class="tag" style="color:${sevColor}; background:${sevBg}; border-color:${sevColor}66; font-weight:700;">${sev}</span></td>
@@ -2697,7 +3249,8 @@ function renderAuditTable(records) {
     if (!tbody) return;
 
     if (!records.length) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:16px;">No administrative audit records logged yet.</td></tr>';
+        const searchVal = document.getElementById("auditSearchInput")?.value?.trim();
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:16px;">${searchVal ? "No administrative audit records match your filter criteria." : "No administrative audit records logged yet."}</td></tr>`;
         return;
     }
 

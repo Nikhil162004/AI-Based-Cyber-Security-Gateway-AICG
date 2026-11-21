@@ -156,7 +156,7 @@ def run_e2e():
 
             assert username_input.is_displayed()
             assert password_input.is_displayed()
-            assert mfa_input.is_displayed()
+            assert not mfa_input.is_displayed(), "MFA input must start hidden on initial load"
             assert submit_btn.is_displayed()
 
             # Check lab honesty indicators
@@ -166,13 +166,11 @@ def run_e2e():
 
             # Capture initial login screenshot
             driver.save_screenshot(str(screenshots_dir / "01_login_page.png"))
-            print("  [+] Login page rendered correctly with simulated MFA and lab disclaimer.")
+            print("  [+] Login page rendered correctly with hidden MFA drawer and lab disclaimer.")
 
             # Test invalid password rejection
             username_input.send_keys("admin")
             password_input.send_keys("WrongPassword123!")
-            mfa_input.clear()
-            mfa_input.send_keys(DEFAULT_SIMULATED_MFA_TOKEN)
             submit_btn.click()
             time.sleep(1.0)
 
@@ -181,18 +179,25 @@ def run_e2e():
             assert "Invalid" in error_el.text and "credentials" in error_el.text
             print("  [+] Invalid credentials rejected with generic timing-safe error.")
 
-            # Test invalid MFA rejection
+            # Test primary credentials verification triggering progressive MFA drawer
             username_input.clear()
             password_input.clear()
-            mfa_input.clear()
             username_input.send_keys("admin")
             password_input.send_keys("Admin@AICG2026!")
+            submit_btn.click()
+            time.sleep(1.0)
+
+            assert mfa_input.is_displayed(), "MFA input must appear after primary credentials verification"
+
+            # Test invalid MFA rejection
+            mfa_input.clear()
             mfa_input.send_keys("000000")
             submit_btn.click()
             time.sleep(1.0)
 
             assert error_el.is_displayed()
             assert "Invalid" in error_el.text and "MFA" in error_el.text
+            print("  [+] Invalid simulated MFA token rejected.")
             print("  [+] Invalid simulated MFA token rejected.")
 
             # -------------------------------------------------------------

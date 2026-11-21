@@ -41,6 +41,17 @@ _CATALOGUE = [
 CATALOGUE = {scenario.scenario_id: scenario for scenario in _CATALOGUE}
 
 
+_ATTACKER_IPS: dict[str, str] = {
+    "ATK-01": "10.42.0.250",
+    "ATTACKER-01": "10.42.0.250",
+    "ATTACKER-02": "10.42.0.251",
+    "ATTACKER-03": "10.42.0.252",
+    "ATTACKER-04": "10.42.0.253",
+    "ATTACKER-05": "10.42.0.254",
+    "ATTACKER-06": "10.42.0.249",
+}
+
+
 def catalogue() -> list[dict[str, Any]]:
     return [scenario.public() for scenario in _CATALOGUE]
 
@@ -87,11 +98,10 @@ def generate_window(scenario_id: str, intensity: int = 3, sequence: int = 0, see
         if device_id is None
         else (f"{dev_id}-SIM" if not normal else f"{dev_id}-NODE")
     )
-    src_ip = (
-        ("10.42.0.250" if not normal else f"10.42.0.{10 + sensor_idx}")
-        if device_id is None
-        else ("10.42.0.250" if not normal else "10.42.0.250" if dev_id == "ATK-01" else f"10.42.0.{10 + sensor_idx}")
-    )
+    if not normal:
+        src_ip = _ATTACKER_IPS.get(dev_id, "10.42.0.250")
+    else:
+        src_ip = _ATTACKER_IPS.get(dev_id) or (f"10.42.0.{10 + sensor_idx}" if dev_id.startswith("SENSOR-") else "10.42.0.10")
 
     return TelemetryEvent(
         source_type=source_type, source_id=src_id,

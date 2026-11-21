@@ -47,7 +47,16 @@ class Settings:
     model_path: Path = field(default_factory=_model_path_from_env)
     report_dir: Path = BACKEND_ROOT / "reports"
     dataset_dir: Path = BACKEND_ROOT / "data" / "datasets"
-    cooja_dir: Path = field(default_factory=lambda: Path(os.getenv("AEGIS_COOJA_DIR", "/home/kali/contiki-ng/examples/ai_edge_iiot/data")))
+    cooja_dir: Path = field(
+        default_factory=lambda: Path(
+            os.getenv("AEGIS_COOJA_DIR")
+            or (
+                "/home/kali/contiki-ng/examples/ai_edge_iiot/data"
+                if Path("/home/kali/contiki-ng/examples/ai_edge_iiot/data").exists()
+                else str(BACKEND_ROOT / "dataset")
+            )
+        )
+    )
     event_retention_days: int = int(os.getenv("AEGIS_RETENTION_DAYS", "30"))
     demo_tick_seconds: float = float(os.getenv("AEGIS_DEMO_TICK_SECONDS", "1.0"))
     response_mode: str = field(default_factory=lambda: os.getenv("AEGIS_RESPONSE_MODE", "DRY_RUN").upper())

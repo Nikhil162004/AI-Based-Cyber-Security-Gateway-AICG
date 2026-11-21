@@ -1,5 +1,6 @@
 """Tests for NS-3, Cooja, and PCAP evidence adapters."""
 
+import os
 from pathlib import Path
 import pytest
 from aegis_gateway.adapters import cooja_csv_events, ns3_csv_events, pcap_events, pcap_window_events
@@ -38,7 +39,9 @@ def test_ns3_packet_trace_csv_adapter():
 
 
 def test_cooja_csv_adapter():
-    csv_file = Path("/home/kali/contiki-ng/examples/ai_edge_iiot/data/cooja_ml_ready_v1.csv")
+    default_csv = Path(__file__).resolve().parent.parent / "dataset" / "cooja_ml_ready_v1.csv"
+    env_path = os.getenv("AEGIS_COOJA_CSV")
+    csv_file = Path(env_path) if env_path else (default_csv if default_csv.exists() else Path("/home/kali/contiki-ng/examples/ai_edge_iiot/data/cooja_ml_ready_v1.csv"))
     if not csv_file.exists():
         pytest.skip(f"Contiki-NG file not found: {csv_file}")
 

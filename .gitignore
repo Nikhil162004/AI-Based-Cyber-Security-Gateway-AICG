@@ -1,22 +1,113 @@
+# ==============================================================================
+# AI-Edge-DDoS-Gateway Professional .gitignore
+# Tailored for Python, Flask, ML (scikit-learn), NS-3, and Frontend Operations
+# ==============================================================================
+
+# --- Python & Bytecode ---
 __pycache__/
 *.py[cod]
 *$py.class
-.pytest_cache/
-data/*.sqlite3
-data/*.sqlite3-journal
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Virtual Environments ---
 .venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+.ENV/
+
+# --- Testing & Coverage ---
+.pytest_cache/
+backend/.pytest_cache/
 .coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
 htmlcov/
+.tox/
+.nox/
 
-# Ralph verification runtime logs
+# --- Verification & CI Runtime Logs ---
 .ralph/
+*.ralph
 
-# SQLite WAL runtime files
-data/*.sqlite3-wal
-data/*.sqlite3-shm
+# --- SQLite Databases, WAL & Journal Files ---
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+*.sqlite
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+data/*.sqlite3*
+backend/data/*.sqlite3*
 
-# Backend SQLite runtime database
-backend/data/*.sqlite3
-backend/data/*.sqlite3-journal
-backend/data/*.sqlite3-wal
-backend/data/*.sqlite3-shm
+# --- Local NS-3 Installation, Builds, & Archives ---
+ns-allinone-*/
+ns-allinone-*.tar.bz2
+ns-3.*/
+cmake-cache/
+.lock-ns3*
+
+# --- Temporary Logs & Debug Output ---
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Temporary Simulation & Replay Outputs ---
+*.flowmon
+*.tr
+*.pcap.tmp
+temp_sim_*
+
+# --- Editor & OS Artifacts ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==============================================================================
+# Critical Project Whitelist (Never Exclude)
+# ==============================================================================
+!backend/dataset/
+!backend/dataset/**
+!backend/models/
+!backend/models/**
+!backend/simulation/
+!backend/simulation/**
+!backend/reports/evidence/screenshots/
+!backend/reports/evidence/screenshots/**
+!docs/
+!docs/**
+!dashboard-design-reference.png
