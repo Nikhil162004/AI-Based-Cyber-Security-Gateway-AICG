@@ -36,7 +36,14 @@ class GatewayRuntime:
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or Settings()
         self.settings.ensure_directories()
-        self.store = GatewayStore(self.settings.database_path, master_key=self.settings.device_master_key)
+        self.store = GatewayStore(
+            self.settings.database_path,
+            master_key=self.settings.device_master_key,
+            production=self.settings.production,
+            allow_demo_accounts=self.settings.allow_demo_accounts,
+            initial_admin_username=self.settings.initial_admin_username,
+            initial_admin_password=self.settings.initial_admin_password,
+        )
         self.detector = HybridDetector(self.settings.model_path)
         self.energy = EnergyModel()
         self.iam = IAMService(storage=self.store, master_key=self.settings.device_master_key)

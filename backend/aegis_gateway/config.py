@@ -72,6 +72,16 @@ class Settings:
         default_factory=lambda: os.getenv("AEGIS_MASTER_KEY") or os.getenv("AEGIS_DEVICE_MASTER_KEY") or LAB_MASTER_KEY_FALLBACK,
         repr=False,
     )
+    allow_demo_accounts: bool = field(
+        default_factory=lambda: not _bool("AEGIS_PRODUCTION", False) and _bool("AEGIS_DEMO_ACCOUNTS", True)
+    )
+    initial_admin_username: str = field(
+        default_factory=lambda: (os.getenv("AEGIS_INITIAL_ADMIN_USERNAME") or os.getenv("AEGIS_ADMIN_USERNAME") or "admin").strip()
+    )
+    initial_admin_password: str | None = field(
+        default_factory=lambda: os.getenv("AEGIS_INITIAL_ADMIN_PASSWORD") or os.getenv("AEGIS_ADMIN_PASSWORD"),
+        repr=False,
+    )
     session_cookie_secure: bool = field(
         default_factory=lambda: _bool(
             "AEGIS_SESSION_COOKIE_SECURE",
@@ -81,6 +91,19 @@ class Settings:
     auth_rate_limit_max: int = int(os.getenv("AEGIS_AUTH_RATE_LIMIT_MAX", "10"))
     auth_rate_limit_window_seconds: int = int(os.getenv("AEGIS_AUTH_RATE_LIMIT_WINDOW", "60"))
     in_process_enforcement: bool = field(default_factory=lambda: _bool("AEGIS_IN_PROCESS_ENFORCEMENT", True))
+
+    def __post_init__(self) -> None:
+        if self.production:
+            if not self.secret_key or self.is_lab_secret_key:
+                raise ValueError(
+                    "AEGIS_SECRET_KEY environment variable is required in production mode "
+                    "and cannot use the default lab fallback key."
+                )
+            if not self.device_master_key or self.is_lab_master_key:
+                raise ValueError(
+                    "AEGIS_MASTER_KEY (or AEGIS_DEVICE_MASTER_KEY) environment variable is required in production mode "
+                    "and cannot use the default lab fallback key."
+                )
 
     @property
     def is_lab_master_key(self) -> bool:

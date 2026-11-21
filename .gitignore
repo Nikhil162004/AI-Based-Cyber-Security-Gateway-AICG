@@ -110,4 +110,8 @@ desktop.ini
 !backend/reports/evidence/screenshots/**
 !docs/
 !docs/**
-!dashboard-design-reference.png
+
+# --- External Reference Documents & UI Mockups (Preserved Locally) ---
+dashboard-design-reference.png
+docs/*.pdf
+docs/*.docx

@@ -67,10 +67,12 @@ def test_api_static_assets_and_pages(runtime_app):
         res_css = client.get("/static/css/dashboard.css")
         assert res_css.status_code == 200
         assert len(res_css.data) > 1000
+        res_css.close()
 
         res_js = client.get("/static/js/dashboard.js")
         assert res_js.status_code == 200
         assert len(res_js.data) > 1000
+        res_js.close()
 
 
 def test_dashboard_kpi_card_detection_pipeline_accuracy(runtime_app):

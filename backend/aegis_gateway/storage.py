@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -21,9 +22,21 @@ GENESIS_HASH = "0" * 64
 
 
 class GatewayStore:
-    def __init__(self, path: Path, master_key: str | None = None):
+    def __init__(
+        self,
+        path: Path,
+        master_key: str | None = None,
+        production: bool = False,
+        allow_demo_accounts: bool = True,
+        initial_admin_username: str | None = None,
+        initial_admin_password: str | None = None,
+    ):
         self.path = path
         self.master_key = master_key
+        self.production = production
+        self.allow_demo_accounts = allow_demo_accounts
+        self.initial_admin_username = initial_admin_username or "admin"
+        self.initial_admin_password = initial_admin_password
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._audit_lock = threading.RLock()
         self.initialize()
@@ -180,15 +193,43 @@ class GatewayStore:
     def _seed_default_users(self, con: sqlite3.Connection) -> None:
         from .security import hash_password
         now = utc_now()
-        defaults = [
-            ("USR-ADMIN-01", "admin", hash_password("Admin@AICG2026!"), "ADMIN", "ACTIVE", 1, "SIMULATED_VERIFIED", now, None),
-            ("USR-OPERATOR-01", "operator", hash_password("Operator@AICG2026!"), "OPERATOR", "ACTIVE", 1, "SIMULATED_VERIFIED", now, None),
-        ]
-        for row in defaults:
+
+        # Check if users already exist
+        existing = con.execute("SELECT COUNT(*) AS c FROM admin_users").fetchone()["c"]
+        if existing > 0:
+            return
+
+        if self.production:
+            # Production: requires explicit administrator credentials for first-run bootstrap
+            if not self.initial_admin_password or not self.initial_admin_password.strip():
+                raise RuntimeError(
+                    "Production first-run bootstrap failed: AEGIS_INITIAL_ADMIN_PASSWORD is required "
+                    "to initialize the initial administrator account. Set AEGIS_INITIAL_ADMIN_PASSWORD "
+                    "in the environment to provision the administrator securely."
+                )
+
+            admin_user = (self.initial_admin_username or "admin").strip()
+            user_id = f"USR-ADMIN-{uuid4().hex[:8].upper()}"
+            hashed = hash_password(self.initial_admin_password.strip())
             con.execute(
-                "INSERT OR IGNORE INTO admin_users (user_id, username, password_hash, role, status, mfa_enabled, mfa_status, created_at, last_login) VALUES (?,?,?,?,?,?,?,?,?)",
-                row
+                "INSERT INTO admin_users (user_id, username, password_hash, role, status, mfa_enabled, mfa_status, created_at, last_login) VALUES (?,?,?,?,?,?,?,?,?)",
+                (user_id, admin_user, hashed, "ADMIN", "ACTIVE", 1, "SIMULATED_VERIFIED", now, None)
             )
+        else:
+            # Development / Testing environment
+            if self.allow_demo_accounts:
+                admin_pw = self.initial_admin_password.strip() if self.initial_admin_password else "Admin@AICG2026!"
+                admin_user = (self.initial_admin_username or "admin").strip()
+                operator_pw = os.getenv("AEGIS_INITIAL_OPERATOR_PASSWORD", "Operator@AICG2026!").strip()
+                defaults = [
+                    ("USR-ADMIN-01", admin_user, hash_password(admin_pw), "ADMIN", "ACTIVE", 1, "SIMULATED_VERIFIED", now, None),
+                    ("USR-OPERATOR-01", "operator", hash_password(operator_pw), "OPERATOR", "ACTIVE", 1, "SIMULATED_VERIFIED", now, None),
+                ]
+                for row in defaults:
+                    con.execute(
+                        "INSERT OR IGNORE INTO admin_users (user_id, username, password_hash, role, status, mfa_enabled, mfa_status, created_at, last_login) VALUES (?,?,?,?,?,?,?,?,?)",
+                        row
+                    )
 
     def _seed_default_device_identities(self, con: sqlite3.Connection) -> None:
         from .iam import DEFAULT_MASTER_KEY, derive_device_key, hash_device_key
