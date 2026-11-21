@@ -1,0 +1,42 @@
+MIT License
+
+Copyright (c) 2026 JAYDEEP JOTIRAM MULIK
+
+===============================================================================
+SCOPE OF LICENSE NOTICE
+===============================================================================
+This MIT License applies solely and exclusively to the original gateway application
+source code, scripts, configuration schemas, and original tests created for the
+AI-Based Cyber Security Gateway for Industry 4.0 (AICG) project, located in:
+  - backend/aegis_gateway/
+  - frontend/
+  - backend/scripts/
+  - backend/tests/
+
+This MIT License DOES NOT apply to:
+1. Custom NS-3 network simulation scripts in backend/simulation/ which are
+   separately licensed under the GNU General Public License v2 (GPLv2).
+2. Third-party software components, libraries, and runtime dependencies, which
+   are licensed under their respective upstream terms (see THIRD_PARTY_NOTICES.md).
+3. Datasets located in backend/dataset/ and machine learning model artifacts located
+   in backend/models/, which are retained for academic, research, and evaluation
+   demonstration purposes and are not covered by this MIT License.
+===============================================================================
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -1,9 +1,9 @@
-# AI-Edge-DDoS-Gateway: AI-Powered Edge Cybersecurity Gateway for Industry 4.0
+# AI-Based Cyber Security Gateway for Industry 4.0 (AICG)
 
 [![Python](https://img.shields.io/badge/Python-3.14-blue.svg)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Framework-Flask_3.1-green.svg)](https://flask.palletsprojects.com/)
 [![scikit-learn](https://img.shields.io/badge/ML-scikit--learn_1.9-orange.svg)](https://scikit-learn.org/)
-[![Test Suite](https://img.shields.io/badge/Tests-248_Passed-brightgreen.svg)]()
+[![Test Suite](https://img.shields.io/badge/Tests-261_Passed-brightgreen.svg)]()
 [![Safety Boundary](https://img.shields.io/badge/Boundary-100%25_Dry--Run_/_Contained-red.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -405,25 +405,24 @@ backend/tests/test_wave3b_mitigation_reconciliation.py ................. [ 98%]
 ```
 AI-Edge-DDoS-Gateway/
 ├── .gitignore                          # Tailored Python, ML, NS-3, and frontend exclusion rules
-├── LICENSE                             # MIT Open-Source License
+├── LICENSE                             # MIT Open-Source License (Gateway Application)
+├── THIRD_PARTY_NOTICES.md              # Verified third-party software licenses and notices
 ├── pytest.ini                          # Test configuration and runner paths
 ├── README.md                           # Master technical project documentation
 ├── requirements.txt                    # Production runtime dependencies
-├── requirements-dev.txt                # Development and QA dependencies
-├── dashboard-design-reference.png      # Canonical Matte Graphite design specification
 ├── backend/
 │   ├── app.py                          # Flask application launcher
 │   ├── aegis_gateway/                  # Core gateway Python package
-│   ├── dataset/                        # NS-3 PCAPs, feature CSVs, and Cooja logs
+│   ├── dataset/                        # Simulation PCAPs, feature CSVs, and Cooja logs
 │   ├── models/                         # Calibrated ML bundles (Joblib)
 │   ├── reports/
 │   │   ├── evidence/screenshots/       # High-resolution UI acceptance screenshots
 │   │   └── srs/                        # Software Requirements Specifications & diagrams
 │   ├── scripts/                        # Automated browser test and verification scripts
 │   ├── simulation/
-│   │   ├── normal_iiot.cc              # Baseline NS-3 IIoT simulation model
-│   │   └── ns3/                        # Custom C++ NS-3 DDoS simulation scripts
-│   └── tests/                          # Automated pytest verification suite (248 tests)
+│   │   ├── normal_iiot.cc              # Baseline NS-3 IIoT simulation model (GPLv2)
+│   │   └── ns3/                        # Custom C++ NS-3 DDoS simulation scripts (GPLv2)
+│   └── tests/                          # Automated pytest verification suite (261 tests)
 ├── docs/                               # Architecture blueprints, demo guides, and plans
 └── frontend/
     ├── static/                         # Static CSS tokens and ES6 streaming modules
@@ -450,4 +449,22 @@ Special thanks to:
 - The **Contiki-NG & Cooja Communities** for 6LoWPAN mote emulation capabilities.
 - The **scikit-learn and SciPy Teams** for foundational statistical and machine learning libraries.
 
-Licensed under the [MIT License](LICENSE).
+---
+
+## 18. Licensing & Intellectual Property
+
+**Copyright (c) 2026 JAYDEEP JOTIRAM MULIK**
+
+The AICG repository incorporates distinct licensing boundaries across its components:
+
+### 1. Gateway Application Source Code (MIT License)
+The original Python backend source code located in `backend/aegis_gateway/`, user interface assets in `frontend/`, maintenance scripts in `backend/scripts/`, and automated test suites in `backend/tests/` are licensed under the standard [MIT License](LICENSE).
+
+### 2. NS-3 Network Simulation Models (GNU GPLv2)
+The custom C++ discrete-event network simulation programs in `backend/simulation/ns3/` (`ddos_udp*.cc`) and `backend/simulation/normal_iiot.cc` are developed against the NS-3 Network Simulator API headers. In accordance with NS-3 upstream licensing architecture, these simulation components are governed by the **GNU General Public License version 2 (GPL-2.0-only)**. See [backend/simulation/README.md](backend/simulation/README.md) for full simulation details.
+
+### 3. Simulation Datasets and Pre-Trained Machine Learning Models
+The synthetic IIoT telemetry datasets, feature CSV files, and raw PCAP packet captures in `backend/dataset/`, as well as pre-trained model bundles in `backend/models/` (`realistic_detector_v1.joblib` and `hybrid_detector.joblib`), are strictly excluded from the root MIT License. They are **not** licensed under CC0-1.0, CC-BY, MIT, or any other open-source license, and no additional reuse permission is granted. All rights are reserved by the copyright holder (JAYDEEP JOTIRAM MULIK).
+
+### 4. Third-Party Open-Source Components
+All third-party libraries, frameworks, and tools (including Flask, scikit-learn, NumPy, Joblib, dpkt, and pytest) remain licensed under their respective upstream open-source licenses (BSD-3-Clause, MIT, and Apache-2.0). Complete verified dependency notices, copyright declarations, and license terms are detailed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

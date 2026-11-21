@@ -5,7 +5,10 @@ from __future__ import annotations
 import csv
 from collections import defaultdict
 from pathlib import Path
+import socket
 from typing import Any, Iterator
+
+import dpkt
 
 from .schema import Provenance, TelemetryEvent
 
@@ -172,95 +175,217 @@ def cooja_csv_events(path: Path, scenario_id: str | None = None) -> Iterator[Tel
             ).normalize()
 
 
-def pcap_events(path: Path) -> Iterator[TelemetryEvent]:
-    """Replay a local PCAP as REPLAYED observations packet-by-packet.
+def _extract_ip_packet(buf: bytes, datalink: int) -> tuple[Any, str | None, str | None, int]:
+    """Extract (ip_layer, src_ip, dst_ip, total_frame_len) from raw packet buffer.
 
-    Requires Scapy. Preserves REPLAYED provenance; no socket transmission occurs.
+    Supports:
+      - DLT_PPP (9): NS-3 Point-to-Point (0x0021 + IPv4) or standard HDLC PPP
+      - DLT_EN10MB (1): Standard Ethernet frames
+      - DLT_RAW / DLT_RAW_IPV4 (12, 101): Raw IP frames
+      - DLT_LINUX_SLL (113): Linux cooked sockets
+      - DLT_NULL (0): BSD loopback frames
     """
-    from scapy.all import ICMP, IP, TCP, UDP, rdpcap  # type: ignore
+    total_len = len(buf)
+    try:
+        ip = None
+        if datalink == 9:  # DLT_PPP
+            if buf.startswith(b"\x00!"):
+                ip = dpkt.ip.IP(buf[2:])
+            elif buf.startswith(b"\xff\x03"):
+                ppp = dpkt.ppp.PPP(buf)
+                if isinstance(ppp.data, (dpkt.ip.IP, dpkt.ip6.IP6)):
+                    ip = ppp.data
+                elif isinstance(ppp.data, bytes):
+                    ip = dpkt.ip.IP(ppp.data)
+            else:
+                ip = dpkt.ip.IP(buf)
+        elif datalink == 1:  # DLT_EN10MB (Ethernet)
+            eth = dpkt.ethernet.Ethernet(buf)
+            if isinstance(eth.data, (dpkt.ip.IP, dpkt.ip6.IP6)):
+                ip = eth.data
+        elif datalink in (12, 101):  # DLT_RAW
+            ip = dpkt.ip.IP(buf)
+        elif datalink == 113:  # DLT_LINUX_SLL
+            sll = dpkt.sll.SLL(buf)
+            if isinstance(sll.data, (dpkt.ip.IP, dpkt.ip6.IP6)):
+                ip = sll.data
+        elif datalink == 0:  # DLT_NULL
+            ip = dpkt.ip.IP(buf[4:])
+        else:
+            ip = dpkt.ip.IP(buf)
 
-    for index, packet in enumerate(rdpcap(str(path))):
-        if not packet.haslayer(IP):
-            continue
-        ip = packet[IP]
-        protocol, sport, dport, flags, icmp_type = str(ip.proto), None, None, None, None
-        if packet.haslayer(TCP):
-            protocol, sport, dport, flags = "TCP", int(packet[TCP].sport), int(packet[TCP].dport), str(packet[TCP].flags)
-        elif packet.haslayer(UDP):
-            protocol, sport, dport = "UDP", int(packet[UDP].sport), int(packet[UDP].dport)
-        elif packet.haslayer(ICMP):
-            protocol, icmp_type = "ICMP", str(packet[ICMP].type)
-        size = len(packet)
+        if ip is None:
+            return None, None, None, total_len
 
-        yield TelemetryEvent(
-            source_type="PCAP_REPLAY",
-            source_id=path.name,
-            src_ip=ip.src,
-            dst_ip=ip.dst,
-            src_port=sport,
-            dst_port=dport,
-            protocol=protocol,
-            packet_count=1,
-            byte_count=size,
-            packet_rate=1.0,
-            byte_rate=float(size),
-            packet_size=float(size),
-            flow_id=f"pcap-{index}",
-            unique_sources=1,
-            unique_destinations=1,
-            tcp_flags=flags,
-            icmp_type=icmp_type,
-            dataset_id=path.stem,
-            provenance=Provenance.REPLAYED.value,
-        ).normalize()
+        if isinstance(ip, dpkt.ip.IP):
+            src_ip = socket.inet_ntoa(ip.src)
+            dst_ip = socket.inet_ntoa(ip.dst)
+        elif isinstance(ip, dpkt.ip6.IP6):
+            src_ip = socket.inet_ntop(socket.AF_INET6, ip.src)
+            dst_ip = socket.inet_ntop(socket.AF_INET6, ip.dst)
+        else:
+            return None, None, None, total_len
+
+        return ip, src_ip, dst_ip, total_len
+    except Exception:
+        return None, None, None, total_len
+
+
+def _format_tcp_flags(flags_int: int) -> str:
+    """Format numeric TCP flag bitmask into standard character flags."""
+    flag_chars = []
+    if flags_int & dpkt.tcp.TH_FIN: flag_chars.append("F")
+    if flags_int & dpkt.tcp.TH_SYN: flag_chars.append("S")
+    if flags_int & dpkt.tcp.TH_RST: flag_chars.append("R")
+    if flags_int & dpkt.tcp.TH_PUSH: flag_chars.append("P")
+    if flags_int & dpkt.tcp.TH_ACK: flag_chars.append("A")
+    if flags_int & dpkt.tcp.TH_URG: flag_chars.append("U")
+    if flags_int & dpkt.tcp.TH_ECE: flag_chars.append("E")
+    if flags_int & dpkt.tcp.TH_CWR: flag_chars.append("C")
+    return "".join(flag_chars)
+
+
+def _open_pcap_reader(path: Path):
+    """Open and return a (file_handle, dpkt_reader) pair with validation."""
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {path}")
+    if path.stat().st_size == 0:
+        raise ValueError(f"Empty PCAP file: {path}")
+
+    handle = open(path, "rb")
+    try:
+        reader = dpkt.pcap.Reader(handle)
+        return handle, reader
+    except Exception as err:
+        try:
+            handle.seek(0)
+            reader = dpkt.pcapng.Reader(handle)
+            return handle, reader
+        except Exception:
+            handle.close()
+            raise ValueError(f"Invalid or corrupted PCAP file {path}: {err}") from err
+
+
+def pcap_events(path: Path) -> Iterator[TelemetryEvent]:
+    """Replay a local PCAP as REPLAYED observations packet-by-packet using dpkt.
+
+    Preserves REPLAYED provenance; no socket transmission occurs.
+    """
+    handle, reader = _open_pcap_reader(path)
+    try:
+        datalink = reader.datalink()
+        for index, (ts, buf) in enumerate(reader):
+            ip, src_ip, dst_ip, size = _extract_ip_packet(buf, datalink)
+            if not ip or not src_ip or not dst_ip:
+                continue
+
+            protocol = str(getattr(ip, "p", "IP"))
+            sport, dport, flags, icmp_type = None, None, None, None
+
+            if isinstance(ip.data, dpkt.tcp.TCP):
+                tcp = ip.data
+                protocol = "TCP"
+                sport = int(tcp.sport)
+                dport = int(tcp.dport)
+                flags = _format_tcp_flags(tcp.flags) or None
+            elif isinstance(ip.data, dpkt.udp.UDP):
+                udp = ip.data
+                protocol = "UDP"
+                sport = int(udp.sport)
+                dport = int(udp.dport)
+            elif isinstance(ip.data, dpkt.icmp.ICMP):
+                icmp = ip.data
+                protocol = "ICMP"
+                icmp_type = str(icmp.type)
+
+            yield TelemetryEvent(
+                source_type="PCAP_REPLAY",
+                source_id=path.name,
+                src_ip=src_ip,
+                dst_ip=dst_ip,
+                src_port=sport,
+                dst_port=dport,
+                protocol=protocol,
+                packet_count=1,
+                byte_count=size,
+                packet_rate=1.0,
+                byte_rate=float(size),
+                packet_size=float(size),
+                flow_id=f"pcap-{index}",
+                unique_sources=1,
+                unique_destinations=1,
+                tcp_flags=flags,
+                icmp_type=icmp_type,
+                dataset_id=path.stem,
+                provenance=Provenance.REPLAYED.value,
+            ).normalize()
+    finally:
+        handle.close()
 
 
 def pcap_window_events(path: Path, window_seconds: float = 1.0, max_windows: int = 100) -> Iterator[TelemetryEvent]:
-    """Aggregate a local PCAP into time-windowed observations.
+    """Aggregate a local PCAP into time-windowed observations using dpkt.
 
     Prevents historian flooding while providing realistic window telemetry.
     """
-    from scapy.all import ICMP, IP, TCP, UDP, rdpcap  # type: ignore
+    handle, reader = _open_pcap_reader(path)
+    try:
+        datalink = reader.datalink()
+        buckets: dict[int, list[tuple[Any, str, str, int]]] = defaultdict(list)
+        start_time = None
 
-    buckets: dict[int, list[Any]] = defaultdict(list)
-    start_time = None
-    for packet in rdpcap(str(path)):
-        if not packet.haslayer(IP):
-            continue
-        pkt_time = float(packet.time)
-        if start_time is None:
-            start_time = pkt_time
-        rel_time = max(0.0, pkt_time - start_time)
-        bucket_idx = int(rel_time / window_seconds)
-        buckets[bucket_idx].append(packet)
+        for ts, buf in reader:
+            ip, src_ip, dst_ip, size = _extract_ip_packet(buf, datalink)
+            if not ip or not src_ip or not dst_ip:
+                continue
 
-    for bucket_idx in sorted(buckets.keys())[:max_windows]:
-        pkts = buckets[bucket_idx]
-        count = len(pkts)
-        total_bytes = sum(len(p) for p in pkts)
-        srcs = {p[IP].src for p in pkts}
-        dsts = {p[IP].dst for p in pkts}
-        tcp_count = sum(1 for p in pkts if p.haslayer(TCP))
-        udp_count = sum(1 for p in pkts if p.haslayer(UDP))
-        icmp_count = sum(1 for p in pkts if p.haslayer(ICMP))
-        has_syn = any(p.haslayer(TCP) and "S" in str(p[TCP].flags) for p in pkts)
-        protocol = "UDP" if udp_count >= tcp_count and udp_count >= icmp_count and udp_count > 0 else "TCP" if tcp_count > 0 else "ICMP" if icmp_count > 0 else "IP"
+            pkt_time = float(ts)
+            if start_time is None:
+                start_time = pkt_time
+            rel_time = max(0.0, pkt_time - start_time)
+            bucket_idx = int(rel_time / window_seconds)
+            buckets[bucket_idx].append((ip, src_ip, dst_ip, size))
 
-        yield TelemetryEvent(
-            source_type="PCAP_REPLAY",
-            source_id=path.name,
-            src_ip=next(iter(srcs), None),
-            dst_ip=next(iter(dsts), None),
-            protocol=protocol,
-            packet_count=count,
-            byte_count=total_bytes,
-            packet_rate=round(count / window_seconds, 2),
-            byte_rate=round(total_bytes / window_seconds, 2),
-            packet_size=round(total_bytes / count, 2) if count else 0.0,
-            unique_sources=len(srcs),
-            unique_destinations=len(dsts),
-            tcp_flags="S" if has_syn else None,
-            flow_id=f"pcap-win-{bucket_idx}",
-            dataset_id=path.stem,
-            provenance=Provenance.REPLAYED.value,
-        ).normalize()
+        for bucket_idx in sorted(buckets.keys())[:max_windows]:
+            pkts = buckets[bucket_idx]
+            count = len(pkts)
+            total_bytes = sum(size for _, _, _, size in pkts)
+            srcs = {src for _, src, _, _ in pkts}
+            dsts = {dst for _, _, dst, _ in pkts}
+            tcp_count = sum(1 for ip, _, _, _ in pkts if isinstance(ip.data, dpkt.tcp.TCP))
+            udp_count = sum(1 for ip, _, _, _ in pkts if isinstance(ip.data, dpkt.udp.UDP))
+            icmp_count = sum(1 for ip, _, _, _ in pkts if isinstance(ip.data, dpkt.icmp.ICMP))
+            has_syn = any(
+                isinstance(ip.data, dpkt.tcp.TCP) and bool(ip.data.flags & dpkt.tcp.TH_SYN)
+                for ip, _, _, _ in pkts
+            )
+            protocol = (
+                "UDP"
+                if udp_count >= tcp_count and udp_count >= icmp_count and udp_count > 0
+                else "TCP"
+                if tcp_count > 0
+                else "ICMP"
+                if icmp_count > 0
+                else "IP"
+            )
+
+            yield TelemetryEvent(
+                source_type="PCAP_REPLAY",
+                source_id=path.name,
+                src_ip=next(iter(srcs), None),
+                dst_ip=next(iter(dsts), None),
+                protocol=protocol,
+                packet_count=count,
+                byte_count=total_bytes,
+                packet_rate=round(count / window_seconds, 2),
+                byte_rate=round(total_bytes / window_seconds, 2),
+                packet_size=round(total_bytes / count, 2) if count else 0.0,
+                unique_sources=len(srcs),
+                unique_destinations=len(dsts),
+                tcp_flags="S" if has_syn else None,
+                flow_id=f"pcap-win-{bucket_idx}",
+                dataset_id=path.stem,
+                provenance=Provenance.REPLAYED.value,
+            ).normalize()
+    finally:
+        handle.close()
