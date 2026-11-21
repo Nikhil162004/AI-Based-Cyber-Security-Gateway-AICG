@@ -389,6 +389,8 @@ def test_sec03_production_enables_secure_cookie_by_default(monkeypatch):
     """AEGIS_PRODUCTION=true enables session_cookie_secure by default."""
     monkeypatch.delenv("AEGIS_SESSION_COOKIE_SECURE", raising=False)
     monkeypatch.setenv("AEGIS_PRODUCTION", "true")
+    monkeypatch.setenv("AEGIS_SECRET_KEY", "prod-secret-key-for-test-32bytes!")
+    monkeypatch.setenv("AEGIS_MASTER_KEY", "prod-master-key-for-test-32bytes!")
 
     settings = Settings()
     assert settings.production is True
