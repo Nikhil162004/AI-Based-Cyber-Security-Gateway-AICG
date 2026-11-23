@@ -1925,6 +1925,16 @@ def create_app(runtime: GatewayRuntime) -> Flask:
                 yield f"event: {message['type']}\ndata: {json.dumps(message['data'], default=str)}\n\n"
         return Response(stream(), mimetype="text/event-stream")
 
+    @app.errorhandler(500)
+    def handle_500(e):
+        import traceback
+        original = getattr(e, "original_exception", e)
+        return jsonify({
+            "error": str(original),
+            "type": type(original).__name__,
+            "traceback": traceback.format_exception(original)
+        }), 500
+
     return app
 
 
