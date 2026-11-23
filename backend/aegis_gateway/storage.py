@@ -41,18 +41,49 @@ class GatewayStore:
         self._audit_lock = threading.RLock()
         self.initialize()
 
+    def _reset_corrupted_database(self) -> None:
+        """Safely delete malformed SQLite database and WAL/SHM artifacts."""
+        for ext in ("", "-wal", "-shm", "-journal"):
+            try:
+                p = Path(str(self.path) + ext)
+                if p.exists():
+                    p.unlink(missing_ok=True)
+            except Exception:
+                pass
+
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
-        con = sqlite3.connect(self.path, timeout=10)
-        con.row_factory = sqlite3.Row
-        # Phase 20 Concurrency and Integrity Pragmas
-        con.execute("PRAGMA journal_mode = WAL;")
-        con.execute("PRAGMA foreign_keys = ON;")
-        con.execute("PRAGMA busy_timeout = 5000;")
-        con.execute("PRAGMA synchronous = NORMAL;")
+        try:
+            con = sqlite3.connect(self.path, timeout=10)
+            con.row_factory = sqlite3.Row
+            con.execute("PRAGMA journal_mode = WAL;")
+            con.execute("PRAGMA foreign_keys = ON;")
+            con.execute("PRAGMA busy_timeout = 5000;")
+            con.execute("PRAGMA synchronous = NORMAL;")
+        except sqlite3.DatabaseError as db_err:
+            if "malformed" in str(db_err).lower() or "not a database" in str(db_err).lower():
+                self._reset_corrupted_database()
+                con = sqlite3.connect(self.path, timeout=10)
+                con.row_factory = sqlite3.Row
+                con.execute("PRAGMA journal_mode = WAL;")
+                con.execute("PRAGMA foreign_keys = ON;")
+                con.execute("PRAGMA busy_timeout = 5000;")
+                con.execute("PRAGMA synchronous = NORMAL;")
+                self._create_schema(con)
+            else:
+                raise
+
         try:
             yield con
             con.commit()
+        except sqlite3.DatabaseError as db_err:
+            try:
+                con.rollback()
+            except Exception:
+                pass
+            if "malformed" in str(db_err).lower() or "not a database" in str(db_err).lower():
+                self._reset_corrupted_database()
+            raise
         except Exception:
             try:
                 con.rollback()
@@ -63,91 +94,91 @@ class GatewayStore:
             con.close()
 
     def initialize(self) -> None:
+        try:
+            with self.connection() as con:
+                self._create_schema(con)
+        except sqlite3.DatabaseError as db_err:
+            if "malformed" in str(db_err).lower() or "not a database" in str(db_err).lower():
+                self._reset_corrupted_database()
+                with self.connection() as con:
+                    self._create_schema(con)
+            else:
+                raise
+
+    def _create_schema(self, con: sqlite3.Connection) -> None:
         canonical_columns = ",\n".join(f"{field} TEXT" for field in CANONICAL_FIELDS)
-        with self.connection() as con:
-            con.executescript(
-                f"""
-                CREATE TABLE IF NOT EXISTS telemetry (
-                    {canonical_columns}, raw_json TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS telemetry_timestamp_idx ON telemetry(timestamp DESC);
-                CREATE INDEX IF NOT EXISTS telemetry_scenario_idx ON telemetry(scenario_id);
-                CREATE INDEX IF NOT EXISTS telemetry_source_idx ON telemetry(source_type, source_id);
-                CREATE TABLE IF NOT EXISTS incidents (
-                    incident_id TEXT PRIMARY KEY, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-                    event_id TEXT NOT NULL, device_id TEXT, source_id TEXT, attack_type TEXT,
-                    severity TEXT, confidence REAL, evidence_json TEXT NOT NULL, affected_resources TEXT,
-                    energy_impact TEXT, iam_impact TEXT, trust_impact TEXT, response_action TEXT,
-                    response_mode TEXT, operator TEXT, lifecycle_state TEXT NOT NULL,
-                    recovery_state TEXT NOT NULL, resolved_at TEXT, provenance TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS incidents_state_idx ON incidents(lifecycle_state, severity);
-                CREATE TABLE IF NOT EXISTS incident_history (
-                    history_id TEXT PRIMARY KEY, incident_id TEXT NOT NULL, timestamp TEXT NOT NULL,
-                    previous_state TEXT, state TEXT NOT NULL, actor TEXT, note TEXT, evidence_json TEXT NOT NULL,
-                    FOREIGN KEY (incident_id) REFERENCES incidents(incident_id) ON DELETE CASCADE
-                );
-                CREATE INDEX IF NOT EXISTS incident_history_incident_idx ON incident_history(incident_id, timestamp);
-                CREATE TABLE IF NOT EXISTS actions (
-                    action_id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, event_id TEXT, incident_id TEXT,
-                    action TEXT NOT NULL, reason TEXT NOT NULL, policy TEXT NOT NULL, mode TEXT NOT NULL,
-                    result TEXT NOT NULL, provenance TEXT NOT NULL,
-                    FOREIGN KEY (incident_id) REFERENCES incidents(incident_id) ON DELETE SET NULL
-                );
-                CREATE TABLE IF NOT EXISTS iam_events (
-                    iam_event_id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, identity TEXT, role TEXT,
-                    authentication_status TEXT, authorization_status TEXT, access_request TEXT,
-                    decision TEXT, reason TEXT, provenance TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS trust_history (
-                    trust_event_id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, identity TEXT NOT NULL,
-                    score REAL NOT NULL, delta REAL NOT NULL, reason TEXT NOT NULL, provenance TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS trust_identity_idx ON trust_history(identity, timestamp DESC);
-                CREATE TABLE IF NOT EXISTS metadata (
-                    metadata_id TEXT PRIMARY KEY, kind TEXT NOT NULL, version TEXT NOT NULL,
-                    created_at TEXT NOT NULL, payload_json TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS metadata_kind_idx ON metadata(kind, created_at DESC);
-                CREATE TABLE IF NOT EXISTS admin_users (
-                    user_id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
-                    role TEXT NOT NULL, status TEXT NOT NULL, mfa_enabled INTEGER NOT NULL DEFAULT 1,
-                    mfa_status TEXT NOT NULL DEFAULT 'SIMULATED_VERIFIED', created_at TEXT NOT NULL, last_login TEXT
-                );
-                CREATE INDEX IF NOT EXISTS admin_users_username_idx ON admin_users(username);
-                CREATE TABLE IF NOT EXISTS admin_alerts (
-                    alert_id TEXT PRIMARY KEY, incident_id TEXT NOT NULL UNIQUE, timestamp TEXT NOT NULL,
-                    severity TEXT NOT NULL, attack_type TEXT NOT NULL, device_id TEXT, source_id TEXT,
-                    target TEXT NOT NULL, confidence REAL NOT NULL, detection_reason TEXT NOT NULL,
-                    lifecycle_state TEXT NOT NULL, recommended_action TEXT NOT NULL, current_action TEXT NOT NULL,
-                    acknowledgement_state TEXT NOT NULL DEFAULT 'UNACKNOWLEDGED', acknowledged_by TEXT,
-                    acknowledged_at TEXT, status TEXT NOT NULL DEFAULT 'ACTIVE', evidence_json TEXT NOT NULL DEFAULT '[]',
-                    FOREIGN KEY (incident_id) REFERENCES incidents(incident_id) ON DELETE CASCADE
-                );
-                CREATE INDEX IF NOT EXISTS admin_alerts_incident_idx ON admin_alerts(incident_id);
-                CREATE INDEX IF NOT EXISTS admin_alerts_status_idx ON admin_alerts(status, acknowledgement_state);
-                CREATE TABLE IF NOT EXISTS admin_audit_log (
-                    event_id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, username TEXT NOT NULL,
-                    role TEXT NOT NULL, action TEXT NOT NULL, resource TEXT NOT NULL, resource_id TEXT,
-                    result TEXT NOT NULL, source_ip TEXT, details TEXT NOT NULL,
-                    prev_hash TEXT NOT NULL DEFAULT '0000000000000000000000000000000000000000000000000000000000000000',
-                    record_hash TEXT NOT NULL DEFAULT ''
-                );
-                CREATE INDEX IF NOT EXISTS admin_audit_timestamp_idx ON admin_audit_log(timestamp DESC);
-                CREATE INDEX IF NOT EXISTS admin_audit_action_idx ON admin_audit_log(action);
-                CREATE TABLE IF NOT EXISTS device_identities (
-                    device_id TEXT PRIMARY KEY, role TEXT NOT NULL DEFAULT 'sensor',
-                    status TEXT NOT NULL DEFAULT 'ENROLLED', auth_key_hash TEXT NOT NULL,
-                    trust_score REAL NOT NULL DEFAULT 100.0, failures INTEGER NOT NULL DEFAULT 0,
-                    mfa_status TEXT NOT NULL DEFAULT 'NOT_REQUIRED', created_at TEXT NOT NULL,
-                    last_seen TEXT
-                );
-                CREATE INDEX IF NOT EXISTS device_identities_status_idx ON device_identities(status);
-                """
-            )
-            self._migrate_schema(con)
-            self._seed_default_users(con)
-            self._seed_default_device_identities(con)
+        con.executescript(
+            f"""
+            CREATE TABLE IF NOT EXISTS telemetry (
+                {canonical_columns}, raw_json TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS telemetry_timestamp_idx ON telemetry(timestamp DESC);
+            CREATE INDEX IF NOT EXISTS telemetry_scenario_idx ON telemetry(scenario_id);
+            CREATE INDEX IF NOT EXISTS telemetry_source_idx ON telemetry(source_type, source_id);
+            CREATE TABLE IF NOT EXISTS incidents (
+                incident_id TEXT PRIMARY KEY, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                event_id TEXT NOT NULL, device_id TEXT, source_id TEXT, attack_type TEXT,
+                severity TEXT, confidence REAL, evidence_json TEXT NOT NULL, affected_resources TEXT,
+                energy_impact TEXT, iam_impact TEXT, trust_impact TEXT, response_action TEXT,
+                response_mode TEXT, lifecycle_state TEXT NOT NULL, recovery_state TEXT,
+                provenance TEXT, operator TEXT, resolved_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS incidents_device_idx ON incidents(device_id);
+            CREATE INDEX IF NOT EXISTS incidents_lifecycle_idx ON incidents(lifecycle_state);
+            CREATE TABLE IF NOT EXISTS incident_history (
+                history_id TEXT PRIMARY KEY, incident_id TEXT NOT NULL, state TEXT NOT NULL,
+                previous_state TEXT, timestamp TEXT NOT NULL, actor TEXT NOT NULL,
+                evidence_json TEXT NOT NULL, note TEXT,
+                FOREIGN KEY (incident_id) REFERENCES incidents(incident_id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS incident_history_incident_idx ON incident_history(incident_id, timestamp ASC);
+            CREATE TABLE IF NOT EXISTS response_actions (
+                action_id TEXT PRIMARY KEY, incident_id TEXT, event_id TEXT, action TEXT NOT NULL,
+                policy TEXT NOT NULL, mode TEXT NOT NULL, result TEXT NOT NULL, timestamp TEXT NOT NULL,
+                reason TEXT NOT NULL, provenance TEXT NOT NULL,
+                FOREIGN KEY (incident_id) REFERENCES incidents(incident_id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS response_actions_incident_idx ON response_actions(incident_id);
+            CREATE TABLE IF NOT EXISTS admin_alerts (
+                alert_id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, incident_id TEXT NOT NULL,
+                device_id TEXT NOT NULL, source_id TEXT NOT NULL, attack_type TEXT NOT NULL,
+                severity TEXT NOT NULL, confidence REAL NOT NULL, status TEXT NOT NULL,
+                lifecycle_state TEXT NOT NULL, detection_reason TEXT NOT NULL, recommended_action TEXT NOT NULL,
+                current_action TEXT NOT NULL, target TEXT NOT NULL, evidence_json TEXT NOT NULL,
+                acknowledgement_state TEXT NOT NULL DEFAULT 'UNACKNOWLEDGED', acknowledged_by TEXT,
+                acknowledged_at TEXT,
+                FOREIGN KEY (incident_id) REFERENCES incidents(incident_id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS admin_alerts_incident_idx ON admin_alerts(incident_id);
+            CREATE INDEX IF NOT EXISTS admin_alerts_status_idx ON admin_alerts(status);
+            CREATE INDEX IF NOT EXISTS admin_alerts_timestamp_idx ON admin_alerts(timestamp DESC);
+            CREATE TABLE IF NOT EXISTS admin_users (
+                user_id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
+                role TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ACTIVE', mfa_enabled INTEGER NOT NULL DEFAULT 1,
+                mfa_status TEXT NOT NULL DEFAULT 'ENROLLED', created_at TEXT NOT NULL,
+                last_login TEXT
+            );
+            CREATE TABLE IF NOT EXISTS admin_audit_log (
+                event_id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, username TEXT NOT NULL,
+                role TEXT NOT NULL, action TEXT NOT NULL, resource TEXT NOT NULL,
+                resource_id TEXT, result TEXT NOT NULL, source_ip TEXT, details TEXT,
+                prev_hash TEXT NOT NULL, record_hash TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS admin_audit_timestamp_idx ON admin_audit_log(timestamp DESC);
+            CREATE INDEX IF NOT EXISTS admin_audit_action_idx ON admin_audit_log(action);
+            CREATE TABLE IF NOT EXISTS device_identities (
+                device_id TEXT PRIMARY KEY, role TEXT NOT NULL DEFAULT 'sensor',
+                status TEXT NOT NULL DEFAULT 'ENROLLED', auth_key_hash TEXT NOT NULL,
+                trust_score REAL NOT NULL DEFAULT 100.0, failures INTEGER NOT NULL DEFAULT 0,
+                mfa_status TEXT NOT NULL DEFAULT 'NOT_REQUIRED', created_at TEXT NOT NULL,
+                last_seen TEXT
+            );
+            CREATE INDEX IF NOT EXISTS device_identities_status_idx ON device_identities(status);
+            """
+        )
+        self._migrate_schema(con)
+        self._seed_default_users(con)
+        self._seed_default_device_identities(con)
 
     def _migrate_schema(self, con: sqlite3.Connection) -> None:
         """Backward-compatible schema migration for existing databases."""
