@@ -1059,8 +1059,16 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         active_inc = runtime.store.find_active_incident()
         if not active_inc:
             recent_incidents = runtime.store.incidents(limit=1)
-            if recent_incidents and recent_incidents[0].get("lifecycle_state") == "RESOLVED":
-                active_inc = recent_incidents[0]
+            if recent_incidents and recent_incidents[0].get("lifecycle_state") in {"RESOLVED", "CLOSED"}:
+                res_time = recent_incidents[0].get("resolved_at") or recent_incidents[0].get("updated_at")
+                if res_time:
+                    try:
+                        from datetime import datetime, timezone
+                        res_dt = datetime.fromisoformat(res_time.replace("Z", "+00:00"))
+                        if (datetime.now(timezone.utc) - res_dt).total_seconds() < 8:
+                            active_inc = recent_incidents[0]
+                    except Exception:
+                        pass
 
         active_inc_summary = {
             "incident_id": active_inc["incident_id"],

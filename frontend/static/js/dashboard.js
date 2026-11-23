@@ -1590,13 +1590,9 @@ const lifecycleVisualController = {
 };
 
 function shouldAnimateIntro(inc) {
-    if (!inc || !inc.created_at) return false;
-    const createdAtMs = new Date(inc.created_at).getTime();
-    if (isNaN(createdAtMs)) return false;
-    const ageMs = Date.now() - createdAtMs;
-    // Paced intro only plays for newly opened incidents (< 4000 ms old) created in this page session
-    if (ageMs > 4000) return false;
-    if (createdAtMs < (pageSessionStartTime - 1000)) return false;
+    if (!inc || !inc.incident_id) return false;
+    // Always trigger visual progression when a new incident starts or transitions from baseline
+    if (lifecycleVisualController.activeIncidentId === inc.incident_id) return false;
     const state = (inc.lifecycle_state || "").toUpperCase();
     return ["DETECTED", "TRIAGED", "ANALYZING", "RESPONDING", "CONTAINED"].includes(state);
 }
@@ -1651,7 +1647,7 @@ function startLifecycleIntroAnimation(inc, summary, telemetryContext) {
                 lifecycleVisualController.cachedTelemetryContext
             );
             step();
-        }, 400);
+        }, 500);
     }
 
     step();

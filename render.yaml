@@ -8,4 +8,4 @@ services:
     startCommand: gunicorn backend.app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120
     envVars:
       - key: AEGIS_DEV_AUTO_AUTH
-        value: "1"
+        value: "0"

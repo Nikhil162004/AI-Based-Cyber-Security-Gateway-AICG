@@ -422,13 +422,25 @@ class GatewayRuntime:
                             self.publish("alert", alert)
                     elif state == "RECOVERING" and streak >= 5:
                         self.response.release(dev)
-                        self._device_normal_streaks.pop(dev, None)
                         updated = self.store.transition_incident(
                             inc_id,
                             "RESOLVED",
                             "system",
                             f"Recovery verified from sustained normal baseline ({streak} normal windows) for device '{dev}'.",
                             ["sustained normal observations verified"]
+                        )
+                        self.publish("incident", updated)
+                        alert = self.store.sync_alert_with_incident(updated)
+                        if alert:
+                            self.publish("alert", alert)
+                    elif state == "RESOLVED" and streak >= 8:
+                        self._device_normal_streaks.pop(dev, None)
+                        updated = self.store.transition_incident(
+                            inc_id,
+                            "CLOSED",
+                            "system",
+                            f"Recovery verified and audit finalized from sustained normal baseline ({streak} normal windows) for device '{dev}'.",
+                            ["sustained normal observations verified; incident closed"]
                         )
                         self.publish("incident", updated)
                         alert = self.store.sync_alert_with_incident(updated)
