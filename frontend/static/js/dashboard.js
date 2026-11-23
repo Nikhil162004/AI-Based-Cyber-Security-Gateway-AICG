@@ -2145,6 +2145,8 @@ async function runControlledDemo() {
 
         await new Promise(r => setTimeout(r, 400));
         await refreshDashboard();
+        setTimeout(refreshDashboard, 800);
+        setTimeout(refreshDashboard, 1400);
 
     } catch (error) {
         console.error("Controlled demo failed:", error);
@@ -2199,6 +2201,9 @@ window.triggerScenario = async function(scenarioId, intensity = 3, duration = 10
             }
             if (detail) detail.textContent = `Profile: ${scenarioId} (Intensity: ${intensity}, Duration: ${duration}s)`;
             refreshDashboard();
+            setTimeout(refreshDashboard, 350);
+            setTimeout(refreshDashboard, 800);
+            setTimeout(refreshDashboard, 1400);
         } else {
             if (banner) {
                 banner.textContent = "SIMULATION FAILED";
@@ -2439,6 +2444,7 @@ async function refreshDashboard() {
         if (activeUnclosed) {
             stepperIncident = activeUnclosed;
             hmiTargetIncident = activeUnclosed;
+            if (hmiTargetIncident) hmiTargetIncident._closedSince = null;
         } else if (hmiTargetIncident) {
             const refreshedTarget = incidentsList.find(i => i.incident_id === hmiTargetIncident.incident_id);
             if (refreshedTarget) {
@@ -2447,9 +2453,15 @@ async function refreshDashboard() {
             } else {
                 stepperIncident = hmiTargetIncident;
             }
-        } else if (incidentsList.length && incidentsList[0].lifecycle_state === "RESOLVED") {
-            stepperIncident = incidentsList[0];
-            hmiTargetIncident = incidentsList[0];
+            if (stepperIncident && ["RESOLVED", "CLOSED"].includes(stepperIncident.lifecycle_state)) {
+                if (!hmiTargetIncident._closedSince) {
+                    hmiTargetIncident._closedSince = Date.now();
+                } else if (Date.now() - hmiTargetIncident._closedSince > 6000) {
+                    // Hold Resolved/Closed for 6s, then smoothly return to Healthy Baseline
+                    hmiTargetIncident = null;
+                    stepperIncident = null;
+                }
+            }
         }
 
         // Update the 7-Step Stepper using the canonical incident state
@@ -3317,6 +3329,6 @@ window.__refreshCoalesce = {
 initSidebarNavigation();
 checkAuthStatus();
 refreshDashboard();
-setInterval(refreshDashboard, 3500);
+setInterval(refreshDashboard, 1500);
 initSSE();
 

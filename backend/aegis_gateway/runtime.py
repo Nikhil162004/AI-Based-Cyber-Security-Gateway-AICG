@@ -295,6 +295,7 @@ class GatewayRuntime:
 
         with self._lock:
             if is_impersonation:
+                identity = self.iam.get(dev_id)
                 delta = 0.0
                 trust_reason = "unauthenticated impersonation attempt rejected; legitimate sensor trust preserved"
             elif not auth_ok and not is_enrolled:
@@ -422,6 +423,7 @@ class GatewayRuntime:
                             self.publish("alert", alert)
                     elif state == "RECOVERING" and streak >= 5:
                         self.response.release(dev)
+                        self._device_normal_streaks.pop(dev, None)
                         updated = self.store.transition_incident(
                             inc_id,
                             "RESOLVED",
@@ -705,9 +707,10 @@ class GatewayRuntime:
                     if not has_active_attack_sims:
                         try:
                             self.ingest(generate_window("normal", intensity=1, sequence=sequence))
-                            sequence += 1
                         except Exception:
                             pass
+                        finally:
+                            sequence += 1
                     try:
                         self.step_device_recovery()
                     except Exception:

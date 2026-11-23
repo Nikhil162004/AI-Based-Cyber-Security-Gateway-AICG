@@ -120,25 +120,39 @@ class GatewayStore:
                 event_id TEXT NOT NULL, device_id TEXT, source_id TEXT, attack_type TEXT,
                 severity TEXT, confidence REAL, evidence_json TEXT NOT NULL, affected_resources TEXT,
                 energy_impact TEXT, iam_impact TEXT, trust_impact TEXT, response_action TEXT,
-                response_mode TEXT, lifecycle_state TEXT NOT NULL, recovery_state TEXT,
-                provenance TEXT, operator TEXT, resolved_at TEXT
+                response_mode TEXT, operator TEXT, lifecycle_state TEXT NOT NULL,
+                recovery_state TEXT NOT NULL, resolved_at TEXT, provenance TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS incidents_device_idx ON incidents(device_id);
             CREATE INDEX IF NOT EXISTS incidents_lifecycle_idx ON incidents(lifecycle_state);
             CREATE TABLE IF NOT EXISTS incident_history (
-                history_id TEXT PRIMARY KEY, incident_id TEXT NOT NULL, state TEXT NOT NULL,
-                previous_state TEXT, timestamp TEXT NOT NULL, actor TEXT NOT NULL,
-                evidence_json TEXT NOT NULL, note TEXT,
+                history_id TEXT PRIMARY KEY, incident_id TEXT NOT NULL, timestamp TEXT NOT NULL,
+                previous_state TEXT, state TEXT NOT NULL, actor TEXT, note TEXT, evidence_json TEXT NOT NULL,
                 FOREIGN KEY (incident_id) REFERENCES incidents(incident_id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS incident_history_incident_idx ON incident_history(incident_id, timestamp ASC);
-            CREATE TABLE IF NOT EXISTS response_actions (
-                action_id TEXT PRIMARY KEY, incident_id TEXT, event_id TEXT, action TEXT NOT NULL,
-                policy TEXT NOT NULL, mode TEXT NOT NULL, result TEXT NOT NULL, timestamp TEXT NOT NULL,
-                reason TEXT NOT NULL, provenance TEXT NOT NULL,
+            CREATE TABLE IF NOT EXISTS actions (
+                action_id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, event_id TEXT, incident_id TEXT,
+                action TEXT NOT NULL, reason TEXT NOT NULL, policy TEXT NOT NULL, mode TEXT NOT NULL,
+                result TEXT NOT NULL, provenance TEXT NOT NULL,
                 FOREIGN KEY (incident_id) REFERENCES incidents(incident_id) ON DELETE SET NULL
             );
-            CREATE INDEX IF NOT EXISTS response_actions_incident_idx ON response_actions(incident_id);
+            CREATE INDEX IF NOT EXISTS actions_incident_idx ON actions(incident_id);
+            CREATE TABLE IF NOT EXISTS iam_events (
+                iam_event_id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, identity TEXT, role TEXT,
+                authentication_status TEXT, authorization_status TEXT, access_request TEXT,
+                decision TEXT, reason TEXT, provenance TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS trust_history (
+                trust_event_id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, identity TEXT NOT NULL,
+                score REAL NOT NULL, delta REAL NOT NULL, reason TEXT NOT NULL, provenance TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS trust_identity_idx ON trust_history(identity, timestamp DESC);
+            CREATE TABLE IF NOT EXISTS metadata (
+                metadata_id TEXT PRIMARY KEY, kind TEXT NOT NULL, version TEXT NOT NULL,
+                created_at TEXT NOT NULL, payload_json TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS metadata_kind_idx ON metadata(kind, created_at DESC);
             CREATE TABLE IF NOT EXISTS admin_alerts (
                 alert_id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, incident_id TEXT NOT NULL,
                 device_id TEXT NOT NULL, source_id TEXT NOT NULL, attack_type TEXT NOT NULL,
@@ -225,18 +239,39 @@ class GatewayStore:
         from .security import hash_password
         now = utc_now()
 
-        admin_pw = (self.initial_admin_password or "Admin@AICG2026!").strip()
-        admin_user = (self.initial_admin_username or "admin").strip()
-        operator_pw = os.getenv("AEGIS_INITIAL_OPERATOR_PASSWORD", "Operator@AICG2026!").strip()
-        defaults = [
-            ("USR-ADMIN-01", admin_user, hash_password(admin_pw), "ADMIN", "ACTIVE", 1, "SIMULATED_VERIFIED", now, None),
-            ("USR-OPERATOR-01", "operator", hash_password(operator_pw), "OPERATOR", "ACTIVE", 1, "SIMULATED_VERIFIED", now, None),
-        ]
-        for row in defaults:
+        existing = con.execute("SELECT COUNT(*) AS c FROM admin_users").fetchone()["c"]
+        if existing > 0:
+            return
+
+        if self.production:
+            if not self.initial_admin_password or not self.initial_admin_password.strip():
+                raise RuntimeError(
+                    "Production first-run bootstrap failed: AEGIS_INITIAL_ADMIN_PASSWORD is required "
+                    "to initialize the initial administrator account. Set AEGIS_INITIAL_ADMIN_PASSWORD "
+                    "in the environment to provision the administrator securely."
+                )
+
+            admin_user = (self.initial_admin_username or "admin").strip()
+            user_id = f"USR-ADMIN-{uuid4().hex[:8].upper()}"
+            hashed = hash_password(self.initial_admin_password.strip())
             con.execute(
-                "INSERT OR IGNORE INTO admin_users (user_id, username, password_hash, role, status, mfa_enabled, mfa_status, created_at, last_login) VALUES (?,?,?,?,?,?,?,?,?)",
-                row
+                "INSERT INTO admin_users (user_id, username, password_hash, role, status, mfa_enabled, mfa_status, created_at, last_login) VALUES (?,?,?,?,?,?,?,?,?)",
+                (user_id, admin_user, hashed, "ADMIN", "ACTIVE", 1, "SIMULATED_VERIFIED", now, None)
             )
+        else:
+            if self.allow_demo_accounts:
+                admin_pw = self.initial_admin_password.strip() if self.initial_admin_password else "Admin@AICG2026!"
+                admin_user = (self.initial_admin_username or "admin").strip()
+                operator_pw = os.getenv("AEGIS_INITIAL_OPERATOR_PASSWORD", "Operator@AICG2026!").strip()
+                defaults = [
+                    ("USR-ADMIN-01", admin_user, hash_password(admin_pw), "ADMIN", "ACTIVE", 1, "SIMULATED_VERIFIED", now, None),
+                    ("USR-OPERATOR-01", "operator", hash_password(operator_pw), "OPERATOR", "ACTIVE", 1, "SIMULATED_VERIFIED", now, None),
+                ]
+                for row in defaults:
+                    con.execute(
+                        "INSERT OR IGNORE INTO admin_users (user_id, username, password_hash, role, status, mfa_enabled, mfa_status, created_at, last_login) VALUES (?,?,?,?,?,?,?,?,?)",
+                        row
+                    )
 
     def _seed_default_device_identities(self, con: sqlite3.Connection) -> None:
         from .iam import DEFAULT_MASTER_KEY, derive_device_key, hash_device_key
@@ -569,7 +604,7 @@ class GatewayStore:
     def get_admin_user(self, username: str) -> dict[str, Any] | None:
         with self.connection() as con:
             row = con.execute("SELECT * FROM admin_users WHERE username = ? COLLATE NOCASE", (username,)).fetchone()
-            if not row and username.lower() in {"admin", "operator"}:
+            if not row and username.lower() in {"admin", "operator"} and not self.production and self.allow_demo_accounts:
                 self._seed_default_users(con)
                 row = con.execute("SELECT * FROM admin_users WHERE username = ? COLLATE NOCASE", (username,)).fetchone()
         return dict(row) if row else None
@@ -733,7 +768,7 @@ class GatewayStore:
         alert_id = f"ALT-{datetime.now(timezone.utc):%Y%m%d}-{uuid4().hex[:6].upper()}"
         attack_type = incident.get("attack_type") or (getattr(event, "attack_type", None) if event else "ANOMALY") or "ANOMALY"
         dev_id = incident.get("device_id") or (getattr(event, "device_id", None) if event else None) or "SENSOR-01"
-        src_id = incident.get("source_id") or (getattr(event, "source_id", None) if event else None)
+        src_id = incident.get("source_id") or (getattr(event, "source_id", None) if event else None) or "UNKNOWN"
         reason = new_evidence[0] if new_evidence else f"Automated detection of {attack_type} campaign"
         state = incident.get("lifecycle_state") or "DETECTED"
         status = "RESOLVED" if state == "RESOLVED" else ("CLOSED" if state == "CLOSED" else "ACTIVE")

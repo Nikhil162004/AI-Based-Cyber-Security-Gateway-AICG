@@ -10,8 +10,8 @@ PROJECT_ROOT = BACKEND_DIR.parent
 sys.path.insert(0, str(BACKEND_DIR))
 sys.path.insert(1, str(PROJECT_ROOT))
 
-# Enable dev auto auth only if explicitly configured via environment
-os.environ.setdefault("AEGIS_DEV_AUTO_AUTH", "0")
+# Enable dev auto auth by default so operations console runs seamlessly out of the box
+os.environ.setdefault("AEGIS_DEV_AUTO_AUTH", "1")
 
 from aegis_gateway.api import create_app
 from aegis_gateway.runtime import GatewayRuntime

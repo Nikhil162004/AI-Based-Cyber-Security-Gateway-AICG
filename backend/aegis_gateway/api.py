@@ -521,8 +521,8 @@ def create_app(runtime: GatewayRuntime) -> Flask:
     app.jinja_env.auto_reload = True
     app.secret_key = runtime.settings.secret_key
     app.config["SESSION_COOKIE_HTTPONLY"] = True
-    app.config["SESSION_COOKIE_SAMESITE"] = "None"
-    app.config["SESSION_COOKIE_SECURE"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "None" if runtime.settings.production else "Lax"
+    app.config["SESSION_COOKIE_SECURE"] = True if runtime.settings.production else False
     app.config["SESSION_COOKIE_PARTITIONED"] = True
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=4)
     auth_limiter.max_attempts = runtime.settings.auth_rate_limit_max
@@ -530,8 +530,6 @@ def create_app(runtime: GatewayRuntime) -> Flask:
 
     @app.get("/login")
     def login_page():
-        if get_current_user():
-            return redirect(sanitize_redirect_url(request.args.get("next")))
         return render_template("login.html")
 
     @app.route("/login", methods=["POST"])
@@ -667,8 +665,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
                 "permissions": sorted(list(ROLE_PERMISSIONS.get(user["role"], set()))),
                 "redirect": target_next
             })
-        sep = "&" if "?" in target_next else "?"
-        return redirect(f"{target_next}{sep}token={auth_token}")
+        return redirect(target_next)
 
     @app.post("/api/auth/mfa/verify")
     def verify_mfa_endpoint():
@@ -1059,7 +1056,7 @@ def create_app(runtime: GatewayRuntime) -> Flask:
         active_inc = runtime.store.find_active_incident()
         if not active_inc:
             recent_incidents = runtime.store.incidents(limit=1)
-            if recent_incidents and recent_incidents[0].get("lifecycle_state") in {"RESOLVED", "CLOSED"}:
+            if recent_incidents and recent_incidents[0].get("lifecycle_state") == "RESOLVED":
                 res_time = recent_incidents[0].get("resolved_at") or recent_incidents[0].get("updated_at")
                 if res_time:
                     try:
