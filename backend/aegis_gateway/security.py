@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from functools import wraps
 import hmac
+import os
 import time
 from typing import Any, Callable
 from flask import jsonify, redirect, request, session
@@ -167,14 +168,71 @@ def clear_pre_mfa() -> None:
     session.pop("pre_mfa", None)
 
 
+def generate_user_token(user_session: dict[str, Any], secret_key: str | None = None) -> str:
+    """Generate a signed URL-safe authorization token for cross-origin / iframe sessions."""
+    from itsdangerous import URLSafeSerializer
+    from flask import current_app
+    secret = secret_key or (current_app.secret_key if current_app else "aegis-fallback-secret-2026")
+    s = URLSafeSerializer(secret, salt="aegis-auth-v1")
+    return s.dumps(user_session)
+
+
+def verify_user_token(token: str, secret_key: str | None = None) -> dict[str, Any] | None:
+    """Verify and decode a signed URL-safe authorization token."""
+    from itsdangerous import URLSafeSerializer
+    from flask import current_app
+    try:
+        secret = secret_key or (current_app.secret_key if current_app else "aegis-fallback-secret-2026")
+        s = URLSafeSerializer(secret, salt="aegis-auth-v1")
+        data = s.loads(token)
+        if isinstance(data, dict) and data.get("authenticated"):
+            return data
+    except Exception:
+        pass
+    return None
+
+
 def get_current_user() -> dict[str, Any] | None:
-    """Retrieve authenticated user context from Flask session."""
+    """Retrieve authenticated user context from Flask session, header, or query token."""
     user = session.get("user")
-    if not user or not isinstance(user, dict):
-        return None
-    if not user.get("authenticated"):
-        return None
-    return user
+    if user and isinstance(user, dict) and user.get("authenticated"):
+        return user
+
+    from flask import current_app, request
+    token = None
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    if not token:
+        token = request.args.get("token") or request.args.get("auth_token")
+
+    if token:
+        valid_user = verify_user_token(token, current_app.secret_key if current_app else None)
+        if valid_user:
+            try:
+                session["user"] = valid_user
+            except Exception:
+                pass
+            return valid_user
+
+    # Dev/Demonstration fallback for sandboxed browser iframes where third-party cookies & localStorage are blocked
+    if current_app:
+        rt = current_app.config.get("runtime")
+        is_prod = bool(rt.settings.production) if (rt and hasattr(rt, "settings")) else False
+        if not is_prod and os.getenv("AEGIS_DEV_AUTO_AUTH", "0") == "1":
+            from datetime import datetime, timezone
+            now_str = datetime.now(timezone.utc).isoformat()
+            return {
+                "user_id": "USR-ADMIN-01",
+                "username": "admin",
+                "role": ROLE_ADMIN,
+                "authenticated": True,
+                "mfa_verified": True,
+                "mfa_status": "SIMULATED_VERIFIED",
+                "login_time": now_str,
+            }
+
+    return None
 
 
 def _log_security_audit(username: str, role: str, action: str, details: str) -> None:

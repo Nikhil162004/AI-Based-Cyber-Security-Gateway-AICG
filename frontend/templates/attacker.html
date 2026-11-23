@@ -6,6 +6,49 @@
     <title>AICG ATTACK SIMULATOR • Controlled In-Process Threat Simulator</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f87171'%3E%3Cpath d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/%3E%3C/svg%3E">
+    <script>
+    (function() {
+        const params = new URLSearchParams(window.location.search);
+        let token = params.get("token") || params.get("auth_token");
+        if (token) {
+            try {
+                localStorage.setItem("aegis_token", token);
+                sessionStorage.setItem("aegis_token", token);
+            } catch(e) {}
+            params.delete("token");
+            params.delete("auth_token");
+            const newSearch = params.toString() ? ("?" + params.toString()) : "";
+            window.history.replaceState({}, document.title, window.location.pathname + newSearch);
+        } else {
+            try {
+                token = localStorage.getItem("aegis_token") || sessionStorage.getItem("aegis_token");
+            } catch(e) {}
+        }
+
+        const origFetch = window.fetch;
+        window.fetch = function(url, options) {
+            options = options || {};
+            const curToken = token || localStorage.getItem("aegis_token") || sessionStorage.getItem("aegis_token");
+            if (curToken) {
+                if (!options.headers) {
+                    options.headers = {};
+                }
+                if (options.headers instanceof Headers) {
+                    if (!options.headers.has("Authorization")) {
+                        options.headers.set("Authorization", "Bearer " + curToken);
+                    }
+                } else if (Array.isArray(options.headers)) {
+                    options.headers.push(["Authorization", "Bearer " + curToken]);
+                } else {
+                    if (!options.headers["Authorization"]) {
+                        options.headers["Authorization"] = "Bearer " + curToken;
+                    }
+                }
+            }
+            return origFetch.call(this, url, options);
+        };
+    })();
+    </script>
 </head>
 <body class="cockpit-viewport">
 
@@ -28,7 +71,7 @@
                 </div>
             </div>
             <div class="cockpit-header-right back-nav">
-                <a href="/" class="cockpit-back-link">
+                <a href="/" class="cockpit-back-link" onclick="window.location.href='/'; return false;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <line x1="19" y1="12" x2="5" y2="12"></line>
                         <polyline points="12 19 5 12 12 5"></polyline>

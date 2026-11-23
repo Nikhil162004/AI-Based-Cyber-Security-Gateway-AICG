@@ -6,6 +6,60 @@
     <title>AI EDGE SECURITY GATEWAY • AICG Industrial SOC &amp; OT Operations HMI</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2338bdf8'%3E%3Cpath d='M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z'/%3E%3C/svg%3E">
+    <script>
+    (function() {
+        const params = new URLSearchParams(window.location.search);
+        let token = params.get("token") || params.get("auth_token");
+        if (token) {
+            try {
+                localStorage.setItem("aegis_token", token);
+                sessionStorage.setItem("aegis_token", token);
+            } catch(e) {}
+            params.delete("token");
+            params.delete("auth_token");
+            const newSearch = params.toString() ? ("?" + params.toString()) : "";
+            window.history.replaceState({}, document.title, window.location.pathname + newSearch);
+        } else {
+            try {
+                token = localStorage.getItem("aegis_token") || sessionStorage.getItem("aegis_token");
+            } catch(e) {}
+        }
+
+        const origFetch = window.fetch;
+        window.fetch = function(url, options) {
+            options = options || {};
+            const curToken = token || localStorage.getItem("aegis_token") || sessionStorage.getItem("aegis_token");
+            if (curToken) {
+                if (!options.headers) {
+                    options.headers = {};
+                }
+                if (options.headers instanceof Headers) {
+                    if (!options.headers.has("Authorization")) {
+                        options.headers.set("Authorization", "Bearer " + curToken);
+                    }
+                } else if (Array.isArray(options.headers)) {
+                    options.headers.push(["Authorization", "Bearer " + curToken]);
+                } else {
+                    if (!options.headers["Authorization"]) {
+                        options.headers["Authorization"] = "Bearer " + curToken;
+                    }
+                }
+            }
+            return origFetch.call(this, url, options);
+        };
+
+        const origEventSource = window.EventSource;
+        if (origEventSource) {
+            window.EventSource = function(url, config) {
+                const curToken = token || localStorage.getItem("aegis_token") || sessionStorage.getItem("aegis_token");
+                if (curToken && typeof url === "string" && !url.includes("token=")) {
+                    url += (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(curToken);
+                }
+                return new origEventSource(url, config);
+            };
+        }
+    })();
+    </script>
 </head>
 <body>
 
@@ -90,9 +144,14 @@
                 <span>Export CSV</span>
             </a>
 
-            <a href="/attacker" target="_blank" class="btn-header-tool btn-header-remote" title="Open Dedicated AICG Attacker Console">
+            <a href="#sec-controls" class="btn-header-tool" title="Jump to in-page Attack Simulator" onclick="const el=document.getElementById('sec-controls');if(el){el.scrollIntoView({behavior:'smooth'});}return false;">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <span>Simulator ↓</span>
+            </a>
+
+            <a href="/attacker" class="btn-header-tool btn-header-remote" title="Open Dedicated AICG Attacker Console" onclick="window.location.href='/attacker'; return false;">
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><polyline points="9 10 12 13 9 16"/><line x1="14" y1="16" x2="16" y2="16"/></svg>
-                <span>Attacker</span>
+                <span>⚡ Attacker Console</span>
             </a>
         </div>
 
@@ -2167,9 +2226,9 @@
                 <span>Run Controlled Demo</span>
             </button>
 
-            <a href="/attacker" target="_blank" class="btn-open-remote">
+            <a href="/attacker" class="btn-open-remote" onclick="window.location.href='/attacker'; return false;">
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><polyline points="9 10 12 13 9 16"/><line x1="14" y1="16" x2="16" y2="16"/></svg>
-                <span>Open Remote Attacker Console →</span>
+                <span>Open Dedicated Attacker Console →</span>
             </a>
         </div>
 

@@ -2785,6 +2785,12 @@ function renderAuthBadge(authData) {
             if (form) {
                 form.action = "/logout";
                 form.method = "POST";
+                form.onsubmit = function() {
+                    try {
+                        localStorage.removeItem("aegis_token");
+                        sessionStorage.removeItem("aegis_token");
+                    } catch(e) {}
+                };
             }
         }
 

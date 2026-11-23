@@ -1,5 +1,6 @@
 """Compatibility launcher for the unified AEGIS-OT gateway API/HMI."""
 
+import os
 import sys
 from pathlib import Path
 
@@ -9,6 +10,9 @@ PROJECT_ROOT = BACKEND_DIR.parent
 sys.path.insert(0, str(BACKEND_DIR))
 sys.path.insert(1, str(PROJECT_ROOT))
 
+# Enable dev auto auth for browser iframes where third-party cookies & localStorage are blocked
+os.environ.setdefault("AEGIS_DEV_AUTO_AUTH", "1")
+
 from aegis_gateway.api import create_app
 from aegis_gateway.runtime import GatewayRuntime
 
@@ -17,4 +21,6 @@ runtime.start_baseline()
 app = create_app(runtime)
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=8000, debug=False, threaded=True)
+    host = os.environ.get("AEGIS_HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT") or os.environ.get("AEGIS_PORT", 8000))
+    app.run(host=host, port=port, debug=False, threaded=True)

@@ -36,6 +36,7 @@ from .security import (
     ROLE_PERMISSIONS,
     auth_limiter,
     clear_pre_mfa,
+    generate_user_token,
     get_current_user,
     get_pre_mfa_user,
     has_permission,
@@ -47,6 +48,7 @@ from .security import (
     set_pre_mfa_user,
     verify_password,
     verify_simulated_mfa,
+    verify_user_token,
     _log_security_audit,
 )
 
@@ -519,8 +521,9 @@ def create_app(runtime: GatewayRuntime) -> Flask:
     app.jinja_env.auto_reload = True
     app.secret_key = runtime.settings.secret_key
     app.config["SESSION_COOKIE_HTTPONLY"] = True
-    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-    app.config["SESSION_COOKIE_SECURE"] = runtime.settings.session_cookie_secure
+    app.config["SESSION_COOKIE_SAMESITE"] = "None"
+    app.config["SESSION_COOKIE_SECURE"] = True
+    app.config["SESSION_COOKIE_PARTITIONED"] = True
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=4)
     auth_limiter.max_attempts = runtime.settings.auth_rate_limit_max
     auth_limiter.window_seconds = runtime.settings.auth_rate_limit_window_seconds
@@ -653,16 +656,19 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             source_ip=request.remote_addr,
         )
 
+        auth_token = generate_user_token(user_session, app.secret_key)
         target_next = sanitize_redirect_url(request.args.get("next") or (data.get("next") if isinstance(data, dict) else None))
         if request.is_json or request.path.startswith("/api/"):
             return jsonify({
                 "ok": True,
                 "authenticated": True,
+                "token": auth_token,
                 "user": user_session,
                 "permissions": sorted(list(ROLE_PERMISSIONS.get(user["role"], set()))),
                 "redirect": target_next
             })
-        return redirect(target_next)
+        sep = "&" if "?" in target_next else "?"
+        return redirect(f"{target_next}{sep}token={auth_token}")
 
     @app.post("/api/auth/mfa/verify")
     def verify_mfa_endpoint():
@@ -741,9 +747,11 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             details="Authenticated gateway administrative session via simulated MFA",
             source_ip=request.remote_addr,
         )
+        auth_token = generate_user_token(user_session, app.secret_key)
         return jsonify({
             "ok": True,
             "authenticated": True,
+            "token": auth_token,
             "user": user_session,
             "permissions": sorted(list(ROLE_PERMISSIONS.get(user["role"], set()))),
             "redirect": sanitize_redirect_url(data.get("next") or request.args.get("next") or "/")

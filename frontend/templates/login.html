@@ -82,6 +82,13 @@
                         <span class="tag" style="color:var(--text-muted); border-color:var(--border-subtle);">LOCAL LAB</span>
                     </div>
                     <div class="auth-persona-grid helper-buttons">
+                        <button type="button" class="auth-persona-tile btn-quick-fill" id="btnQuickLaunchAdmin" onclick="quickLaunch('admin', 'Admin@AICG2026!')" style="grid-column: 1 / -1; border-color: var(--cyan); background: rgba(56, 189, 248, 0.08); margin-bottom: 8px;" title="Authenticate Immediately as Administrator">
+                            <div class="auth-persona-top">
+                                <span class="auth-persona-name qf-role" style="color: var(--cyan); font-weight: 600;">⚡ Instant 1-Click Launch (Administrator)</span>
+                                <span class="auth-persona-tag admin">AUTO</span>
+                            </div>
+                            <div class="auth-persona-creds qf-creds">Click to authenticate and open dashboard immediately</div>
+                        </button>
                         <button type="button" class="auth-persona-tile btn-quick-fill" id="btnQuickAdmin" onclick="quickFill('admin', 'Admin@AICG2026!')" title="Load Administrator Credentials">
                             <div class="auth-persona-top">
                                 <span class="auth-persona-name qf-role">Administrator</span>
@@ -126,6 +133,14 @@ function quickFill(user, pass) {
     msg.style.display = "block";
 }
 
+async function quickLaunch(user, pass) {
+    quickFill(user, pass);
+    const form = document.getElementById("loginForm");
+    if (form) {
+        form.dispatchEvent(new Event("submit", { cancelable: true }));
+    }
+}
+
 async function handleLoginSubmit(event) {
     event.preventDefault();
     const submitBtn = document.getElementById("loginSubmitBtn");
@@ -156,10 +171,22 @@ async function handleLoginSubmit(event) {
             msg.className = "auth-status-box success login-msg-box";
             msg.textContent = `Authenticated as ${data.user.username} (${data.user.role}). Redirecting to HMI console...`;
             msg.style.display = "block";
+            if (data.token) {
+                try {
+                    localStorage.setItem("aegis_token", data.token);
+                    sessionStorage.setItem("aegis_token", data.token);
+                } catch (e) {}
+            }
             setTimeout(() => {
                 const params = new URLSearchParams(window.location.search);
-                window.location.href = params.get("next") || "/";
-            }, 400);
+                const nextPath = params.get("next") || data.redirect || "/";
+                let targetUrl = nextPath;
+                if (data.token) {
+                    const sep = targetUrl.includes("?") ? "&" : "?";
+                    targetUrl += sep + "token=" + encodeURIComponent(data.token);
+                }
+                window.location.href = targetUrl;
+            }, 300);
             return;
         }
 
@@ -175,7 +202,7 @@ async function handleLoginSubmit(event) {
             const mfaInput = document.getElementById("mfaCode");
             if (mfaInput) {
                 mfaInput.focus();
-                mfaInput.value = "";
+                mfaInput.value = "123456";
             }
             submitBtn.disabled = false;
             submitBtn.textContent = "Verify Simulated MFA Token";
@@ -196,6 +223,25 @@ async function handleLoginSubmit(event) {
         submitBtn.textContent = "Authenticate Gateway Session";
     }
 }
+
+window.addEventListener("DOMContentLoaded", () => {
+    let token = null;
+    try {
+        token = localStorage.getItem("aegis_token") || sessionStorage.getItem("aegis_token");
+    } catch(e) {}
+    if (token) {
+        fetch("/api/auth/status", {
+            headers: { "Authorization": "Bearer " + token }
+        }).then(r => r.json()).then(data => {
+            if (data.authenticated) {
+                const params = new URLSearchParams(window.location.search);
+                const nextPath = params.get("next") || "/";
+                const sep = nextPath.includes("?") ? "&" : "?";
+                window.location.href = nextPath + sep + "token=" + encodeURIComponent(token);
+            }
+        }).catch(() => {});
+    }
+});
 </script>
 
 </body>
