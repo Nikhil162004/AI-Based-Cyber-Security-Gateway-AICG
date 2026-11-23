@@ -553,7 +553,12 @@ def create_app(runtime: GatewayRuntime) -> Flask:
             auth_limiter.record_failure(request.remote_addr, username)
             return jsonify({"error": "Invalid administrative credentials", "code": "AUTH_FAILED"}), 401
 
-        user = runtime.store.get_admin_user(username)
+        try:
+            user = runtime.store.get_admin_user(username)
+        except Exception:
+            runtime.store.initialize()
+            user = runtime.store.get_admin_user(username)
+
         if not user:
             # Constant-time dummy verification
             verify_password("dummy_password", "scrypt:32768:8:1$dummy$dummypasswordhashforconstanttimecheck123456")
@@ -699,7 +704,12 @@ def create_app(runtime: GatewayRuntime) -> Flask:
                 "code": "PRE_AUTH_REQUIRED",
             }), 401
 
-        user = runtime.store.get_admin_user(username)
+        try:
+            user = runtime.store.get_admin_user(username)
+        except Exception:
+            runtime.store.initialize()
+            user = runtime.store.get_admin_user(username)
+
         if not user:
             auth_limiter.record_failure(request.remote_addr, username)
             return jsonify({"error": "Invalid user", "code": "USER_NOT_FOUND"}), 404

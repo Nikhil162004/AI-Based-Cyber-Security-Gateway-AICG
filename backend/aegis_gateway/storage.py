@@ -235,9 +235,24 @@ class GatewayStore:
             "WHERE incident_id IN (SELECT incident_id FROM incidents WHERE lifecycle_state = 'RESOLVED') AND status NOT IN ('RESOLVED', 'CLOSED')"
         )
 
+        existing_tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        if "admin_users" not in existing_tables:
+            self._seed_default_users(con)
+
     def _seed_default_users(self, con: sqlite3.Connection) -> None:
         from .security import hash_password
         now = utc_now()
+
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS admin_users (
+                user_id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
+                role TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ACTIVE', mfa_enabled INTEGER NOT NULL DEFAULT 1,
+                mfa_status TEXT NOT NULL DEFAULT 'ENROLLED', created_at TEXT NOT NULL,
+                last_login TEXT
+            )
+            """
+        )
 
         existing = con.execute("SELECT COUNT(*) AS c FROM admin_users").fetchone()["c"]
         if existing > 0:
@@ -601,8 +616,13 @@ class GatewayStore:
     # ADMINISTRATIVE USER IDENTITY REGISTRY (LOCAL LAB)
     # =========================================================================
 
+    def _ensure_admin_users_table(self, con: sqlite3.Connection) -> None:
+        """Guarantee admin_users table exists and default accounts are seeded."""
+        self._seed_default_users(con)
+
     def get_admin_user(self, username: str) -> dict[str, Any] | None:
         with self.connection() as con:
+            self._ensure_admin_users_table(con)
             row = con.execute("SELECT * FROM admin_users WHERE username = ? COLLATE NOCASE", (username,)).fetchone()
             if not row and username.lower() in {"admin", "operator"} and not self.production and self.allow_demo_accounts:
                 self._seed_default_users(con)
@@ -611,11 +631,13 @@ class GatewayStore:
 
     def get_admin_user_by_id(self, user_id: str) -> dict[str, Any] | None:
         with self.connection() as con:
+            self._ensure_admin_users_table(con)
             row = con.execute("SELECT * FROM admin_users WHERE user_id = ?", (user_id,)).fetchone()
         return dict(row) if row else None
 
     def list_admin_users(self) -> list[dict[str, Any]]:
         with self.connection() as con:
+            self._ensure_admin_users_table(con)
             rows = con.execute("SELECT user_id, username, role, status, mfa_enabled, mfa_status, created_at, last_login FROM admin_users ORDER BY created_at ASC").fetchall()
         return [dict(row) for row in rows]
 
