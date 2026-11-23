@@ -470,7 +470,7 @@ class GatewayRuntime:
                         cur_dev = active_devs[sequence % len(active_devs)]
                         result = self.ingest(generate_window(scenario_id, intensity, sequence, device_id=cur_dev))
                     else:
-                        result = self.ingest(generate_window(scenario_id, intensity, sequence, device_id=device_id))
+                        result = self.ingest(generate_window(scenario_id, intensity, sequence, device_id=target_dev))
                     state_ref[0].windows += 1
                     sequence += 1
                     stop.wait(self.settings.demo_tick_seconds)
