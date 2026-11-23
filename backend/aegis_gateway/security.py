@@ -215,23 +215,6 @@ def get_current_user() -> dict[str, Any] | None:
                 pass
             return valid_user
 
-    # Dev/Demonstration fallback for sandboxed browser iframes where third-party cookies & localStorage are blocked
-    if current_app:
-        rt = current_app.config.get("runtime")
-        is_prod = bool(rt.settings.production) if (rt and hasattr(rt, "settings")) else False
-        if not is_prod and os.getenv("AEGIS_DEV_AUTO_AUTH", "0") == "1":
-            from datetime import datetime, timezone
-            now_str = datetime.now(timezone.utc).isoformat()
-            return {
-                "user_id": "USR-ADMIN-01",
-                "username": "admin",
-                "role": ROLE_ADMIN,
-                "authenticated": True,
-                "mfa_verified": True,
-                "mfa_status": "SIMULATED_VERIFIED",
-                "login_time": now_str,
-            }
-
     return None
 
 

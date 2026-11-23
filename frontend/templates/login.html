@@ -208,25 +208,6 @@ async function handleLoginSubmit(event) {
         submitBtn.textContent = "Authenticate Gateway Session";
     }
 }
-
-window.addEventListener("DOMContentLoaded", () => {
-    let token = null;
-    try {
-        token = localStorage.getItem("aegis_token") || sessionStorage.getItem("aegis_token");
-    } catch(e) {}
-    if (token) {
-        fetch("/api/auth/status", {
-            headers: { "Authorization": "Bearer " + token }
-        }).then(r => r.json()).then(data => {
-            if (data.authenticated) {
-                const params = new URLSearchParams(window.location.search);
-                const nextPath = params.get("next") || "/";
-                const sep = nextPath.includes("?") ? "&" : "?";
-                window.location.href = nextPath + sep + "token=" + encodeURIComponent(token);
-            }
-        }).catch(() => {});
-    }
-});
 </script>
 
 </body>

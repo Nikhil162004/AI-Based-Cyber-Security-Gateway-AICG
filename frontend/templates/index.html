@@ -141,15 +141,15 @@
 
             <a href="/api/export/telemetry.csv" download class="btn-header-tool" title="Quick CSV Export">
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                <span>Export CSV</span>
+                <span>Export</span>
             </a>
 
             <a href="#sec-controls" class="btn-header-tool" title="Jump to in-page Attack Simulator" onclick="const el=document.getElementById('sec-controls');if(el){el.scrollIntoView({behavior:'smooth'});}return false;">
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                <span>Simulator ↓</span>
+                <span>Sim ↓</span>
             </a>
 
-            <a href="/attacker" class="btn-header-tool btn-header-remote" title="Open Dedicated AICG Attacker Console" onclick="window.location.href='/attacker'; return false;">
+            <a href="/attacker" class="btn-header-tool btn-header-remote" id="navBtnAttacker" title="Open Dedicated AICG Attacker Console" onclick="window.location.href='/attacker'; return false;">
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><polyline points="9 10 12 13 9 16"/><line x1="14" y1="16" x2="16" y2="16"/></svg>
                 <span>⚡ Attacker Console</span>
             </a>

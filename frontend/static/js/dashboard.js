@@ -2369,6 +2369,10 @@ async function refreshDashboard() {
         // 1. Status & Summary
         let statusObj = null;
         const statusRes = await fetch("/api/status", { cache: "no-store" });
+        if (statusRes.status === 401) {
+            window.location.href = "/login?next=" + encodeURIComponent(window.location.pathname);
+            return;
+        }
         if (statusRes.ok) {
             statusObj = await statusRes.json();
             const sysStatus = document.getElementById("systemStatus");
