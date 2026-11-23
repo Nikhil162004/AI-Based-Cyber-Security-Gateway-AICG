@@ -10,8 +10,8 @@ PROJECT_ROOT = BACKEND_DIR.parent
 sys.path.insert(0, str(BACKEND_DIR))
 sys.path.insert(1, str(PROJECT_ROOT))
 
-# Enable dev auto auth by default so operations console runs seamlessly out of the box
-os.environ.setdefault("AEGIS_DEV_AUTO_AUTH", "1")
+# Require authentication by default so visitors must log in before accessing the operations console
+os.environ.setdefault("AEGIS_DEV_AUTO_AUTH", "0")
 
 from aegis_gateway.api import create_app
 from aegis_gateway.runtime import GatewayRuntime

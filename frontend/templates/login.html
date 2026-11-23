@@ -82,13 +82,6 @@
                         <span class="tag" style="color:var(--text-muted); border-color:var(--border-subtle);">LOCAL LAB</span>
                     </div>
                     <div class="auth-persona-grid helper-buttons">
-                        <button type="button" class="auth-persona-tile btn-quick-fill" id="btnQuickLaunchAdmin" onclick="quickLaunch('admin', 'Admin@AICG2026!')" style="grid-column: 1 / -1; border-color: var(--cyan); background: rgba(56, 189, 248, 0.08); margin-bottom: 8px;" title="Authenticate Immediately as Administrator">
-                            <div class="auth-persona-top">
-                                <span class="auth-persona-name qf-role" style="color: var(--cyan); font-weight: 600;">⚡ Instant 1-Click Launch (Administrator)</span>
-                                <span class="auth-persona-tag admin">AUTO</span>
-                            </div>
-                            <div class="auth-persona-creds qf-creds">Click to authenticate and open dashboard immediately</div>
-                        </button>
                         <button type="button" class="auth-persona-tile btn-quick-fill" id="btnQuickAdmin" onclick="quickFill('admin', 'Admin@AICG2026!')" title="Load Administrator Credentials">
                             <div class="auth-persona-top">
                                 <span class="auth-persona-name qf-role">Administrator</span>
@@ -131,14 +124,6 @@ function quickFill(user, pass) {
     msg.className = "auth-status-box success login-msg-box";
     msg.textContent = `Loaded demonstration credentials for role: ${user.toUpperCase()}`;
     msg.style.display = "block";
-}
-
-async function quickLaunch(user, pass) {
-    quickFill(user, pass);
-    const form = document.getElementById("loginForm");
-    if (form) {
-        form.dispatchEvent(new Event("submit", { cancelable: true }));
-    }
 }
 
 async function handleLoginSubmit(event) {

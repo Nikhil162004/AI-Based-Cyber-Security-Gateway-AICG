@@ -20,14 +20,14 @@ An edge cybersecurity gateway research prototype engineered for Industrial IoT (
 > ### 🌐 Live Cloud Deployment & Quick Demo Access
 > - **Live Production Gateway**: [https://aicg-security-gateway.onrender.com/](https://aicg-security-gateway.onrender.com/)
 > - **GitHub Repository**: [https://github.com/Nikhil162004/AI-Based-Cyber-Security-Gateway-AICG](https://github.com/Nikhil162004/AI-Based-Cyber-Security-Gateway-AICG)
-> - **Interactive Login Portal**: [https://aicg-security-gateway.onrender.com/login](https://aicg-security-gateway.onrender.com/login) *(Direct `🔑 Login Portal` button in top header)*
+> - **Interactive Login Portal**: [https://aicg-security-gateway.onrender.com/login](https://aicg-security-gateway.onrender.com/login)
 >
 > | Account Role | Username | Password | Simulated MFA Code | Capabilities |
 > | :--- | :--- | :--- | :--- | :--- |
 > | **Administrator** | `admin` | `Admin@AICG2026!` | `123456` | Full access: Attack simulations, mitigation modes, user management, audit logs |
 > | **SOC Operator** | `operator` | `Operator@AICG2026!` | `123456` | Read-only telemetry monitoring, incident forensics, forensic CSV exports |
 >
-> 💡 *Tip: On the login portal, click **⚡ Instant 1-Click Launch (Administrator)** to sign in instantly with pre-verified credentials.*
+> 💡 *Note: The gateway enforces zero-trust authentication on all unauthenticated requests. Users must log in via the portal (simulated MFA token: `123456`) before entering the operations console.*
 
 ---
 
@@ -424,7 +424,7 @@ The gateway includes declarative cloud infrastructure manifests for turnkey depl
    $$\text{Detected} \longrightarrow \text{Analyzing} \longrightarrow \text{Responding} \longrightarrow \text{Contained} \longrightarrow \text{Recovering} \longrightarrow \text{Resolved} \longrightarrow \text{Closed}$$
    After incident resolution and 5 consecutive healthy baseline windows, the UI holds completion status for 6 seconds, then automatically returns to **● Healthy Baseline**.
 3. **Self-Healing SQLite Historian**: Automatically rebuilds missing schema tables (`iam_events`, `actions`, `trust_history`, `metadata`) and repairs corrupted disk files on container restarts.
-4. **Dedicated Interactive Login Portal**: Accessible via `/login` with an instant 1-click launch bypass for live presentations and stakeholder demonstrations.
+4. **Dedicated Interactive Login Portal**: Accessible via `/login` requiring credential verification and step-up simulated MFA token authentication (`123456`) before granting access to the HMI operations console.
 
 ---
 
