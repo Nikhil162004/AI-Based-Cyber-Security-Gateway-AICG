@@ -1,6 +1,11 @@
 # AI-Based Cyber Security Gateway for Industry 4.0 (AICG)
 
-[![Python](https://img.shields.io/badge/Python-3.14.8-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Live Cloud Service](https://img.shields.io/badge/Render-Live_Production_Demo-00D4B2?style=for-the-badge&logo=render&logoColor=white)](https://aicg-security-gateway.onrender.com/)
+[![GitHub Repository](https://img.shields.io/badge/GitHub-Nikhil162004%2FAICG-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Nikhil162004/AI-Based-Cyber-Security-Gateway-AICG)
+[![Operational Status](https://img.shields.io/badge/Gateway_Status-Online_%26_Streaming-10b981?style=for-the-badge)]()
+[![WSGI Server](https://img.shields.io/badge/WSGI-Gunicorn_Multi--Threaded-22c55e?style=for-the-badge&logo=gunicorn&logoColor=white)](https://gunicorn.org/)
+
+[![Python](https://img.shields.io/badge/Python-3.13%20%7C%203.14-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Framework](https://img.shields.io/badge/Framework-Flask_3.1.3-000000.svg?logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
 [![ML](https://img.shields.io/badge/ML-scikit--learn_1.9.0-F7931E.svg?logo=scikitlearn&logoColor=white)](https://scikit-learn.org/)
 [![Packet Engine](https://img.shields.io/badge/Packet_Engine-dpkt_1.9.8-6B46C1.svg)](https://github.com/kbandla/dpkt)
@@ -9,6 +14,20 @@
 [![License](https://img.shields.io/badge/License-Multi--Tier_%28MIT_%2F_GPLv2%29-2563EB.svg)](LICENSE)
 
 An edge cybersecurity gateway research prototype engineered for Industrial IoT (IIoT) and Industry 4.0 operational technology (OT) networks. The platform unites multi-source telemetry ingestion, deterministic physics-informed energy and resource modeling, hybrid machine learning anomaly detection, dynamic Zero-Trust Identity and Access Management (IAM), multi-window campaign correlation, and closed-loop incident lifecycle governance within an industrial Matte Graphite operations console.
+
+---
+
+> ### 🌐 Live Cloud Deployment & Quick Demo Access
+> - **Live Production Gateway**: [https://aicg-security-gateway.onrender.com/](https://aicg-security-gateway.onrender.com/)
+> - **GitHub Repository**: [https://github.com/Nikhil162004/AI-Based-Cyber-Security-Gateway-AICG](https://github.com/Nikhil162004/AI-Based-Cyber-Security-Gateway-AICG)
+> - **Interactive Login Portal**: [https://aicg-security-gateway.onrender.com/login](https://aicg-security-gateway.onrender.com/login) *(Direct `🔑 Login Portal` button in top header)*
+>
+> | Account Role | Username | Password | Simulated MFA Code | Capabilities |
+> | :--- | :--- | :--- | :--- | :--- |
+> | **Administrator** | `admin` | `Admin@AICG2026!` | `123456` | Full access: Attack simulations, mitigation modes, user management, audit logs |
+> | **SOC Operator** | `operator` | `Operator@AICG2026!` | `123456` | Read-only telemetry monitoring, incident forensics, forensic CSV exports |
+>
+> 💡 *Tip: On the login portal, click **⚡ Instant 1-Click Launch (Administrator)** to sign in instantly with pre-verified credentials.*
 
 ---
 
@@ -374,7 +393,42 @@ python3 backend/app.py
 
 ---
 
-## 13. Testing and Verification
+## 13. Cloud Deployment (Render PaaS & Gunicorn WSGI)
+
+The gateway includes declarative cloud infrastructure manifests for turnkey deployment on **[Render](https://render.com/)** with automated continuous deployment directly from this GitHub repository.
+
+### Infrastructure-as-Code Manifests
+- **`render.yaml`**: Declarative blueprint defining service architecture:
+  ```yaml
+  services:
+    - type: web
+      name: aicg-security-gateway
+      env: python
+      region: oregon
+      plan: free
+      buildCommand: pip install -r requirements.txt
+      startCommand: gunicorn backend.app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120
+      envVars:
+        - key: AEGIS_DEV_AUTO_AUTH
+          value: "1"
+  ```
+- **`Procfile`**: Standard PaaS process manifest:
+  ```text
+  web: gunicorn backend.app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120
+  ```
+- **`Dockerfile`**: Containerized packaging specification for isolated Linux deployments.
+
+### Key Production Enhancements in this Release
+1. **Dynamic Real-Time Baseline Streaming**: Continuous sequence progression (`normal-0`, `normal-1`, `normal-2`...) cycling between `14.5` and `18.5 pkts/s` across sensor nodes (`SENSOR-01`, `SENSOR-02`, `SENSOR-03`), eliminating the 14.4 pkts/s flatline.
+2. **7-Stage Incident Lifecycle & Auto-Reset**: During attacks, the visual stepper paces through:
+   $$\text{Detected} \longrightarrow \text{Analyzing} \longrightarrow \text{Responding} \longrightarrow \text{Contained} \longrightarrow \text{Recovering} \longrightarrow \text{Resolved} \longrightarrow \text{Closed}$$
+   After incident resolution and 5 consecutive healthy baseline windows, the UI holds completion status for 6 seconds, then automatically returns to **● Healthy Baseline**.
+3. **Self-Healing SQLite Historian**: Automatically rebuilds missing schema tables (`iam_events`, `actions`, `trust_history`, `metadata`) and repairs corrupted disk files on container restarts.
+4. **Dedicated Interactive Login Portal**: Accessible via `/login` with an instant 1-click launch bypass for live presentations and stakeholder demonstrations.
+
+---
+
+## 14. Testing and Verification
 
 The repository includes a comprehensive automated regression suite verifying security controls, cryptographic token caching, API boundary enforcement, ML model inference, and dpkt PCAP parsing.
 
@@ -403,9 +457,9 @@ pytest backend/tests/test_wave1_security_hardening.py
 
 ---
 
-## 14. Repository Structure
+## 15. Repository Structure
 
-The selected canonical project structure reflects active repository components and root compatibility symlinks:
+The canonical project structure includes production cloud manifests, backend services, and frontend templates:
 
 ```
 AI-Based-Cyber-Security-Gateway-AICG/
@@ -414,7 +468,10 @@ AI-Based-Cyber-Security-Gateway-AICG/
 ├── THIRD_PARTY_NOTICES.md              # Verified third-party software licenses and notices
 ├── pytest.ini                          # Test runner and warning filter configuration
 ├── README.md                           # Master technical project documentation
-├── requirements.txt                    # Core runtime dependencies
+├── render.yaml                         # Render Cloud PaaS Infrastructure-as-Code Blueprint
+├── Procfile                            # Gunicorn production process manifest
+├── Dockerfile                          # Standalone Linux container definition
+├── requirements.txt                    # Core runtime dependencies (including Gunicorn)
 ├── requirements-dev.txt                # Development and test runner dependencies
 ├── dashboard/                          # Standalone dashboard launcher (app.py)
 ├── data -> backend/data                # Root compatibility symlink to database storage
@@ -422,7 +479,7 @@ AI-Based-Cyber-Security-Gateway-AICG/
 ├── models -> backend/models            # Root compatibility symlink to ML models
 ├── simulation -> backend/simulation    # Root compatibility symlink to NS-3 models
 ├── backend/
-│   ├── app.py                          # Flask application launcher (127.0.0.1:8000)
+│   ├── app.py                          # Flask application launcher (0.0.0.0:8000 / $PORT)
 │   ├── aegis_gateway/                  # Core gateway Python package
 │   │   ├── adapters.py                 # dpkt PCAP, NS-3, and Cooja trace parsing
 │   │   ├── api.py                      # Flask REST endpoints, SSE stream, and session guards
@@ -436,11 +493,9 @@ AI-Based-Cyber-Security-Gateway-AICG/
 │   │   ├── scenarios.py                # Scenario definitions (1 normal + 10 anomaly profiles)
 │   │   ├── schema.py                   # Canonical schema definitions and field normalization
 │   │   ├── security.py                 # Werkzeug password hashing, session tokens, simulated MFA
-│   │   └── storage.py                  # SQLite schema, WAL historian, and audit logging
+│   │   └── storage.py                  # Self-healing SQLite schema, WAL historian, and audit logging
 │   ├── dataset/                        # Simulation PCAPs, feature CSVs, and Cooja logs (Rights Reserved)
-│   │   └── README.md                   # Dataset provenance and non-permissive terms
 │   ├── models/                         # Calibrated ML bundles (Joblib) (Rights Reserved)
-│   │   └── README.md                   # Model provenance and non-permissive terms
 │   ├── reports/
 │   │   ├── evidence/screenshots/       # High-resolution UI acceptance screenshots
 │   │   └── srs/                        # Software Requirements Specifications & diagrams
@@ -466,7 +521,7 @@ AI-Based-Cyber-Security-Gateway-AICG/
 
 ---
 
-## 15. Security and Limitations
+## 16. Security and Limitations
 
 ### Security Architecture Disclosures
 1. **Simulated Multi-Factor Authentication (MFA)**:
@@ -485,7 +540,7 @@ AI-Based-Cyber-Security-Gateway-AICG/
 
 ---
 
-## 16. Roadmap
+## 17. Roadmap
 
 - [ ] **GitHub Actions CI**: Automatically execute the regression test suite on pushes and pull requests.
 - [ ] **eBPF / XDP Data-Plane In-Kernel Acceleration**: Implement eBPF/XDP bypass filters to drop volumetric floods directly in network drivers before socket traversal.
@@ -496,11 +551,12 @@ AI-Based-Cyber-Security-Gateway-AICG/
 
 ---
 
-## 17. Contributors and Acknowledgements
+## 18. Contributors and Acknowledgements
 
 Developed as an advanced cybersecurity engineering platform for resilient Industry 4.0 edge automation.
 
-**Author & Copyright Holder:** JAYDEEP JOTIRAM MULIK
+**Author & Copyright Holder:** JAYDEEP JOTIRAM MULIK  
+**Cloud Deployment & Autonomous Lifecycle Engineering:** NIKHIL
 
 Special thanks to:
 - The **NS-3 Project** for discrete-event network simulation frameworks.
@@ -510,7 +566,7 @@ Special thanks to:
 
 ---
 
-## 18. Licensing and Intellectual Property
+## 19. Licensing and Intellectual Property
 
 **Copyright (c) 2026 JAYDEEP JOTIRAM MULIK**
 
